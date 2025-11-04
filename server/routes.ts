@@ -551,28 +551,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userMessage: content,
       });
       
-      // Save AI message to database
-      const aiMessage = await storage.createMessage({
-        conversationId,
-        senderId: personaId,
-        senderType: "ai",
-        content: aiResponse,
-        isRead: false,
-        status: "sent",
-      });
+      // Split AI response by backslash (\) and forward slash (/)
+      // This creates multiple messages for more natural conversation flow
+      const messageParts = aiResponse
+        .split(/[\\\/]/)  // Split by both \ and /
+        .map(part => part.trim())  // Trim whitespace
+        .filter(part => part.length > 0);  // Remove empty parts
+      
+      // If no valid parts after splitting, use original response
+      const aiMessages = [];
+      if (messageParts.length === 0) {
+        const aiMessage = await storage.createMessage({
+          conversationId,
+          senderId: personaId,
+          senderType: "ai",
+          content: aiResponse,
+          isRead: false,
+          status: "sent",
+        });
+        aiMessages.push(aiMessage);
+      } else {
+        // Create a separate message for each part
+        for (const part of messageParts) {
+          const aiMessage = await storage.createMessage({
+            conversationId,
+            senderId: personaId,
+            senderType: "ai",
+            content: part,
+            isRead: false,
+            status: "sent",
+          });
+          aiMessages.push(aiMessage);
+        }
+      }
       
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
-      // Broadcast user message and AI response to all connected clients
+      // Broadcast user message first
       broadcastNewMessage(conversationId, userMessage);
-      broadcastNewMessage(conversationId, aiMessage);
+      
+      // Then broadcast all AI messages in order
+      for (const aiMessage of aiMessages) {
+        broadcastNewMessage(conversationId, aiMessage);
+      }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
       extractAndStoreMemories(conversationId, personaId, content, aiResponse)
         .catch(err => console.error("Memory extraction failed:", err));
       
-      res.json({ userMessage, aiMessage, response: aiResponse });
+      res.json({ userMessage, aiMessages, response: aiResponse });
     } catch (error: any) {
       console.error("Error generating AI response:", error);
       if (error.name === 'ZodError') {
@@ -647,29 +675,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Save complete AI message to database
-      const aiMessage = await storage.createMessage({
-        conversationId,
-        senderId: personaId,
-        senderType: "ai",
-        content: fullResponse,
-        isRead: false,
-        status: "sent",
-      });
+      // Split AI response by backslash (\) and forward slash (/)
+      const messageParts = fullResponse
+        .split(/[\\\/]/)  // Split by both \ and /
+        .map(part => part.trim())
+        .filter(part => part.length > 0);
+      
+      // Save split messages to database
+      const aiMessages = [];
+      if (messageParts.length === 0) {
+        const aiMessage = await storage.createMessage({
+          conversationId,
+          senderId: personaId,
+          senderType: "ai",
+          content: fullResponse,
+          isRead: false,
+          status: "sent",
+        });
+        aiMessages.push(aiMessage);
+      } else {
+        for (const part of messageParts) {
+          const aiMessage = await storage.createMessage({
+            conversationId,
+            senderId: personaId,
+            senderType: "ai",
+            content: part,
+            isRead: false,
+            status: "sent",
+          });
+          aiMessages.push(aiMessage);
+        }
+      }
       
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
-      // Broadcast user message and AI response to all connected clients
+      // Broadcast user message
       broadcastNewMessage(conversationId, userMessage);
-      broadcastNewMessage(conversationId, aiMessage);
+      
+      // Broadcast all split AI messages
+      for (const aiMessage of aiMessages) {
+        broadcastNewMessage(conversationId, aiMessage);
+      }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
       extractAndStoreMemories(conversationId, personaId, content, fullResponse)
         .catch(err => console.error("Memory extraction failed:", err));
       
       // Send final message with saved message data
-      res.write(`data: ${JSON.stringify({ done: true, aiMessage })}\n\n`);
+      res.write(`data: ${JSON.stringify({ done: true, aiMessages })}\n\n`);
       res.end();
     } catch (error: any) {
       console.error("Error generating AI response stream:", error);
