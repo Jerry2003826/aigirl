@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Heart, MessageCircle, Send, Plus, Trash2, Sparkles } from "lucide-react";
+import { Heart, MessageCircle, Send, Plus, Trash2, Sparkles, ImagePlus, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,8 @@ export default function MomentsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiMomentDialogOpen, setAiMomentDialogOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   // Fetch current user
   const { data: currentUser } = useQuery<User>({
@@ -112,7 +114,47 @@ export default function MomentsPage() {
 
   const handlePublish = () => {
     if (!content.trim()) return;
-    createMomentMutation.mutate({ content });
+    const images = imageData ? [imageData] : [];
+    createMomentMutation.mutate({ content, images });
+    // Clear image after publish
+    setImageData(null);
+    setImagePreview(null);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "文件类型无效",
+        description: "请选择图片文件",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "文件过大",
+        description: "图片必须小于5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setImageData(base64);
+      setImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearImage = () => {
+    setImageData(null);
+    setImagePreview(null);
   };
 
   const handleLike = (momentId: string) => {
@@ -201,7 +243,51 @@ export default function MomentsPage() {
                 className="min-h-[120px] resize-none"
                 data-testid="input-moment-content"
               />
-              <div className="flex justify-end gap-2">
+              
+              {/* Image Preview */}
+              {imagePreview && (
+                <div className="relative inline-block">
+                  <img 
+                    src={imagePreview} 
+                    alt="Preview" 
+                    className="max-h-48 rounded-lg border"
+                  />
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="destructive"
+                    className="absolute -right-2 -top-2 h-6 w-6 rounded-full"
+                    onClick={clearImage}
+                    data-testid="button-clear-image"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              
+              <div className="flex justify-between items-center">
+                <label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageSelect}
+                    data-testid="input-image"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    asChild
+                  >
+                    <span>
+                      <ImagePlus className="mr-2 h-4 w-4" />
+                      添加图片
+                    </span>
+                  </Button>
+                </label>
+                
+                <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
@@ -217,6 +303,7 @@ export default function MomentsPage() {
                 >
                   {createMomentMutation.isPending ? "发布中..." : "发布"}
                 </Button>
+                </div>
               </div>
             </div>
           </DialogContent>

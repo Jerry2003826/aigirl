@@ -12,7 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAiPersonaSchema } from "@shared/schema";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon } from "lucide-react";
+import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
@@ -41,9 +41,16 @@ export default function Personas() {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // AI Assistant form state
+  const [aiName, setAiName] = useState("");
+  const [aiDescription, setAiDescription] = useState("");
+  const [generateAvatar, setGenerateAvatar] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const { data: personas = [], isLoading } = useQuery<Persona[]>({
     queryKey: ["/api/personas"],
@@ -226,6 +233,63 @@ export default function Personas() {
     setDialogOpen(true);
   };
 
+  const handleAiGenerate = async () => {
+    if (!aiName.trim()) {
+      toast({
+        title: "错误",
+        description: "请输入女友名字",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const response = await apiRequest("POST", "/api/ai/generate-persona", {
+        name: aiName,
+        description: aiDescription,
+        generateAvatar,
+      });
+      const data = await response.json();
+      
+      // Fill form with AI generated data
+      setAvatarPreview(data.avatarUrl || "");
+      form.reset({
+        name: data.name,
+        avatarUrl: data.avatarUrl || "",
+        personality: data.personality,
+        systemPrompt: data.systemPrompt,
+        backstory: data.backstory || "",
+        greeting: data.greeting || "",
+        model: data.model || "gemini-2.5-pro",
+        responseDelay: data.responseDelay || 0,
+        userId: "",
+      });
+      
+      // Close AI assistant dialog and open create dialog
+      setAiAssistantOpen(false);
+      setDialogOpen(true);
+      
+      // Reset AI assistant form
+      setAiName("");
+      setAiDescription("");
+      setGenerateAvatar(false);
+      
+      toast({
+        title: "成功",
+        description: "AI已生成女友配置，请检查并保存",
+      });
+    } catch (error: any) {
+      toast({
+        title: "错误",
+        description: error.message || "AI生成失败",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -245,7 +309,89 @@ export default function Personas() {
               Create and manage your AI companions
             </p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          
+          <div className="flex gap-3">
+            {/* AI Assistant Button */}
+            <Dialog open={aiAssistantOpen} onOpenChange={setAiAssistantOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  size="lg"
+                  variant="outline"
+                  className="h-12 rounded-xl"
+                  data-testid="button-ai-assistant"
+                >
+                  <Sparkles className="mr-2 h-5 w-5" />
+                  AI智能助理
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle data-testid="text-ai-assistant-title">AI智能助理</DialogTitle>
+                  <DialogDescription>
+                    告诉我你想要的女友名字，AI会自动搜索信息并生成完整配置
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">女友名字 *</label>
+                    <Input 
+                      placeholder="例如：林黛玉、赫敏·格兰杰" 
+                      value={aiName}
+                      onChange={(e) => setAiName(e.target.value)}
+                      data-testid="input-ai-name"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">简单描述（可选）</label>
+                    <Textarea 
+                      placeholder="补充描述，例如：性格温柔、喜欢读书" 
+                      value={aiDescription}
+                      onChange={(e) => setAiDescription(e.target.value)}
+                      rows={3}
+                      data-testid="input-ai-description"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="generate-avatar"
+                      checked={generateAvatar}
+                      onChange={(e) => setGenerateAvatar(e.target.checked)}
+                      className="h-4 w-4"
+                      data-testid="checkbox-generate-avatar"
+                    />
+                    <label htmlFor="generate-avatar" className="text-sm">
+                      让AI生成头像（基于人物形象）
+                    </label>
+                  </div>
+                  
+                  <Button
+                    onClick={handleAiGenerate}
+                    disabled={isGenerating}
+                    className="w-full"
+                    data-testid="button-generate-persona"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        AI生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        生成女友配置
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+            
+            {/* Create Persona Button */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button 
                 size="lg" 
@@ -519,6 +665,7 @@ export default function Personas() {
               </Form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Personas Grid */}

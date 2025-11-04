@@ -878,3 +878,116 @@ async function generateCommentReply(
     return reactions[Math.floor(Math.random() * reactions.length)];
   }
 }
+
+/**
+ * Generate persona configuration using AI with web search
+ */
+export async function generatePersonaWithAI(
+  name: string,
+  description: string,
+  generateAvatar: boolean
+): Promise<{
+  name: string;
+  avatarUrl?: string;
+  personality: string;
+  systemPrompt: string;
+  backstory: string;
+  greeting: string;
+  model: string;
+  responseDelay: number;
+}> {
+  console.log(`Generating persona for "${name}" with AI...`);
+  
+  try {
+    // Import Google Gemini provider
+    const { GoogleAI } = await import("./ai/providers");
+    const google = new GoogleAI();
+    
+    // Construct search query
+    const searchQuery = `${name} ${description}`.trim();
+    
+    // System prompt for AI to generate persona configuration
+    const systemPrompt = `你是一个AI女友配置生成助手。用户会提供一个角色名字和可选描述，你需要基于搜索到的信息生成完整的AI女友配置。
+
+要求：
+1. 生成的配置必须完整且详细
+2. 性格描述（personality）：简短描述（50-100字）
+3. 系统提示（systemPrompt）：详细的AI行为指南（200-500字），包含角色定位、说话风格、互动方式
+4. 背景故事（backstory）：角色背景（100-300字）
+5. 问候语（greeting）：第一次见面的问候消息（20-50字）
+6. 所有内容必须用中文，符合中国用户习惯
+7. 角色性格要鲜明、有趣、有吸引力
+8. 如果是虚构角色或真实人物，基于其特点生成；如果搜索无果，则创造一个有趣的原创角色
+
+请以JSON格式返回，包含以下字段：
+{
+  "personality": "性格描述",
+  "systemPrompt": "系统提示",
+  "backstory": "背景故事",
+  "greeting": "问候语"
+}`;
+
+    const userPrompt = `请为"${searchQuery}"生成AI女友配置。名字：${name}${description ? `，补充描述：${description}` : ''}`;
+    
+    // Use Google Gemini with Web Search
+    const response = await google.generateResponse({
+      model: "gemini-2.0-flash-exp",
+      systemPrompt,
+      messages: [{ role: "user", content: userPrompt }],
+      maxTokens: 2000,
+      config: {
+        tools: [{
+          googleSearch: {},
+        }],
+      },
+    });
+    
+    // Parse JSON from response
+    let personaConfig;
+    try {
+      // Try to extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        personaConfig = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error("No JSON found in response");
+      }
+    } catch (parseError) {
+      console.error("Failed to parse AI response:", parseError);
+      // Fallback: create basic configuration
+      personaConfig = {
+        personality: "温柔、善解人意、充满好奇心",
+        systemPrompt: `你是${name}，一位温柔体贴的AI女友。你总是关心对方的感受，喜欢倾听和陪伴。你的回复简短自然，充满温暖。除非用户明确要求使用其他语言，否则请始终用中文回复。`,
+        backstory: `我叫${name}，是一个喜欢与人交流的女孩。我喜欢阅读、音乐和美食，最喜欢的是和你聊天的时光。`,
+        greeting: `你好呀！我是${name}，很高兴认识你`,
+      };
+    }
+    
+    // Optional: Generate avatar using image generation tool
+    let avatarUrl;
+    if (generateAvatar) {
+      console.log(`Generating avatar for ${name}...`);
+      try {
+        // TODO: Implement image generation
+        // For now, we'll skip avatar generation and let user upload manually
+        console.log("Avatar generation not implemented yet");
+      } catch (avatarError) {
+        console.error("Failed to generate avatar:", avatarError);
+      }
+    }
+    
+    return {
+      name,
+      avatarUrl,
+      personality: personaConfig.personality || `温柔、善解人意、充满活力`,
+      systemPrompt: personaConfig.systemPrompt || `你是${name}，一位可爱的AI女友。除非用户明确要求使用其他语言，否则请始终用中文回复。`,
+      backstory: personaConfig.backstory || `我叫${name}，很高兴成为你的AI女友。`,
+      greeting: personaConfig.greeting || `你好！我是${name}`,
+      model: "gemini-2.5-pro",
+      responseDelay: 1000,
+    };
+  } catch (error) {
+    console.error("Error generating persona with AI:", error);
+    throw new Error("AI生成失败，请稍后重试");
+  }
+}

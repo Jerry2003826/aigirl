@@ -128,6 +128,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI Assistant: Generate persona configuration
+  app.post('/api/ai/generate-persona', isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, description, generateAvatar } = req.body;
+      
+      if (!name || typeof name !== 'string') {
+        return res.status(400).json({ message: "Name is required" });
+      }
+      
+      // Import the generation function
+      const { generatePersonaWithAI } = await import("./aiService");
+      
+      // Generate persona configuration using AI
+      const personaData = await generatePersonaWithAI(name, description || "", generateAvatar);
+      
+      res.json(personaData);
+    } catch (error: any) {
+      console.error("Error generating persona with AI:", error);
+      res.status(500).json({ message: error.message || "Failed to generate persona" });
+    }
+  });
+
   app.post('/api/personas', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
