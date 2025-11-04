@@ -112,7 +112,7 @@ function Router() {
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
-            "md:flex pb-20 w-full md:w-auto",
+            "md:flex pb-14 w-full md:w-auto",
             showMobileSidebar ? "flex" : "hidden"
           )}>
             <AppSidebar
@@ -128,7 +128,7 @@ function Router() {
             "flex-1 overflow-hidden md:flex flex-col",
             showMobileSidebar ? "hidden" : "flex"
           )}>
-            <div className="flex-1 overflow-hidden pb-20">
+            <div className="flex-1 overflow-hidden pb-14">
               <Switch>
                 <Route path="/">
                   {() => (
