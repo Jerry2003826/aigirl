@@ -404,13 +404,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                       <Brain className="mr-2 h-4 w-4" />
                       查看记忆
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setLocation(`/contacts/${selectedConversation.personas![0].id}`)}
-                      data-testid="menu-view-persona"
-                    >
-                      <UserCircle className="mr-2 h-4 w-4" />
-                      查看AI信息
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
                 )}
