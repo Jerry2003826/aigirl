@@ -375,14 +375,15 @@ export class OpenAIProvider implements AIProvider {
 // Factory function to get the appropriate AI provider
 export function getAIProvider(settings?: AiSettings): AIProvider {
   const provider = settings?.provider || "google"; // Default to Google Gemini
+  const customApiKey = settings?.customApiKey;
 
   if (provider === "google") {
-    return new GeminiProvider();
+    return new GeminiProvider(customApiKey);
   } else if (provider === "openai") {
-    return new OpenAIProvider();
+    return new OpenAIProvider(customApiKey);
   } else {
     // Fallback to Google Gemini
-    return new GeminiProvider();
+    return new GeminiProvider(customApiKey);
   }
 }
 
