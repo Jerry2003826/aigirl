@@ -78,7 +78,7 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
   });
 
   const { data: memories = [], isLoading: memoriesLoading } = useQuery<Memory[]>({
-    queryKey: ["/api/memories", "persona", personaId],
+    queryKey: ["/api/memories/persona", personaId],
   });
 
   const form = useForm<MemoryFormData>({

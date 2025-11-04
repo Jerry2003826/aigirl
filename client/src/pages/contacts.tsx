@@ -74,6 +74,15 @@ export default function Contacts() {
       groups[letter].push(persona);
     });
 
+    // Sort personas within each group by pinyin
+    Object.keys(groups).forEach(letter => {
+      groups[letter].sort((a, b) => {
+        const pinyinA = pinyin(a.name, { toneType: 'none' });
+        const pinyinB = pinyin(b.name, { toneType: 'none' });
+        return pinyinA.localeCompare(pinyinB, 'zh-CN');
+      });
+    });
+
     // Sort groups by key
     return Object.entries(groups).sort(([a], [b]) => {
       // English letters first, then others
