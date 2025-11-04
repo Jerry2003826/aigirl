@@ -1,0 +1,226 @@
+一、带 RAG + 联网搜索的标准 Google 模型调用（JS）
+
+下面用的是现在官方推荐的 @google/genai SDK + googleSearch 工具（适配 gemini-2.5 系列）。
+Google AI for Developers
+
+// 安装：
+// npm install @google/genai
+
+import { GoogleGenAI } from "@google/genai";
+
+// 推荐用环境变量传 Key，不要写死在代码里
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
+
+/**
+ * question: 用户问题
+ * retrievedDocs: 你自己 RAG 检索出来的文档数组
+ *   例如 [{ title: 'xxx', content: '长文本...' }, ...]
+ */
+export async function answerWithRagAndSearch(
+  question: string,
+  retrievedDocs: { title: string; content: string }[]
+) {
+  // 1. 把 RAG 命中的文档拼成一段「知识库上下文」
+  const ragContext =
+    retrievedDocs.length === 0
+      ? "（知识库里没有找到相关资料）"
+      : retrievedDocs
+          .map(
+            (doc, i) =>
+              `【文档${i + 1}：${doc.title || "未命名"}】\n${doc.content}`
+          )
+          .join("\n\n");
+
+  // 2. 配置 Google Search 工具（联网搜索）
+  const groundingTool = {
+    googleSearch: {}, // 开启联网搜索工具
+  };
+
+  const config = {
+    tools: [groundingTool],
+  };
+
+  // 3. 调用 Gemini 2.5（建议 Pro / Flash 看你需求）
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-pro", // 或 gemini-2.5-flash
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `
+你是一个严谨的 AI 助手，回答时遵守以下优先级：
+
+1. **优先使用我提供的本地知识库内容（RAG 命中的文档）**。
+2. 如果知识库明显不足，再通过联网搜索（Google Search 工具）补充最新信息。
+3. 回答时用自然的中文，总结整理后输出，不要直接长篇粘贴原文。
+
+【本地知识库内容】：
+${ragContext}
+
+【用户问题】：
+${question}
+            `.trim(),
+          },
+        ],
+      },
+    ],
+    config,
+  });
+
+  // 最终回答文本
+  const answerText = response.text;
+  return {
+    text: answerText,
+    // 如果你想做“引用来源 / 展示链接”，可以拿 groundingMetadata 里信息
+    groundingMetadata: response.candidates?.[0]?.groundingMetadata,
+  };
+}
+
+
+RAG 的“向量检索”那部分（算 embedding、查向量库）你已经在自己项目里做过了，这里就假设你已经拿到 retrievedDocs；
+真正在模型这边做的事情就是：把命中文档拼进 prompt + 打开 googleSearch 工具，让模型在需要时自己联网查。
+Google AI for Developers
+
+二、用这套能力后，你整个「AI 女友项目」是怎么运作的？
+
+下面是「从用户点开 App 到 AI 回话」的一条完整链路，用我们之前讨论的“理想版架构 + 上面这段调用”来讲一遍，方便你给别人说明：
+
+用户登录 & 多端统一账号
+
+用户用邮箱 / 第三方账号登录（Supabase Auth）。
+
+登录成功后，前端拿到一个 access token，以后所有请求都带上它。
+
+不管是电脑端、手机端、浏览器标签页，只要是同一个账号，就指向同一套云端数据。
+
+数据都在服务器按表存，不再是一坨 JSON
+
+在数据库里，你按正常业务表来拆：
+
+users：用户资料
+
+ai_personas：每个 AI 女友 / 角色（名字、头像、人格设定、主 Prompt、配置等）
+
+conversations：会话（和某个角色 1v1 或一个群聊）
+
+messages：消息时间线（一句话一行）
+
+memories：长期 / 短期记忆（关于用户/角色的重要信息）
+
+moments / moment_comments：AI 朋友圈动态和评论
+
+所有端看到的东西，都是从这些表里读出来的，这就是“服务器是唯一真相源”。
+
+用户点进某个 AI 女友的聊天页
+
+前端做几件事：
+
+调一个接口拿到这个会话最近 N 条消息（比如 50 条），渲染聊天记录。
+
+通过 Realtime 或 WebSocket 订阅这个会话的新消息事件：
+
+有新消息插入 messages 表，就推送到当前页面，实现“多端几乎实时同步”。
+
+用户在输入框里发送一句话
+
+前端先本地插入一个“我发送中”的消息泡泡，界面立刻有反馈。
+
+同时调用你写好的后端接口，比如 /api/sendMessage：
+
+请求体包括：conversationId / personaId / text / 可能的图片
+
+请求头带上用户的 access token。
+
+后端收到请求，先写一条“用户消息”到 messages 表
+
+大致流程：
+
+根据 access token 解析出 user_id，确定这个人对这个会话有权限。
+
+在 messages 表插一行：
+
+sender_type = 'user'
+
+role = 'user'
+
+content = 用户消息文本
+
+插入成功后，Realtime 会自动把这条消息推到所有在线设备（包括本设备、其他设备）。
+
+后端做 RAG：从你的“AI 女友记忆 + 历史聊天 + 资料库”里找相关内容
+
+用 Gemini 的 embedding 模型 / 你已有的向量服务，把用户问题编码成向量。
+
+在「这个角色对应的向量库」里做相似度搜索，选出若干条最相关的：
+
+可能包括：
+
+历史聊天里被总结成“记忆”的内容
+
+你给这个角色写的“背景资料”、设定文本
+
+用户额外上传的文档、个人资料等
+
+把命中的文档整理成 retrievedDocs 传给上面的 answerWithRagAndSearch。
+
+后端用 RAG + 联网搜索 调用 Gemini 2.5
+
+把 retrievedDocs 和用户问题一起交给 answerWithRagAndSearch：
+
+Prompt 中明确写：
+
+先优先使用本地知识库（RAG 的结果）；
+
+不够再用 googleSearch 工具联网查；
+
+输出整理后的中文答案。
+
+@google/genai 帮你发请求；
+
+Gemini 2.5 会按需要自动调用 Google Search，生成一个既参考你的资料，又能看最新网络信息的答案。
+Google AI for Developers
+
+后端拿到模型回复 → 写入一条“AI 消息”
+
+将模型返回的文本、引用信息等保存到 messages 表：
+
+sender_type = 'ai'
+
+sender_id = personaId
+
+role = 'assistant'
+
+content = 模型回复
+
+Realtime 立刻把这条新消息推送给所有在线设备。
+
+对前端来说：聊天窗口自动多出一条“她说的话”。
+
+可选：后端顺带更新记忆 / 动态
+
+你可以在后端加一些后处理逻辑，比如：
+
+过一段时间，扫描聊天记录，抽取“可持久化的用户信息”，写到 memories 表。
+
+如果用户让 AI “帮我发一条动态”，就把这条文本写到 moments 表，再由前端展示在“动态”标签页。
+
+多端互通 & 状态一致
+
+因为所有内容都在数据库表里，所有设备都：
+
+登录同一账号
+
+通过同一套 API 读写 conversations / messages / memories / moments
+
+再配合 Realtime 订阅消息插入事件
+
+所以效果就是：
+
+在电脑上跟 AI 聊天，手机端同一会话会立刻看到新消息；
+
+在手机上改了 AI 女友设定，电脑端角色列表立即刷新；
+
+发布动态 / 点赞 / 评论，在所有端都会同步。
