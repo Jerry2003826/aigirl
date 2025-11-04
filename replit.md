@@ -164,6 +164,14 @@ A WeChat-style AI companion chat application that allows users to have conversat
 
 ## Recent Changes
 
+### 2024-11-04: Custom Login Page
+- **Purple Gradient Design**: New login page with purple/pink theme matching user's design reference
+- **Replit Auth Integration**: Seamless integration with existing OIDC authentication
+- **Chinese Localization**: All UI text in Chinese ("AI女友聊天" branding)
+- **Social Login Icons**: Google and GitHub login buttons
+- **Responsive Design**: Full accessibility with data-testid attributes for all interactive elements
+- **Route Update**: Login page now displays for unauthenticated users instead of Home page
+
 ### 2024-11-04: Moments Feature Complete
 - **Database Schema**: Added moments, momentLikes, momentComments tables
 - **Global Social Feed**: GET /api/moments returns all users' and AI personas' moments
