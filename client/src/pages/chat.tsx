@@ -589,31 +589,31 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-10 w-10 shrink-0"
+                  className="h-12 w-12 shrink-0 touch-target-md"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="button-upload-image"
                 >
-                  <ImagePlus className="h-5 w-5" />
+                  <ImagePlus className="h-6 w-6" />
                 </Button>
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder="输入消息..."
-                  className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
+                  className="min-h-[48px] max-h-[120px] resize-none text-base leading-relaxed"
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
                   size="icon"
-                  className="h-10 w-10 shrink-0 rounded-full bg-primary hover:bg-primary/90"
+                  className="h-12 w-12 shrink-0 rounded-full bg-primary hover:bg-primary/90 touch-target-md"
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <Loader2 className="h-6 w-6 animate-spin" />
                   ) : (
-                    <Send className="h-5 w-5" />
+                    <Send className="h-6 w-6" />
                   )}
                 </Button>
             </div>

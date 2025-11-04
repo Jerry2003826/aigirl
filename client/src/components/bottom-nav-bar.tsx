@@ -26,8 +26,8 @@ export function BottomNavBar({ onChatClick }: BottomNavBarProps) {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border safe-area-bottom">
-      <div className="flex items-center justify-around p-3 max-w-3xl mx-auto">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center justify-around py-1.5 px-2 max-w-3xl mx-auto">
         {navItems.map((item) => {
           const isActive = location === item.path || (location === "/" && item.path === "/chat");
           const Icon = item.icon;
@@ -36,13 +36,13 @@ export function BottomNavBar({ onChatClick }: BottomNavBarProps) {
               key={item.key}
               onClick={() => handleNavClick(item)}
               className={cn(
-                "flex flex-col items-center gap-1 py-2 px-3 rounded-lg flex-1 transition-colors hover-elevate touch-target-sm",
+                "flex flex-col items-center gap-0.5 py-1.5 px-2 rounded-lg flex-1 transition-colors hover-elevate",
                 isActive && "text-primary"
               )}
               data-testid={item.testId}
             >
-              <Icon className={cn("h-6 w-6", isActive && "text-primary")} />
-              <span className="text-xs font-medium">{item.title}</span>
+              <Icon className={cn("h-5 w-5", isActive && "text-primary")} />
+              <span className="text-[10px] font-medium">{item.title}</span>
             </button>
           );
         })}
