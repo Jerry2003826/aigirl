@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Heart, MessageCircle, Send, Plus, Trash2 } from "lucide-react";
+import { Heart, MessageCircle, Send, Plus, Trash2, Sparkles } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +22,7 @@ export default function MomentsPage() {
   const { toast } = useToast();
   const [content, setContent] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [aiMomentDialogOpen, setAiMomentDialogOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
 
   // Fetch current user
@@ -86,6 +87,26 @@ export default function MomentsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
+    },
+  });
+
+  // Trigger AI to post moment mutation
+  const triggerAIMomentMutation = useMutation({
+    mutationFn: async (personaId: string) => {
+      const res = await apiRequest('POST', `/api/ai/trigger-moment/${personaId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
+      toast({ title: "✅ AI动态已发布" });
+      setAiMomentDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({ 
+        title: "❌ 发布失败", 
+        description: error.message || "AI发布动态失败",
+        variant: "destructive" 
+      });
     },
   });
 
@@ -156,8 +177,8 @@ export default function MomentsPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Publish Button */}
-      <div className="p-4">
+      {/* Publish Buttons */}
+      <div className="p-4 space-y-2">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button 
@@ -200,6 +221,63 @@ export default function MomentsPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* AI Moment Trigger Button */}
+        {personas.length > 0 && (
+          <Dialog open={aiMomentDialogOpen} onOpenChange={setAiMomentDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="outline"
+                className="w-full border-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 font-medium py-6 rounded-xl"
+                data-testid="button-trigger-ai-moment"
+              >
+                <Sparkles className="h-5 w-5 mr-2" />
+                让AI发布动态
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>选择AI发布动态</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                {personas.map((persona) => (
+                  <div
+                    key={persona.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border hover-elevate"
+                    data-testid={`ai-persona-item-${persona.id}`}
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={persona.avatarUrl || undefined} alt={persona.name} />
+                      <AvatarFallback className="bg-primary/10 font-semibold text-primary">
+                        {persona.name.substring(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    
+                    <div className="flex-1 overflow-hidden">
+                      <div className="font-medium" data-testid={`ai-persona-name-${persona.id}`}>
+                        {persona.name}
+                      </div>
+                      <div className="truncate text-sm text-muted-foreground">
+                        {persona.personality}
+                      </div>
+                    </div>
+                    
+                    <Button
+                      size="sm"
+                      onClick={() => triggerAIMomentMutation.mutate(persona.id)}
+                      disabled={triggerAIMomentMutation.isPending}
+                      className="bg-purple-600 hover:bg-purple-700"
+                      data-testid={`button-trigger-moment-${persona.id}`}
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      发布
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
 
       {/* Moments List */}
