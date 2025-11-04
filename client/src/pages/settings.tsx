@@ -29,7 +29,7 @@ type AiSettings = {
 const settingsFormSchema = z.object({
   provider: z.string().min(1, "Provider is required"),
   model: z.string().min(1, "Model is required"),
-  customApiKey: z.string().optional(),
+  customApiKey: z.string().min(1, "API密钥是必需的，请提供你的Google AI或OpenAI API密钥"),
   ragEnabled: z.boolean(),
   searchEnabled: z.boolean(),
   language: z.string().optional(),
@@ -187,7 +187,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="customApiKey"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-base font-semibold">🔑 API密钥 (强烈推荐)</FormLabel>
+                        <FormLabel className="text-base font-semibold text-destructive">🔑 API密钥 (必填)</FormLabel>
                         <FormControl>
                           <Input
                             type="password"
@@ -195,14 +195,16 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                             {...field}
                             value={field.value || ""}
                             data-testid="input-api-key"
+                            required
                           />
                         </FormControl>
                         <FormDescription className="space-y-1">
-                          <p className="font-medium text-foreground">强烈建议提供你自己的API密钥以获得最佳体验：</p>
+                          <p className="font-medium text-foreground">⚠️ 必须提供API密钥才能使用AI功能：</p>
                           <ul className="list-disc list-inside space-y-0.5 text-sm">
-                            <li>Google AI: 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google AI Studio</a> 获取免费密钥</li>
-                            <li>OpenAI: 在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取密钥</li>
+                            <li><strong>Google AI（推荐）</strong>: 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Google AI Studio</a> 获取免费密钥</li>
+                            <li>OpenAI: 在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取密钥（付费）</li>
                             <li>你的密钥将被安全存储，仅用于你的AI请求</li>
+                            <li className="text-destructive font-medium">没有API密钥将无法使用任何AI功能</li>
                           </ul>
                         </FormDescription>
                         <FormMessage />

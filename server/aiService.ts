@@ -1,13 +1,6 @@
-import OpenAI from "openai";
 import { storage } from "./storage";
 import type { AiPersona, Message, InsertMemory } from "@shared/schema";
 import { getAIProvider, getModelName, type ConversationMessage, type ImageData } from "./ai/providers";
-
-// Backward compatibility: OpenAI client for legacy persona selection
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
-});
 
 interface GenerateResponseOptions {
   conversationId: string;
@@ -339,10 +332,17 @@ export async function selectRespondingPersona(
   
   // Use AI to determine the most appropriate persona based on message content and personalities
   try {
+    // Get user's AI settings to use their custom API key
+    const aiSettings = await storage.getAiSettings(conversation.userId);
+    const provider = getAIProvider(aiSettings);
+    const model = getModelName(aiSettings);
+    
     const personaDescriptions = personas
       .filter(p => p !== null)
       .map((p, i) => `${i + 1}. ${p!.name} (ID: ${p!.id}): ${p!.personality}`)
       .join("\n");
+    
+    const systemPrompt = "你是一个对话协调器，负责在群聊中选择最适合回复的AI角色。你只需要返回角色ID，不要返回任何其他内容。";
     
     const selectionPrompt = `在群聊中，根据以下AI角色和用户的最新消息，判断哪个角色最适合回复。考虑因素：
 1. 用户消息的内容和语气
@@ -363,22 +363,19 @@ ${Object.entries(responseCounts).map(([id, count]) => {
 
 请只返回最适合回复的角色ID（字母数字组成的字符串），不要包含任何解释。`;
     
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
+    const response = await provider.generateResponse({
+      model,
+      systemPrompt,
       messages: [
-        {
-          role: "system",
-          content: "你是一个对话协调器，负责在群聊中选择最适合回复的AI角色。你只需要返回角色ID，不要返回任何其他内容。"
-        },
         {
           role: "user",
           content: selectionPrompt
         }
       ],
-      max_completion_tokens: 100,
+      maxTokens: 100,
     });
     
-    const selectedId = response.choices[0]?.message?.content?.trim();
+    const selectedId = response.trim();
     
     // Validate the selected ID is one of the personas
     if (selectedId && personas.some(p => p?.id === selectedId)) {
@@ -423,6 +420,13 @@ export async function extractAndStoreMemories(
       .map(m => `${m.senderType === "user" ? "User" : "AI"}: ${m.content}`)
       .join("\n");
     
+    // Get user's AI settings to use their custom API key
+    const aiSettings = await storage.getAiSettings(conversation.userId);
+    const provider = getAIProvider(aiSettings);
+    const model = getModelName(aiSettings);
+    
+    const systemPrompt = "你是一个记忆提取系统。从对话中提取重要的用户信息，并格式化为JSON。只返回有效的JSON，不要返回其他任何文本。";
+    
     const extractionPrompt = `分析以下对话，提取关于用户的重要信息，以便在未来对话中记住。包括：
 - 个人信息（姓名、年龄、地点、职业等）
 - 偏好和兴趣
@@ -461,22 +465,19 @@ AI：${aiResponse}
   }
 ]`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
+    const response = await provider.generateResponse({
+      model,
+      systemPrompt,
       messages: [
-        {
-          role: "system",
-          content: "你是一个记忆提取系统。从对话中提取重要的用户信息，并格式化为JSON。只返回有效的JSON，不要返回其他任何文本。"
-        },
         {
           role: "user",
           content: extractionPrompt
         }
       ],
-      max_completion_tokens: 1000,
+      maxTokens: 1000,
     });
     
-    const content = response.choices[0]?.message?.content?.trim();
+    const content = response.trim();
     if (!content) {
       return;
     }
@@ -534,102 +535,53 @@ export async function generateMomentComment(
     throw new Error("Persona not found");
   }
 
+  // Get user's AI settings to use their custom API key
+  const aiSettings = await storage.getAiSettings(userId);
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings, persona.model);
+
   // Build system prompt with memories
   const systemPrompt = await buildSystemPrompt(persona, userId);
   
   // Build prompt for moment comment
-  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
+  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
+  
+  // Add image context if present
+  if (momentImages && momentImages.length > 0) {
+    userPrompt += `还分享了${momentImages.length}张图片。\n\n`;
+  }
+  
+  userPrompt += `请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
 
   try {
-    // Check if model supports vision and images are provided
-    const modelName = persona.model || "gpt-4o"; // Default model
-    const isGeminiModel = modelName.includes('gemini');
-    const isOpenAIVisionModel = modelName.startsWith('gpt-4');
-    const isVisionModel = isOpenAIVisionModel || isGeminiModel;
+    // Use AI provider to generate comment (with vision support if images provided)
+    let imageData: ImageData | undefined;
     
-    if (momentImages && momentImages.length > 0 && isVisionModel) {
-      // Use vision capability for models that support it
-      if (isGeminiModel) {
-        // Use Gemini vision
-        const parts: any[] = [
-          { text: `${systemPrompt}\n\n${userPrompt}` }
-        ];
-        
-        // Add images
-        for (const imageUrl of momentImages) {
-          if (imageUrl.startsWith('data:image')) {
-            // Base64 image
-            const match = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
-            if (match) {
-              parts.push({
-                inlineData: {
-                  mimeType: `image/${match[1]}`,
-                  data: match[2]
-                }
-              });
-            }
-          }
+    // For vision models with images, include first image
+    if (momentImages && momentImages.length > 0) {
+      const firstImage = momentImages[0];
+      if (firstImage.startsWith('data:image')) {
+        const match = firstImage.match(/^data:image\/([^;]+);base64,(.+)$/);
+        if (match) {
+          imageData = {
+            base64: match[2],
+            mimeType: `image/${match[1]}`
+          };
         }
-        
-        const result = await gemini.generateContent({
-          contents: [{ role: "user", parts }],
-          generationConfig: {
-            temperature: 0.9,
-            maxOutputTokens: 150,
-          },
-        });
-        
-        const comment = result.response.text()?.trim() || "好棒！";
-        return comment;
-      } else {
-        // Use OpenAI vision (gpt-4o, gpt-4-turbo, gpt-4o-mini, etc.)
-        const content: any[] = [{ type: "text", text: userPrompt }];
-        
-        for (const imageUrl of momentImages) {
-          // OpenAI only accepts absolute URLs or base64 data URLs
-          if (imageUrl.startsWith('data:image') || imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-            content.push({
-              type: "image_url",
-              image_url: { url: imageUrl }
-            });
-          } else {
-            console.warn(`Skipping relative image URL for OpenAI vision: ${imageUrl}`);
-          }
-        }
-        
-        // Only send images if we have valid ones
-        const completion = await openai.chat.completions.create({
-          model: modelName,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: content.length > 1 ? content : userPrompt }
-          ],
-          temperature: 0.9,
-          max_tokens: 150,
-        });
-        
-        const comment = completion.choices[0]?.message?.content?.trim() || "好棒！";
-        return comment;
       }
-    } else {
-      // No images or non-vision model, use text-only
-      if (momentImages && momentImages.length > 0) {
-        userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n还分享了${momentImages.length}张图片。\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
-      }
-      
-      const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.9,
-        max_tokens: 150,
-      });
-
-      const comment = completion.choices[0]?.message?.content?.trim() || "好棒！";
-      return comment;
     }
+
+    const comment = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: [
+        { role: "user", content: userPrompt }
+      ],
+      maxTokens: 150,
+      imageData,
+    });
+
+    return comment.trim() || "好棒！";
   } catch (error) {
     console.error("Error generating moment comment:", error);
     // Fallback to simple reactions (no emoji)
