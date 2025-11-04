@@ -303,14 +303,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const { personaIds, ...conversationData } = req.body;
       
       // Validate using Zod schema
       const validatedData = insertConversationSchema.parse({
-        ...req.body,
+        ...conversationData,
         userId, // Set userId server-side for security
       });
       
       const conversation = await storage.createConversation(validatedData);
+      
+      // Add AI persona participants if provided
+      if (personaIds && Array.isArray(personaIds) && personaIds.length > 0) {
+        for (const personaId of personaIds) {
+          // Verify persona exists and belongs to user
+          const persona = await storage.getPersona(personaId);
+          if (!persona) {
+            // Rollback conversation creation if persona not found
+            await storage.deleteConversation(conversation.id);
+            return res.status(404).json({ message: `Persona with id ${personaId} not found` });
+          }
+          if (persona.userId !== userId) {
+            // Rollback conversation creation if user doesn't own persona
+            await storage.deleteConversation(conversation.id);
+            return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+          }
+          
+          // Add participant
+          await storage.addParticipant({
+            conversationId: conversation.id,
+            personaId: personaId,
+          });
+        }
+      }
+      
       res.json(conversation);
     } catch (error: any) {
       console.error("Error creating conversation:", error);
