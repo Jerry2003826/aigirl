@@ -22,7 +22,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc, asc, count } from "drizzle-orm";
+import { eq, and, desc, asc, count, inArray } from "drizzle-orm";
 
 // Storage interface with all CRUD methods needed for the AI chat app
 export interface IStorage {
@@ -510,6 +510,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deletePersona(id: string): Promise<boolean> {
+    // First, find all conversations that include this persona
+    const participants = await db
+      .select({ conversationId: conversationParticipants.conversationId })
+      .from(conversationParticipants)
+      .where(eq(conversationParticipants.personaId, id));
+    
+    // Delete all related conversations (this will cascade delete participants and messages)
+    const conversationIds = participants.map(p => p.conversationId);
+    if (conversationIds.length > 0) {
+      await db.delete(conversations).where(inArray(conversations.id, conversationIds));
+    }
+    
+    // Now delete the persona
     const result = await db.delete(aiPersonas).where(eq(aiPersonas.id, id)).returning();
     return result.length > 0;
   }
