@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff } from "lucide-react";
+import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -74,6 +74,32 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
       title: "已刷新",
       description: "数据已同步",
     });
+  };
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: (conversationId: string) =>
+      apiRequest("DELETE", `/api/conversations/${conversationId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({
+        title: "成功",
+        description: "对话已删除",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "删除对话失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteConversation = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("确定要删除这个对话吗？所有消息将被永久删除。")) {
+      deleteConversationMutation.mutate(conversationId);
+    }
   };
 
   const navItems = [
@@ -231,64 +257,77 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
           ) : (
             <div className="p-2">
               {conversations.map((conversation) => (
-                <button
+                <div
                   key={conversation.id}
-                  onClick={() => {
-                    onConversationSelect(conversation.id);
-                    setLocation("/chat");
-                  }}
                   className={cn(
-                    "w-full rounded-lg p-3 text-left transition-colors hover-elevate",
+                    "relative w-full rounded-lg transition-colors hover-elevate group",
                     selectedConversationId === conversation.id && "bg-sidebar-accent"
                   )}
-                  data-testid={`button-conversation-${conversation.id}`}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <Avatar className="h-14 w-14">
-                        <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
-                        <AvatarFallback className="bg-primary/10 text-primary text-base">
-                          {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
-                        </AvatarFallback>
-                      </Avatar>
-                      {conversation.unreadCount && conversation.unreadCount > 0 && (
-                        <Badge 
-                          className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
-                          data-testid={`badge-unread-${conversation.id}`}
-                        >
-                          {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className={cn(
-                          "truncate text-base",
-                          conversation.unreadCount && conversation.unreadCount > 0 ? "font-semibold" : "font-medium"
-                        )} data-testid={`text-conversation-title-${conversation.id}`}>
-                          {conversation.title || conversation.personas?.[0]?.name || "新聊天"}
-                        </p>
-                        {conversation.lastMessageAt && (
-                          <span className="text-sm text-muted-foreground ml-2 shrink-0">
-                            {format(new Date(conversation.lastMessageAt), "HH:mm")}
-                          </span>
+                  <button
+                    onClick={() => {
+                      onConversationSelect(conversation.id);
+                      setLocation("/chat");
+                    }}
+                    className="w-full p-3 text-left"
+                    data-testid={`button-conversation-${conversation.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="relative">
+                        <Avatar className="h-14 w-14">
+                          <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
+                          <AvatarFallback className="bg-primary/10 text-primary text-base">
+                            {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
+                          </AvatarFallback>
+                        </Avatar>
+                        {conversation.unreadCount && conversation.unreadCount > 0 && (
+                          <Badge 
+                            className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
+                            data-testid={`badge-unread-${conversation.id}`}
+                          >
+                            {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                          </Badge>
                         )}
                       </div>
-                      <div className="flex items-center gap-1">
-                        <p className={cn(
-                          "truncate text-sm",
-                          conversation.unreadCount && conversation.unreadCount > 0 
-                            ? "text-foreground font-medium" 
-                            : "text-muted-foreground"
-                        )} data-testid={`text-last-message-${conversation.id}`}>
-                          {conversation.lastMessage 
-                            ? `${conversation.lastMessage.senderType === 'ai' ? '' : '我: '}${conversation.lastMessage.content}`
-                            : '暂无消息'}
-                        </p>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="flex items-center justify-between mb-1">
+                          <p className={cn(
+                            "truncate text-base",
+                            conversation.unreadCount && conversation.unreadCount > 0 ? "font-semibold" : "font-medium"
+                          )} data-testid={`text-conversation-title-${conversation.id}`}>
+                            {conversation.title || conversation.personas?.[0]?.name || "新聊天"}
+                          </p>
+                          {conversation.lastMessageAt && (
+                            <span className="text-sm text-muted-foreground ml-2 shrink-0">
+                              {format(new Date(conversation.lastMessageAt), "HH:mm")}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <p className={cn(
+                            "truncate text-sm",
+                            conversation.unreadCount && conversation.unreadCount > 0 
+                              ? "text-foreground font-medium" 
+                              : "text-muted-foreground"
+                          )} data-testid={`text-last-message-${conversation.id}`}>
+                            {conversation.lastMessage 
+                              ? `${conversation.lastMessage.senderType === 'ai' ? '' : '我: '}${conversation.lastMessage.content}`
+                              : '暂无消息'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </button>
+                  </button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => handleDeleteConversation(conversation.id, e)}
+                    data-testid={`button-delete-conversation-${conversation.id}`}
+                  >
+                    <X className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
               ))}
             </div>
           )}
