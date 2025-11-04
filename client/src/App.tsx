@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ImmersiveModeProvider } from "@/components/immersive-mode-provider";
 import { useAuth } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/app-sidebar";
+import { BottomNavBar } from "@/components/bottom-nav-bar";
 import Login from "@/pages/login";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
@@ -100,67 +101,74 @@ function Router() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-background">
-        {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
-        <div className={cn(
-          "md:flex",
-          showMobileSidebar ? "flex" : "hidden"
-        )}>
-          <AppSidebar
-            selectedConversationId={selectedConversationId}
-            onConversationSelect={handleConversationSelect}
-            onNewChat={handleNewChat}
-            showMobileSidebar={showMobileSidebar}
-          />
+      <div className="flex h-screen w-full bg-background flex-col">
+        <div className="flex-1 flex overflow-hidden">
+          {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
+          <div className={cn(
+            "md:flex pb-20",
+            showMobileSidebar ? "flex" : "hidden"
+          )}>
+            <AppSidebar
+              selectedConversationId={selectedConversationId}
+              onConversationSelect={handleConversationSelect}
+              onNewChat={handleNewChat}
+              showMobileSidebar={showMobileSidebar}
+            />
+          </div>
+          
+          {/* Main content: Always visible on md+, conditionally visible on mobile */}
+          <main className={cn(
+            "flex-1 overflow-hidden md:flex flex-col",
+            showMobileSidebar ? "hidden" : "flex"
+          )}>
+            <div className="flex-1 overflow-hidden pb-20">
+              <Switch>
+                <Route path="/">
+                  {() => (
+                    <Chat
+                      selectedConversationId={selectedConversationId}
+                      onConversationDeleted={handleBackToList}
+                      onBackToList={handleBackToList}
+                      showMobileSidebar={showMobileSidebar}
+                    />
+                  )}
+                </Route>
+                <Route path="/chat">
+                  {() => (
+                    <Chat
+                      selectedConversationId={selectedConversationId}
+                      onConversationDeleted={handleBackToList}
+                      onBackToList={handleBackToList}
+                      showMobileSidebar={showMobileSidebar}
+                    />
+                  )}
+                </Route>
+                <Route path="/moments">
+                  {() => <Moments onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/personas">
+                  {() => <Personas onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/contacts">
+                  {() => <Contacts onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/contacts/:id">
+                  {(params) => <ContactDetail personaId={params.id} onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/groups">
+                  {() => <Groups onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/settings">
+                  {() => <Settings onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route component={NotFound} />
+              </Switch>
+            </div>
+          </main>
         </div>
         
-        {/* Main content: Always visible on md+, conditionally visible on mobile */}
-        <main className={cn(
-          "flex-1 overflow-hidden md:flex",
-          showMobileSidebar ? "hidden" : "flex"
-        )}>
-          <Switch>
-            <Route path="/">
-              {() => (
-                <Chat
-                  selectedConversationId={selectedConversationId}
-                  onConversationDeleted={handleBackToList}
-                  onBackToList={handleBackToList}
-                  showMobileSidebar={showMobileSidebar}
-                />
-              )}
-            </Route>
-            <Route path="/chat">
-              {() => (
-                <Chat
-                  selectedConversationId={selectedConversationId}
-                  onConversationDeleted={handleBackToList}
-                  onBackToList={handleBackToList}
-                  showMobileSidebar={showMobileSidebar}
-                />
-              )}
-            </Route>
-            <Route path="/moments">
-              {() => <Moments onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route path="/personas">
-              {() => <Personas onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route path="/contacts">
-              {() => <Contacts onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route path="/contacts/:id">
-              {(params) => <ContactDetail personaId={params.id} onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route path="/groups">
-              {() => <Groups onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route path="/settings">
-              {() => <Settings onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-            </Route>
-            <Route component={NotFound} />
-          </Switch>
-        </main>
+        {/* Bottom Navigation Bar - Always visible, outside main content toggle */}
+        <BottomNavBar />
       </div>
     </SidebarProvider>
   );

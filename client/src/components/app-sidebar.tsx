@@ -408,27 +408,89 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         </ScrollArea>
       </SidebarContent>
 
-      <SidebarFooter className="p-0 border-t border-sidebar-border">
-        {/* Bottom Navigation */}
-        <div className="flex items-center justify-around p-3 border-b border-sidebar-border">
-          {navItems.map((item) => {
-            const isActive = location === item.path;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                onClick={() => setLocation(item.path)}
-                className={cn(
-                  "flex flex-col items-center gap-1 py-2 px-3 rounded-lg flex-1 transition-colors hover-elevate touch-target-sm",
-                  isActive && "text-primary"
-                )}
-                data-testid={item.testId}
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="flex-1"
+            data-testid="button-theme-toggle"
+          >
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
+          {!isImmersive && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleRefresh}
+                className="flex-1"
+                data-testid="button-refresh"
               >
-                <Icon className={cn("h-6 w-6", isActive && "text-primary")} />
-                <span className="text-xs font-medium">{item.title}</span>
-              </button>
-            );
-          })}
+                <RotateCcw className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setLocation("/settings")}
+                className="flex-1"
+                data-testid="button-settings"
+              >
+                <Settings className="h-5 w-5" />
+              </Button>
+            </>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleImmersive}
+            className="flex-1"
+            data-testid="button-immersive-toggle"
+          >
+            {isImmersive ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-1"
+                data-testid="button-logout-trigger"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>退出登录</DialogTitle>
+                <DialogDescription>
+                  确认要退出当前账户吗？
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 mt-4">
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    data-testid="button-cancel-logout"
+                  >
+                    取消
+                  </Button>
+                </DialogTrigger>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                  data-testid="button-confirm-logout"
+                >
+                  {logoutMutation.isPending ? "退出中..." : "确认退出"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarFooter>
 
