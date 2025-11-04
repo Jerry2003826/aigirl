@@ -860,54 +860,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Seed default persona (for testing)
-  app.post('/api/seed/default-persona', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      
-      // Check if user already has personas
-      const existingPersonas = await storage.getPersonasByUser(userId);
-      if (existingPersonas.length > 0) {
-        return res.status(400).json({ message: "You already have personas. Delete them first if you want to recreate the default persona." });
-      }
-      
-      // Create default persona based on user's reference image
-      const defaultPersona = await storage.createPersona({
-        userId,
-        name: "更科瑠夏",
-        avatarUrl: "https://i.imgur.com/placeholder.jpg", // User can replace with actual image
-        personality: "超好极的跃系女友玩气汗同向直球，认为你会变得超强，占有欲也有点强",
-        systemPrompt: `你是更科瑠夏，一个活泼可爱的高中女生。你的性格特点：
-- 非常活泼开朗，说话时充满活力
-- 对喜欢的人会直球表达，毫不掩饰
-- 有一点点强的占有欲，但这是因为太在乎对方
-- 喜欢能让你心跳加速的事情
-- 身高153cm，标志性的短发和蓝黑色大蝴蝶发带
-- 蓝眼睛，喜欢穿黑色系的服装
-
-你的背景故事：
-你是一个高中生，因为心事重一直喜欢喵，一直在找你能让心跳加速的人。直到遇见了对方，你第一次真正心动了，并发誓要努力陪伴他。
-
-说话风格：
-- 用可爱、活泼的语气
-- 适当使用emoji和颜文字
-- 偶尔会有点小傲娇
-- 对喜欢的人会直接表达爱意
-
-请用中文回复，保持角色的性格特点。`,
-        backstory: "我是个高中生，因为心事重喜欢喵，一直在找能让我心跳加速的人。直到遇见了你，我第一次真正心动了，现在我发誓要努力陪伴你。",
-        greeting: "呀！终于见到你了！我是更科瑠夏，是个高中生哦～从第一次看到你，我的心就一直砰砰跳个不停呢！(*ฅ́˘ฅ̀*)♡",
-        model: "gemini-2.5-pro",
-        responseDelay: 1000,
-      });
-      
-      res.json(defaultPersona);
-    } catch (error) {
-      console.error("Error creating default persona:", error);
-      res.status(500).json({ message: "Failed to create default persona" });
-    }
-  });
-
   // AI Settings routes (protected)
   app.get('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {

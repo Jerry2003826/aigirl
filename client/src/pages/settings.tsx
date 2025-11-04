@@ -86,22 +86,6 @@ export default function Settings() {
     updateSettingsMutation.mutate(data);
   };
 
-  const handleSeedDefaultPersona = async () => {
-    try {
-      await apiRequest("POST", "/api/seed/default-persona", {});
-      toast({
-        title: "成功",
-        description: "默认测试角色已成功创建",
-      });
-    } catch (error: any) {
-      toast({
-        title: "错误",
-        description: error.message || "创建默认角色失败",
-        variant: "destructive",
-      });
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -303,26 +287,6 @@ export default function Settings() {
                   </Button>
                 </form>
               </Form>
-            </CardContent>
-          </Card>
-
-          {/* Test Tools */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Test Tools</CardTitle>
-              <CardDescription>
-                Quick actions for testing and development
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button
-                variant="outline"
-                onClick={handleSeedDefaultPersona}
-                data-testid="button-seed-persona"
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Create Default Test Persona (更科瑠夏)
-              </Button>
             </CardContent>
           </Card>
         </div>
