@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { generateAIResponse, generateAIResponseStream } from "./aiService";
+import { setupWebSocket, broadcastNewMessage } from "./websocket";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -308,6 +309,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const message = await storage.createMessage(validatedData);
       
+      // Broadcast new message to all connected clients in the conversation
+      broadcastNewMessage(conversationId, message);
+      
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
@@ -379,6 +383,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
+      
+      // Broadcast user message and AI response to all connected clients
+      broadcastNewMessage(conversationId, userMessage);
+      broadcastNewMessage(conversationId, aiMessage);
       
       res.json({ userMessage, aiMessage, response: aiResponse });
     } catch (error: any) {
@@ -468,6 +476,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
+      // Broadcast user message and AI response to all connected clients
+      broadcastNewMessage(conversationId, userMessage);
+      broadcastNewMessage(conversationId, aiMessage);
+      
       // Send final message with saved message data
       res.write(`data: ${JSON.stringify({ done: true, aiMessage })}\n\n`);
       res.end();
@@ -483,5 +495,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  
+  // Setup WebSocket server for real-time messaging
+  setupWebSocket(httpServer);
+  
   return httpServer;
 }
