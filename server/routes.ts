@@ -294,6 +294,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         })
       );
       
+      // Sort by lastMessageAt, newest first (conversations with messages first, then by creation time)
+      enrichedConversations.sort((a, b) => {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : new Date(a.createdAt).getTime();
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : new Date(b.createdAt).getTime();
+        return bTime - aTime; // Descending order (newest first)
+      });
+      
       res.json(enrichedConversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
