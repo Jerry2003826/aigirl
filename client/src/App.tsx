@@ -73,10 +73,20 @@ function Router() {
         <main className="flex-1 overflow-hidden">
           <Switch>
             <Route path="/">
-              {() => <Chat selectedConversationId={selectedConversationId} />}
+              {() => (
+                <Chat
+                  selectedConversationId={selectedConversationId}
+                  onConversationDeleted={() => setSelectedConversationId(null)}
+                />
+              )}
             </Route>
             <Route path="/chat">
-              {() => <Chat selectedConversationId={selectedConversationId} />}
+              {() => (
+                <Chat
+                  selectedConversationId={selectedConversationId}
+                  onConversationDeleted={() => setSelectedConversationId(null)}
+                />
+              )}
             </Route>
             <Route path="/moments" component={Moments} />
             <Route path="/personas" component={Personas} />

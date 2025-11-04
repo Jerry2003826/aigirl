@@ -1,21 +1,28 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, MessageCircle, Loader2, ImagePlus, X } from "lucide-react";
+import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2 } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { useLocation } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 type Conversation = {
   id: string;
   title: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
-  personas?: { name: string; avatarUrl: string | null }[];
+  personas?: { id: string; name: string; avatarUrl: string | null }[];
 };
 
 type Message = {
@@ -39,10 +46,12 @@ type Persona = {
 
 interface ChatProps {
   selectedConversationId: string | null;
+  onConversationDeleted?: () => void;
 }
 
-export default function Chat({ selectedConversationId }: ChatProps) {
+export default function Chat({ selectedConversationId, onConversationDeleted }: ChatProps) {
   const { toast } = useToast();
+  const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
@@ -51,6 +60,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -115,6 +125,47 @@ export default function Chat({ selectedConversationId }: ChatProps) {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const deleteConversationMutation = useMutation({
+    mutationFn: (conversationId: string) =>
+      apiRequest("DELETE", `/api/conversations/${conversationId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({
+        title: "成功",
+        description: "对话已删除",
+      });
+      // Clear the selected conversation
+      if (onConversationDeleted) {
+        onConversationDeleted();
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "删除对话失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteConversation = () => {
+    if (!selectedConversation) return;
+    if (confirm("确定要删除这个对话吗？所有消息将被永久删除。")) {
+      deleteConversationMutation.mutate(selectedConversation.id);
+    }
+  };
+
+  const handleViewMemories = () => {
+    if (!selectedConversation?.personas?.[0]) return;
+    // Navigate to contact detail page which shows memories
+    setLocation(`/contacts/${selectedConversation.personas[0].id}`);
+  };
+
+  const handleViewChatHistory = () => {
+    // Scroll to top to view chat history
+    scrollViewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const sendMessageMutation = useMutation({
@@ -245,15 +296,16 @@ export default function Chat({ selectedConversationId }: ChatProps) {
       {selectedConversation ? (
         <>
           {/* Chat Header */}
-          <div className="flex items-center gap-3 border-b p-4 bg-sidebar">
-              <Avatar className="h-10 w-10">
+          <div className="flex items-center gap-3 border-b p-4 bg-sidebar justify-between">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <Avatar className="h-10 w-10 shrink-0">
                 <AvatarImage src={selectedConversation.personas?.[0]?.avatarUrl || undefined} />
                 <AvatarFallback className="bg-primary/10 text-primary">
                   {selectedConversation.title?.substring(0, 2).toUpperCase() || "AI"}
                 </AvatarFallback>
               </Avatar>
-              <div>
-                <h3 className="font-semibold" data-testid="text-chat-header-title">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold truncate" data-testid="text-chat-header-title">
                   {selectedConversation.title || selectedConversation.personas?.[0]?.name || "Chat"}
                 </h3>
                 {isTyping && (
@@ -264,8 +316,60 @@ export default function Chat({ selectedConversationId }: ChatProps) {
               </div>
             </div>
 
+            {/* Menu Button */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0"
+                  data-testid="button-chat-menu"
+                >
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {!selectedConversation.isGroup && selectedConversation.personas?.[0] && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={handleViewMemories}
+                      data-testid="menu-view-memories"
+                    >
+                      <Brain className="mr-2 h-4 w-4" />
+                      查看记忆
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setLocation(`/contacts/${selectedConversation.personas![0].id}`)}
+                      data-testid="menu-view-persona"
+                    >
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      查看AI信息
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuItem
+                  onClick={handleViewChatHistory}
+                  data-testid="menu-view-history"
+                >
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  查看聊天记录
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleDeleteConversation}
+                  className="text-destructive focus:text-destructive"
+                  data-testid="menu-delete-conversation"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  删除对话
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
             {/* Messages */}
-            <ScrollArea className="flex-1 p-4">
+            <div className="flex-1 overflow-hidden relative">
+              <div className="h-full overflow-y-auto p-4" ref={scrollViewportRef}>
               {/* Load More Button */}
               {!messagesLoading && messages.length >= messageLimit && (
                 <div className="flex justify-center mb-4">
@@ -363,7 +467,8 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                   <div ref={messagesEndRef} />
                 </div>
               )}
-            </ScrollArea>
+              </div>
+            </div>
 
             {/* Message Input */}
             <div className="border-t bg-background p-4">
