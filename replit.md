@@ -1,89 +1,37 @@
 # AI Companion Chat Application
 
 ## Overview
-A WeChat-style AI companion chat application enabling users to converse with customizable AI personas in 1-on-1 or group chats. It supports real-time synchronization across multiple devices, offering a robust platform for engaging AI interactions and a social feed for sharing "Moments". The project aims to deliver a highly interactive and personalized AI chat experience.
+This project is a WeChat-style AI companion chat application designed for engaging interactions with customizable AI personas. It supports 1-on-1 and group chats, real-time multi-device synchronization, and a social feed ("Moments"). The application aims to provide a highly interactive and personalized AI chat experience with a strong focus on a mobile-first, Chinese-localized user experience. The business vision is to deliver a robust platform for personalized AI interactions, tapping into the growing market for AI companionship and social networking.
 
 ## User Preferences
 I want the agent to use a creative and engaging communication style. I prefer detailed explanations, especially for complex technical decisions. When proposing changes, please ask for confirmation before implementing major modifications. I value iterative development and clear communication throughout the process. Do not make changes to the folder `Z` or the file `Y`.
 
 ## System Architecture
-The application uses a React, TypeScript, Vite, and TailwindCSS frontend, an Express and TypeScript backend, and PostgreSQL with Drizzle ORM for data persistence. Real-time communication is handled via WebSockets. Authentication leverages Replit OIDC.
+The application features a modern web stack: React, TypeScript, Vite, and TailwindCSS for the frontend; Express and TypeScript for the backend; and PostgreSQL with Drizzle ORM for data persistence. Real-time communication is powered by WebSockets, and authentication utilizes Replit OIDC.
 
 **UI/UX Decisions:**
-The design is heavily inspired by WeChat, featuring a green color palette (`#07C160` primary, user messages `#95EC69` light / `#056F3A` dark) and a purple accent for the Moments feature. It includes dark mode support, typing indicators, loading states, toast notifications, and responsive design optimized for mobile-first usage (iPhone SE baseline: 375x667px). Recent additions include a custom, localized login page with a purple/pink gradient, a redesigned Moments UI with purple theme, and an immersive mode that hides all management/configuration interfaces for a pure chat experience.
-
-**Mobile Optimizations (iPhone SE baseline):**
-- Enhanced typography: 16px base font, larger UI text (14-18px range), improved readability with relaxed line-height
-- Touch-friendly targets: Minimum 44x44px touch areas on all interactive elements, 48-52px for primary actions
-- Optimized chat bubbles: 16px message text, larger avatars (10-14px), 75% max-width for better readability
-- Larger input fields: 48px minimum height for textarea, 12px icon buttons for easier tapping
-- Increased spacing: Better visual hierarchy with larger gaps and padding throughout the UI
-- Bottom navigation: Larger icons (24px) with clearer labels for one-handed use
+The design draws inspiration from WeChat, employing a green primary color palette and a purple accent for the Moments feature. It includes dark mode, typing indicators, loading states, toast notifications, and is optimized for mobile-first responsiveness (iPhone SE baseline). Key UI/UX elements include a custom localized login page, a redesigned Moments UI, and an immersive chat mode. Mobile optimizations include enhanced typography, touch-friendly targets (44-52px), optimized chat bubbles, larger input fields, increased spacing, and a global bottom navigation bar for one-handed use. Content on larger screens is centered within `max-w-3xl` containers.
 
 **Technical Implementations:**
-- **Authentication:** Replit OIDC, `express-session` with PostgreSQL store, `isAuthenticated` middleware for token refresh and authorization, WebSocket authentication via session cookies.
-- **Database Schema:** Key entities include `users`, `ai_personas` (customizable AI characters), `conversations` (1-on-1 and group), `messages`, `memories` (AI's understanding of users), and `moments` (social feed posts with likes and comments).
-- **WebSocket:** Handles real-time message delivery, typing indicators, read status, and multi-device synchronization.
-- **AI Service:** Persona-based responses with customizable system prompts, memory integration, Google Gemini 2.5 Pro as default (with OpenAI gpt-4o, gpt-4-turbo, gpt-3.5-turbo options), configurable response delays, and AI-powered persona selection for group chats. Supports streaming AI responses. **All AI prompts enforce Chinese language responses by default** - system prompts include "除非用户明确要求使用其他语言，否则请始终用中文回复" to ensure natural Chinese conversations. **Fixed conversation rules** enforce: complete compliance with user requests, short responses (30 chars max), backslash-separated sentences (max 4), no robot terminology, no action descriptions in parentheses, and time-aware context understanding. **RAG (Retrieval-Augmented Generation):** When enabled in settings, AI女友's memories are formatted as RAG context and prepended to user messages, allowing the AI to reference specific memories with importance levels. **Web Search (Google Search Grounding):** When enabled, Google Gemini's googleSearch tool is activated to allow AI to search for real-time information and incorporate search results into responses naturally.
-- **API Rate Limiting:** 20 messages per minute per authenticated user on all message-sending endpoints, using an IPv6-safe key generation.
-- **Memory System:** GPT-5 powered memory extraction with Chinese prompts, safe JSON parsing, deduplication, and automatic inclusion in AI system prompts.
-- **Moments Feature:** A global social feed where users and AIs can post, like, and comment. **Modern composer UI** with gradient purple-to-pink primary button, expanded dialog (max-w-2xl), user avatar display, borderless immersive textarea, inline 500-character counter, large rounded image previews, and smooth animations. AI personas **autonomously post moments** via hourly scheduler (30% random probability per check, 6-hour cooldown enforced by `lastMomentAt` field), automatically comment on user posts using Chinese prompts, incorporating their personality and memories. Supports nested comments and real-time updates.
-- **Localization:** Full Chinese localization - all UI text, error messages, toast notifications, placeholders, and AI prompts are in Chinese. System prompts for memory extraction, persona selection, and moment comments all use Chinese instructions.
-- **Conversation Management:** Delete conversations with trash icon on hover, smart "发消息" button that finds existing conversations or creates new ones.
-
-**Feature Specifications:**
-- **User Management:** Secure Replit Auth login, profile management, session persistence.
-- **AI Personas:** CRUD operations for custom AI characters with configurable name, avatar, personality, system prompt, backstory, greeting, AI model, and response delays.
-- **Conversations:** 1-on-1 and group chats, message history pagination, read/unread status, last message timestamp. Chat header includes dropdown menu (MoreVertical icon) with: view memories (1-on-1 only), view AI info (1-on-1 only), view chat history (scroll to top), and delete conversation (with confirmation). Delete conversation clears selection state.
-- **Real-time Features:** Instant message delivery, multi-device sync, typing indicators, live read status, auto-scroll.
-- **Moments:** Global feed with purple theme (`#9333ea`), modern composer with gradient button and expanded UI, top "发布动态" button, inline comment inputs, delete button for user's own posts only, cross-user interactions (likes/comments), **AI autonomous posting** (hourly scheduler, 30% probability, 6-hour cooldown), AI auto-comments, nested comments, real-time updates.
-- **Contacts & Memory Management:** Dedicated contacts page with search, alphabetical grouping, and full CRUD for AI memories with importance classification.
-- **Groups Management:** Dedicated groups page (`/groups`) with list view showing all group chats, member count display, "创建新群聊" button to create empty groups, AI member selection dialog with checkboxes, automatic navigation to new group chat after creation.
-- **Immersive Mode:** Toggle to hide all management and configuration UI (AI persona management, settings, refresh, account menu, create AI girlfriend button), providing a WeChat-like pure chat experience. State persisted in localStorage with Eye/EyeOff toggle button in sidebar header.
-- **AI Advanced Features:** User-configurable RAG (记忆检索增强) and Web Search (联网搜索) toggles in settings page. RAG mode uses AI女友's memory database as knowledge base. Web Search enables Google Gemini's grounding tool for real-time information retrieval.
+- **Authentication:** Replit OIDC, `express-session` with PostgreSQL store, `isAuthenticated` middleware, and WebSocket authentication via session cookies.
+- **Database Schema:** Core entities include `users`, `ai_personas`, `conversations`, `messages`, `memories`, and `moments`.
+- **WebSocket:** Facilitates real-time message delivery, typing indicators, read status, and multi-device synchronization.
+- **AI Service:** Supports persona-based responses with customizable system prompts, memory integration, and Google Gemini 2.5 Pro (with OpenAI alternatives). AI responses are streamed and **enforced to be in Chinese by default**. Conversation rules enforce conciseness (max 30 chars, 4 backslash-separated sentences), no robot terminology, and time-aware context.
+- **RAG (Retrieval-Augmented Generation):** User-configurable feature where AI persona memories are used as RAG context, allowing the AI to reference specific memories based on importance levels.
+- **Web Search (Google Search Grounding):** User-configurable feature that activates Google Gemini's `googleSearch` tool for real-time information retrieval.
+- **API Rate Limiting:** Implemented for message-sending endpoints (20 messages/minute/user).
+- **Memory System:** GPT-5 powered memory extraction, safe JSON parsing, deduplication, and automatic inclusion in AI system prompts.
+- **Moments Feature:** A global social feed allowing users and AIs to post, like, and comment. It features a modern composer UI and **AI personas autonomously post moments** via an hourly scheduler (30% probability, 6-hour cooldown) and automatically comment on user posts, incorporating personality and memories. Supports nested comments and real-time updates.
+- **Localization:** Full Chinese localization across all UI elements, error messages, and AI prompts.
+- **Conversation Management:** Features conversation deletion and smart "发消息" (Send Message) functionality.
+- **User Profile Editing:** Click-to-edit profile functionality with avatar upload, nickname editing, and API for partial updates.
+- **Immersive Mode:** A toggle to hide management interfaces for a pure chat experience, with state persistence.
+- **Groups Management:** Dedicated page for managing groups, including creation and AI member selection.
 
 ## External Dependencies
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, shadcn/ui, Wouter, TanStack Query v5
 - **Backend:** Express, TypeScript, Drizzle ORM
 - **Database:** PostgreSQL (via Neon)
 - **Real-time:** `ws` library (WebSocket)
-- **Authentication:** Replit OIDC Auth (Google, GitHub, email/password), `express-session`
-- **AI:** OpenAI API (via Replit AI Integrations)
-## Recent Changes (November 4, 2025)
-### Mobile Responsive Design Implementation
-- **WeChat-style Mobile UX:** Implemented full-screen switching behavior for mobile devices (<768px), with conversation list as initial view, seamless transition to chat on selection, and back button to return to list.
-- **Sidebar Mobile Fix:** Disabled Shadcn sidebar's default Sheet behavior by setting `collapsible="none"`, allowing unified rendering logic across desktop and mobile. Mobile visibility controlled via CSS classes (`md:block`, conditional `hidden`).
-- **Smart Viewport Detection:** Added `window.innerWidth < 768` checks in conversation select and URL initialization handlers to ensure sidebar only hides on actual mobile devices, preserving desktop dual-pane layout.
-- **Navigation State Management:** `showMobileSidebar` state in App.tsx controls mobile sidebar visibility, with intelligent defaults: true on initial load, false after conversation selection on mobile, true on back navigation.
-- **E2E Testing:** Verified mobile responsive behavior including initial sidebar display, conversation selection, chat view transition, back button functionality, and deep-link URL navigation (all tests passed).
-
-### Moments Modernization & AI Autonomous Posting
-- **Modern Composer UI:** Redesigned post creation dialog with gradient purple-to-pink CTA button, expanded modal layout (max-w-2xl), user avatar and name display, borderless immersive textarea, inline 500-character counter, large rounded image previews (rounded-xl), and smooth transition animations.
-- **AI Autonomous Posting:** Implemented `server/aiScheduler.ts` background service that runs on server startup. The scheduler checks all AI personas hourly, applies 6-hour cooldown enforcement via `canAIPostMoment()`, uses 30% stochastic window for natural posting variance, and delegates to `triggerAIPostMoment()` with detailed logging. Removed manual "让AI发布动态" trigger button to enforce autonomous-only behavior.
-- **Storage Extension:** Added `getAllUsers()` method to `IStorage` interface, implemented in both MemStorage and DatabaseStorage classes to support scheduler enumeration.
-- **Technical Details:** First scheduler check delayed 5 minutes post-startup, subsequent checks every hour. Scheduler logs persona eligibility, random decision outcomes, and posting results for operational visibility.
-
-### User Profile Editing Feature
-- **Click-to-Edit Profile:** Users can now click on their avatar/name in the sidebar to open an edit profile dialog, providing quick access to personalization options.
-- **Profile Dialog UI:** Modern, WeChat-style dialog with large avatar preview (24×24), upload button overlay (Upload icon), nickname input field, and save/cancel buttons. Fully responsive with mobile-optimized touch targets.
-- **Avatar Upload Flow:** Integrated with existing `/api/upload` endpoint, supports drag-and-drop or click-to-select, displays upload progress, and shows instant preview before saving. Accepts relative paths (`/uploads/...`) returned from the upload endpoint.
-- **API Implementation:** Added `PATCH /api/user/profile` endpoint with Zod validation (`updateUserProfileSchema`), authentication middleware, and support for partial updates (username and/or profileImageUrl). Storage layer extended with `updateUserProfile` method in both MemStorage and DatabaseStorage.
-- **Data Consistency:** Unified field naming to use `profileImageUrl` across the entire codebase (schema, storage, API, frontend), ensuring consistent data handling and eliminating legacy `profileImage` references.
-- **Cache Management:** TanStack Query mutation automatically invalidates `/api/user` cache after successful update, ensuring UI reflects changes immediately without manual refresh.
-- **E2E Testing:** Comprehensive test suite verified: dialog open/close, nickname editing and persistence, avatar upload and save, cancel flow without persisting changes, and proper API responses (200 status codes). All tests passed successfully.
-
-### Simplified Logout Feature
-- **Streamlined Account Menu:** Removed "角色管理" option from account menu, keeping only logout functionality with confirmation dialog.
-- **Immersive Mode Visibility:** Logout button (LogOut icon) remains visible even in immersive mode, ensuring users can always sign out.
-- **Confirmation Dialog:** Logout now shows a confirmation dialog ("退出登录" / "确认要退出当前账户吗？") with Cancel and Confirm buttons.
-- **Destructive Styling:** Confirm logout button uses destructive (red) variant to emphasize the irreversible action.
-- **Bug Fix:** Corrected logout flow to use `/api/logout` endpoint (Replit OIDC logout), ensuring proper session termination and redirect.
-
-### Desktop Responsive Design Optimization
-- **Centered Desktop Layout:** All main content pages now use `max-w-3xl` (768px) containers with `mx-auto` for centered display on large screens, preventing content from spanning the entire viewport width.
-- **Optimized Message Bubbles:** Chat message bubbles use responsive max-width: mobile `max-w-[75%]`, desktop `md:max-w-md` (28rem/448px), large desktop `lg:max-w-lg` (32rem/512px) for improved readability.
-- **Responsive Padding:** Consistent padding across pages: mobile `p-4` (1rem), desktop `md:p-6` (1.5rem) for better visual hierarchy.
-- **Affected Pages:** Moments (moments.tsx), Chat (chat.tsx), Contacts (contacts.tsx), Groups (groups.tsx), Settings (settings.tsx - adjusted from max-w-4xl to max-w-3xl).
-- **Desktop Experience:** Content width ~960px on 1280px viewport, providing comfortable reading experience with balanced whitespace.
-- **Mobile Preservation:** Full-width layout maintained on mobile devices (<768px), ensuring optimal use of smaller screens.
-- **E2E Validation:** Comprehensive testing verified correct layout behavior at mobile, tablet, and desktop breakpoints across all optimized pages.
+- **Authentication:** Replit OIDC Auth, `express-session`
+- **AI:** OpenAI API (via Replit AI Integrations), Google Gemini (natively supported)
