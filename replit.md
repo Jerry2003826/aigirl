@@ -62,3 +62,12 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **AI Autonomous Posting:** Implemented `server/aiScheduler.ts` background service that runs on server startup. The scheduler checks all AI personas hourly, applies 6-hour cooldown enforcement via `canAIPostMoment()`, uses 30% stochastic window for natural posting variance, and delegates to `triggerAIPostMoment()` with detailed logging. Removed manual "让AI发布动态" trigger button to enforce autonomous-only behavior.
 - **Storage Extension:** Added `getAllUsers()` method to `IStorage` interface, implemented in both MemStorage and DatabaseStorage classes to support scheduler enumeration.
 - **Technical Details:** First scheduler check delayed 5 minutes post-startup, subsequent checks every hour. Scheduler logs persona eligibility, random decision outcomes, and posting results for operational visibility.
+
+### User Profile Editing Feature
+- **Click-to-Edit Profile:** Users can now click on their avatar/name in the sidebar to open an edit profile dialog, providing quick access to personalization options.
+- **Profile Dialog UI:** Modern, WeChat-style dialog with large avatar preview (24×24), upload button overlay (Upload icon), nickname input field, and save/cancel buttons. Fully responsive with mobile-optimized touch targets.
+- **Avatar Upload Flow:** Integrated with existing `/api/upload` endpoint, supports drag-and-drop or click-to-select, displays upload progress, and shows instant preview before saving. Accepts relative paths (`/uploads/...`) returned from the upload endpoint.
+- **API Implementation:** Added `PATCH /api/user/profile` endpoint with Zod validation (`updateUserProfileSchema`), authentication middleware, and support for partial updates (username and/or profileImageUrl). Storage layer extended with `updateUserProfile` method in both MemStorage and DatabaseStorage.
+- **Data Consistency:** Unified field naming to use `profileImageUrl` across the entire codebase (schema, storage, API, frontend), ensuring consistent data handling and eliminating legacy `profileImage` references.
+- **Cache Management:** TanStack Query mutation automatically invalidates `/api/user` cache after successful update, ensuring UI reflects changes immediately without manual refresh.
+- **E2E Testing:** Comprehensive test suite verified: dialog open/close, nickname editing and persistence, avatar upload and save, cancel flow without persisting changes, and proper API responses (200 status codes). All tests passed successfully.
