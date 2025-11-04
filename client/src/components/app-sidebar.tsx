@@ -368,7 +368,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                             className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
                             data-testid={`badge-unread-${conversation.id}`}
                           >
-                            {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                            {(conversation.unreadCount ?? 0) > 99 ? '99+' : (conversation.unreadCount ?? 0)}
                           </Badge>
                         )}
                       </div>
