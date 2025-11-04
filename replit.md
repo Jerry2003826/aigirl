@@ -10,7 +10,7 @@ I want the agent to use a creative and engaging communication style. I prefer de
 The application uses a React, TypeScript, Vite, and TailwindCSS frontend, an Express and TypeScript backend, and PostgreSQL with Drizzle ORM for data persistence. Real-time communication is handled via WebSockets. Authentication leverages Replit OIDC.
 
 **UI/UX Decisions:**
-The design is heavily inspired by WeChat, featuring a green color palette (`#07C160` primary, user messages `#95EC69` light / `#056F3A` dark) and a purple accent for the Moments feature. It includes dark mode support, typing indicators, loading states, toast notifications, and responsive design for a modern user experience. Recent additions include a custom, localized login page with a purple/pink gradient and a redesigned Moments UI.
+The design is heavily inspired by WeChat, featuring a green color palette (`#07C160` primary, user messages `#95EC69` light / `#056F3A` dark) and a purple accent for the Moments feature. It includes dark mode support, typing indicators, loading states, toast notifications, and responsive design for a modern user experience. Recent additions include a custom, localized login page with a purple/pink gradient, a redesigned Moments UI with purple theme, and an immersive mode that hides all management/configuration interfaces for a pure chat experience.
 
 **Technical Implementations:**
 - **Authentication:** Replit OIDC, `express-session` with PostgreSQL store, `isAuthenticated` middleware for token refresh and authorization, WebSocket authentication via session cookies.
@@ -29,6 +29,7 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **Moments:** Global feed with purple theme (`#9333ea`), top "发布动态" button, inline comment inputs, delete button for user's own posts only, cross-user interactions (likes/comments), AI auto-comments, nested comments, real-time updates.
 - **Contacts & Memory Management:** Dedicated contacts page with search, alphabetical grouping, and full CRUD for AI memories with importance classification.
 - **Groups Management:** Dedicated groups page (`/groups`) with list view showing all group chats, member count display, "创建新群聊" button to create empty groups, AI member selection dialog with checkboxes, automatic navigation to new group chat after creation.
+- **Immersive Mode:** Toggle to hide all management and configuration UI (AI persona management, settings, refresh, account menu, create AI girlfriend button), providing a WeChat-like pure chat experience. State persisted in localStorage with Eye/EyeOff toggle button in sidebar header.
 
 ## External Dependencies
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, shadcn/ui, Wouter, TanStack Query v5

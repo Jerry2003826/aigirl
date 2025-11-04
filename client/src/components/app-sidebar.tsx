@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut } from "lucide-react";
+import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/theme-provider";
+import { useImmersiveMode } from "@/components/immersive-mode-provider";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,6 +47,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { isImmersive, toggleImmersive } = useImmersiveMode();
   const { toast } = useToast();
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
@@ -125,70 +127,84 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
             size="icon" 
             variant="ghost" 
             className="h-8 w-8"
-            onClick={() => setLocation("/personas")}
-            data-testid="button-personas"
+            onClick={toggleImmersive}
+            data-testid="button-immersive-toggle"
+            title={isImmersive ? "退出沉浸模式" : "进入沉浸模式"}
           >
-            <Users className="h-4 w-4" />
+            {isImmersive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </Button>
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            className="h-8 w-8"
-            onClick={handleRefresh}
-            data-testid="button-refresh"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            className="h-8 w-8"
-            onClick={() => setLocation("/settings")}
-            data-testid="button-settings"
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
-          <Dialog>
-            <DialogTrigger asChild>
+          {!isImmersive && (
+            <>
               <Button 
                 size="icon" 
                 variant="ghost" 
                 className="h-8 w-8"
-                data-testid="button-user-menu"
+                onClick={() => setLocation("/personas")}
+                data-testid="button-personas"
               >
-                <UserCircle className="h-4 w-4" />
+                <Users className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>账户管理</DialogTitle>
-                <DialogDescription>
-                  账户设置和退出登录
-                </DialogDescription>
-              </DialogHeader>
-              <div className="flex flex-col gap-3 py-4">
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => setLocation("/personas")}
-                  data-testid="button-manage-personas"
-                >
-                  <Users className="mr-2 h-4 w-4" />
-                  角色管理
-                </Button>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-destructive hover:text-destructive"
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  data-testid="button-logout"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  {logoutMutation.isPending ? "退出中..." : "退出登录"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8"
+                onClick={handleRefresh}
+                data-testid="button-refresh"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8"
+                onClick={() => setLocation("/settings")}
+                data-testid="button-settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="h-8 w-8"
+                    data-testid="button-user-menu"
+                  >
+                    <UserCircle className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>账户管理</DialogTitle>
+                    <DialogDescription>
+                      账户设置和退出登录
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="flex flex-col gap-3 py-4">
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start"
+                      onClick={() => setLocation("/personas")}
+                      data-testid="button-manage-personas"
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      角色管理
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-destructive hover:text-destructive"
+                      onClick={() => logoutMutation.mutate()}
+                      disabled={logoutMutation.isPending}
+                      data-testid="button-logout"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      {logoutMutation.isPending ? "退出中..." : "退出登录"}
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
         </div>
 
         {/* Search Bar */}
@@ -303,16 +319,18 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         </div>
 
         {/* CTA Button */}
-        <div className="p-3">
-          <Button
-            onClick={onNewChat}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-            data-testid="button-create-ai-girlfriend"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            创建新AI女友
-          </Button>
-        </div>
+        {!isImmersive && (
+          <div className="p-3">
+            <Button
+              onClick={onNewChat}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+              data-testid="button-create-ai-girlfriend"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              创建新AI女友
+            </Button>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );
