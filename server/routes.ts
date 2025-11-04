@@ -106,6 +106,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/personas/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const personaId = req.params.id;
+      const persona = await storage.getPersona(personaId);
+      
+      if (!persona) {
+        return res.status(404).json({ message: "Persona not found" });
+      }
+      
+      // Verify the persona belongs to the current user
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      res.json(persona);
+    } catch (error) {
+      console.error("Error fetching persona:", error);
+      res.status(500).json({ message: "Failed to fetch persona" });
+    }
+  });
+
   app.post('/api/personas', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
