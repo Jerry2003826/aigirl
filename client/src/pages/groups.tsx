@@ -190,7 +190,7 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
                         onClick={() => togglePersona(persona.id)}
                         data-testid={`persona-item-${persona.id}`}
                       >
-                        <div onClick={(e) => e.stopPropagation()}>
+                        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
                           <Checkbox
                             checked={selectedPersonas.includes(persona.id)}
                             onCheckedChange={() => togglePersona(persona.id)}
