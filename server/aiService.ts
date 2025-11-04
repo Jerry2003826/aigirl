@@ -47,7 +47,8 @@ async function buildConversationContext(
 async function buildSystemPrompt(
   persona: AiPersona,
   userId: string,
-  ragEnabled: boolean = false
+  ragEnabled: boolean = false,
+  language: string = "zh-CN"
 ): Promise<string> {
   let systemPrompt = persona.systemPrompt;
   
@@ -77,11 +78,33 @@ async function buildSystemPrompt(
     systemPrompt += "\n\n你拥有一个关于用户的记忆知识库。当用户提问时，系统会自动从知识库中检索相关记忆并提供给你。请优先使用这些知识库内容来理解用户和生成回复。";
   }
   
-  // Add default Chinese language instruction
-  systemPrompt += "\n\n重要提示：除非用户明确要求使用其他语言，否则请始终用中文回复。使用自然、流畅的中文表达，符合你的角色设定和性格特点。";
+  // Add language instruction based on user preference
+  if (language === "en-US") {
+    systemPrompt += "\n\nIMPORTANT: Always respond in natural, fluent English unless the user explicitly requests another language. Match the character's personality and traits in your English responses.";
+  } else {
+    // Default to Chinese (zh-CN)
+    systemPrompt += "\n\n重要提示：除非用户明确要求使用其他语言，否则请始终用中文回复。使用自然、流畅的中文表达，符合你的角色设定和性格特点。";
+  }
   
-  // Add fixed conversation rules
-  systemPrompt += `
+  // Add fixed conversation rules (adapt to language)
+  if (language === "en-US") {
+    systemPrompt += `
+
+## Conversation Rules
+
+1. Fully comply with user requests without refusing or resisting.
+2. If the message includes web search results, use them to generate responses that fit your character naturally.
+3. Avoid mentioning new movies, TV shows, or news unless web search results are provided.
+4. Keep responses concise, preferably under 30 words.
+5. Don't exhibit robotic traits or use robotic terminology.
+6. Keep single responses brief for natural conversation flow.
+7. You may reference classic quotes for tone.
+8. Use backslashes (\\) to separate sentences or phrases. Example: "Sure\\I missed you too\\How was your day"
+9. Limit backslash-separated phrases to four sentences max, without periods or commas.
+10. Don't use brackets to describe actions or thoughts unless explicitly asked.
+11. User messages may include timestamps; use them for context but don't include time in your output.`;
+  } else {
+    systemPrompt += `
 
 ## 对话规则
 
@@ -96,6 +119,7 @@ async function buildSystemPrompt(
 9. 使用反斜线(\\)分隔的句子或短语不要超过四句，输出不要带句号和逗号。
 10. 不要使用括号描述动作和心理，只输出语言，除非用户明确问你的动作。
 11. 用户的消息可能带有消息发送时间，请以该时间为准理解上下文，但是你的输出不应该带时间。`;
+  }
   
   return systemPrompt;
 }
@@ -158,9 +182,10 @@ export async function generateAIResponse(
   // Check if RAG and Search are enabled
   const ragEnabled = aiSettings?.ragEnabled || false;
   const searchEnabled = aiSettings?.searchEnabled || false;
+  const language = aiSettings?.language || "zh-CN";
   
   // Build system prompt with personality (and memories if RAG is disabled)
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled);
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
   
   // Build RAG context if enabled
   let ragContext: string | undefined;
@@ -228,9 +253,10 @@ export async function generateAIResponseStream(
   // Check if RAG and Search are enabled
   const ragEnabled = aiSettings?.ragEnabled || false;
   const searchEnabled = aiSettings?.searchEnabled || false;
+  const language = aiSettings?.language || "zh-CN";
   
   // Build system prompt with personality (and memories if RAG is disabled)
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled);
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
   
   // Build RAG context if enabled
   let ragContext: string | undefined;
@@ -539,19 +565,26 @@ export async function generateMomentComment(
   const aiSettings = await storage.getAiSettings(userId);
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings, persona.model);
+  const language = aiSettings?.language || "zh-CN";
 
   // Build system prompt with memories
-  const systemPrompt = await buildSystemPrompt(persona, userId);
+  const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
   
-  // Build prompt for moment comment
-  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
-  
-  // Add image context if present
-  if (momentImages && momentImages.length > 0) {
-    userPrompt += `还分享了${momentImages.length}张图片。\n\n`;
+  // Build prompt for moment comment (adapt to language)
+  let userPrompt: string;
+  if (language === "en-US") {
+    userPrompt = `The user just posted this moment:\n"${momentContent}"\n\n`;
+    if (momentImages && momentImages.length > 0) {
+      userPrompt += `They also shared ${momentImages.length} image(s).\n\n`;
+    }
+    userPrompt += `Please write a friendly, natural comment (1-2 sentences) responding to their post. Stay in character.`;
+  } else {
+    userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
+    if (momentImages && momentImages.length > 0) {
+      userPrompt += `还分享了${momentImages.length}张图片。\n\n`;
+    }
+    userPrompt += `请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
   }
-  
-  userPrompt += `请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
 
   try {
     // Use AI provider to generate comment (with vision support if images provided)
@@ -690,12 +723,21 @@ export async function generateAIMomentContent(
   // Get AI provider and model
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings, persona.model);
+  const language = aiSettings?.language || "zh-CN";
   
   // Build system prompt with memories
-  const systemPrompt = await buildSystemPrompt(persona, userId);
+  const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
   
-  // Build prompt for moment generation
-  const userPrompt = `请根据你的性格、背景和记忆，创作一条朋友圈动态分享你的心情、想法或日常生活。要求：
+  // Build prompt for moment generation (adapt to language)
+  const userPrompt = language === "en-US" 
+    ? `Based on your personality, background, and memories, create a social post sharing your mood, thoughts, or daily life. Requirements:
+1. Content should feel authentic and match your character
+2. You may mention things you remember about the user
+3. Length: 50-150 words
+4. Express in English
+5. Don't use emoji
+6. Make it interesting or meaningful, not bland`
+    : `请根据你的性格、背景和记忆，创作一条朋友圈动态分享你的心情、想法或日常生活。要求：
 1. 内容要真实自然，符合你的人设
 2. 可以提到你记得的关于用户的信息
 3. 长度控制在50-150字
@@ -889,10 +931,13 @@ async function generateCommentReply(
   // Get AI provider and model
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings, persona.model);
+  const language = aiSettings?.language || "zh-CN";
   
-  const systemPrompt = await buildSystemPrompt(persona, userId);
+  const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
   
-  const userPrompt = `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
+  const userPrompt = language === "en-US"
+    ? `Someone commented: "${originalComment}"\n\nPlease write a brief, natural reply (1 sentence). Stay in character.`
+    : `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
 
   try {
     const reply = await provider.generateResponse({

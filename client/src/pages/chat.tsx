@@ -84,7 +84,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   });
 
   // Independent query for selected conversation details
-  const { data: selectedConversationData } = useQuery<Conversation>({
+  const { data: selectedConversationData, isLoading: conversationLoading } = useQuery<Conversation>({
     queryKey: ["/api/conversations", selectedConversationId],
     queryFn: async () => {
       if (!selectedConversationId) throw new Error("No conversation selected");
@@ -412,7 +412,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       "md:flex",
       showMobileSidebar && "hidden md:flex"
     )}>
-      {selectedConversation ? (
+      {selectedConversationId && conversationLoading ? (
+        // Loading state when conversation is being fetched
+        <div className="flex h-full items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" data-testid="spinner-conversation-loading"></div>
+        </div>
+      ) : selectedConversation ? (
         <>
           {/* Chat Header */}
           <div className="flex items-center gap-3 border-b p-4 bg-sidebar justify-between">
