@@ -64,7 +64,7 @@ export default function Personas() {
 
   const createPersonaMutation = useMutation({
     mutationFn: (data: PersonaFormData) => 
-      apiRequest("/api/personas", "POST", data),
+      apiRequest("POST", "/api/personas", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
       setDialogOpen(false);
@@ -85,7 +85,7 @@ export default function Personas() {
 
   const updatePersonaMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<PersonaFormData> }) =>
-      apiRequest(`/api/personas/${id}`, "PATCH", data),
+      apiRequest("PATCH", `/api/personas/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
       setDialogOpen(false);
@@ -107,7 +107,7 @@ export default function Personas() {
 
   const deletePersonaMutation = useMutation({
     mutationFn: (id: string) => 
-      apiRequest(`/api/personas/${id}`, "DELETE"),
+      apiRequest("DELETE", `/api/personas/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
       toast({

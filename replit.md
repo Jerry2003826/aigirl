@@ -26,6 +26,9 @@ A WeChat-style AI companion chat application that allows users to have conversat
 - **conversation_participants**: Many-to-many relationship between conversations and AI personas
 - **messages**: Chat messages with sender type (user/AI), read status, timestamps
 - **memories**: AI memory system to remember user information across conversations
+- **moments**: Social feed posts (WeChat Moments) with content, images, authorId, authorType
+- **momentLikes**: Likes on moments with likerId and likerType (user or AI)
+- **momentComments**: Comments on moments with support for nested replies via parentCommentId
 
 ### WebSocket Implementation
 - Path: `/ws`
@@ -93,6 +96,14 @@ A WeChat-style AI companion chat application that allows users to have conversat
 - Deduplication to prevent duplicate memories
 - Automatic inclusion in AI system prompts
 
+### Moments (Social Feed)
+- **Global Feed**: View moments from all users and AI personas (not restricted to self)
+- **Cross-User Interactions**: Like and comment on any user's or AI's moments
+- **AI Auto-Comments**: 1-3 AI personas automatically comment on user posts within 5-15 seconds
+- **Nested Comments**: Support for replies to comments via parentCommentId
+- **Real-Time Updates**: React Query integration with cache invalidation
+- **WeChat Green Theme**: Primary color #07C160, user messages #95EC69 (light) / #056F3A (dark)
+
 ### UX Optimizations
 - Typing indicators with animation
 - Message send retry on failure
@@ -100,6 +111,7 @@ A WeChat-style AI companion chat application that allows users to have conversat
 - Loading states and skeletons
 - Toast notifications for errors
 - Dark mode support
+- WeChat-inspired green color palette
 
 ## API Endpoints
 
@@ -140,7 +152,29 @@ A WeChat-style AI companion chat application that allows users to have conversat
 - PATCH /api/memories/:id - Update memory
 - DELETE /api/memories/:id - Delete memory
 
+### Moments
+- GET /api/moments - Get all moments (from all users and AI personas) with likes and comments
+- POST /api/moments - Create moment (triggers AI auto-comments)
+- DELETE /api/moments/:momentId - Delete moment
+- POST /api/moments/:momentId/like - Toggle like on moment
+- GET /api/moments/:momentId/likes - Get likes for moment
+- POST /api/moments/:momentId/comments - Create comment (server sets authorId)
+- GET /api/moments/:momentId/comments - Get comments for moment
+- DELETE /api/moments/:momentId/comments/:commentId - Delete comment
+
 ## Recent Changes
+
+### 2024-11-04: Moments Feature Complete
+- **Database Schema**: Added moments, momentLikes, momentComments tables
+- **Global Social Feed**: GET /api/moments returns all users' and AI personas' moments
+- **Cross-User Interactions**: Any user can like/comment on any moment (server-side authorization prevents spoofing)
+- **AI Auto-Comments**: 1-3 AI personas comment on user posts within 5-15 seconds
+  - Uses persona's system prompt, personality, and memories
+  - Respects responseDelay configuration
+  - Graceful fallback on OpenAI errors
+- **Frontend Component**: Complete moments.tsx with React Query integration
+- **WeChat Green Theme**: Full UI redesign with #07C160 primary color
+- **Bug Fixes**: Fixed apiRequest parameter order in personas.tsx
 
 ### 2024-11-04: Advanced Features Complete
 - **AI Model Selection**: Personas can choose between OpenAI models (gpt-4o, gpt-4-turbo, gpt-3.5-turbo)
