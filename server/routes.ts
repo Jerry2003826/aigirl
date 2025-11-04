@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { generateAIResponse, generateAIResponseStream, selectRespondingPersona } from "./aiService";
+import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories } from "./aiService";
 import { setupWebSocket, broadcastNewMessage } from "./websocket";
 import { 
   insertAiPersonaSchema, 
@@ -416,6 +416,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       broadcastNewMessage(conversationId, userMessage);
       broadcastNewMessage(conversationId, aiMessage);
       
+      // Extract and store memories asynchronously (don't await to avoid blocking response)
+      extractAndStoreMemories(conversationId, personaId, content, aiResponse)
+        .catch(err => console.error("Memory extraction failed:", err));
+      
       res.json({ userMessage, aiMessage, response: aiResponse });
     } catch (error: any) {
       console.error("Error generating AI response:", error);
@@ -507,6 +511,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast user message and AI response to all connected clients
       broadcastNewMessage(conversationId, userMessage);
       broadcastNewMessage(conversationId, aiMessage);
+      
+      // Extract and store memories asynchronously (don't await to avoid blocking response)
+      extractAndStoreMemories(conversationId, personaId, content, fullResponse)
+        .catch(err => console.error("Memory extraction failed:", err));
       
       // Send final message with saved message data
       res.write(`data: ${JSON.stringify({ done: true, aiMessage })}\n\n`);

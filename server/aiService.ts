@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { storage } from "./storage";
-import type { AiPersona, Message } from "@shared/schema";
+import type { AiPersona, Message, InsertMemory } from "@shared/schema";
 
 // This is using Replit's AI Integrations service, which provides OpenAI-compatible API access
 // without requiring your own OpenAI API key. Charges are billed to your Replit credits.
@@ -309,5 +309,126 @@ Respond with ONLY the persona ID (the alphanumeric string) of the most appropria
     const leastActivePersona = Object.entries(responseCounts)
       .sort((a, b) => a[1] - b[1])[0];
     return leastActivePersona[0];
+  }
+}
+
+/**
+ * Extract and store user memories from conversation
+ */
+export async function extractAndStoreMemories(
+  conversationId: string,
+  personaId: string,
+  userMessage: string,
+  aiResponse: string
+): Promise<void> {
+  try {
+    // Get conversation to extract userId
+    const conversation = await storage.getConversation(conversationId);
+    if (!conversation) {
+      console.error("Conversation not found for memory extraction");
+      return;
+    }
+    
+    // Get recent conversation context for better memory extraction
+    const recentMessages = await storage.getMessagesByConversation(conversationId, 5, 0);
+    const contextMessages = recentMessages
+      .reverse()
+      .map(m => `${m.senderType === "user" ? "User" : "AI"}: ${m.content}`)
+      .join("\n");
+    
+    const extractionPrompt = `Analyze the following conversation and extract any important information about the user that should be remembered for future conversations. This includes:
+- Personal details (name, age, location, occupation, etc.)
+- Preferences and interests
+- Important life events or experiences
+- Goals, challenges, or concerns
+- Relationships and family
+- Hobbies and activities
+
+Only extract information that is clearly stated by the user. Do not make assumptions or inferences.
+
+Recent conversation context:
+${contextMessages}
+
+Latest exchange:
+User: ${userMessage}
+AI: ${aiResponse}
+
+Respond with a JSON array of memory objects. Each memory should have:
+- key: A brief category or identifier (e.g., "occupation", "favorite_food", "pet_name")
+- value: The specific information to remember
+- context: Optional additional context about when/how this was mentioned
+
+If no new memories should be extracted, respond with an empty array [].
+
+Example response:
+[
+  {
+    "key": "occupation",
+    "value": "software engineer",
+    "context": "mentioned while discussing work stress"
+  },
+  {
+    "key": "favorite_book",
+    "value": "The Great Gatsby",
+    "context": "user's all-time favorite"
+  }
+]`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: "You are a memory extraction system. Extract important user information from conversations and format them as JSON. Always respond with valid JSON only, no additional text."
+        },
+        {
+          role: "user",
+          content: extractionPrompt
+        }
+      ],
+      max_completion_tokens: 1000,
+    });
+    
+    const content = response.choices[0]?.message?.content?.trim();
+    if (!content) {
+      return;
+    }
+    
+    // Parse the JSON response
+    let memories: Array<{ key: string; value: string; context?: string }> = [];
+    try {
+      memories = JSON.parse(content);
+    } catch (parseError) {
+      console.error("Failed to parse memory extraction response:", parseError);
+      return;
+    }
+    
+    // Store each extracted memory
+    for (const memory of memories) {
+      if (!memory.key || !memory.value) {
+        continue;
+      }
+      
+      // Check if a similar memory already exists
+      const existingMemories = await storage.getMemoriesByPersona(personaId, conversation.userId);
+      const duplicate = existingMemories.find(m => 
+        m.key.toLowerCase() === memory.key.toLowerCase()
+      );
+      
+      // Only store if not a duplicate or if the value is significantly different
+      if (!duplicate || duplicate.value !== memory.value) {
+        await storage.createMemory({
+          personaId,
+          userId: conversation.userId,
+          key: memory.key,
+          value: memory.value,
+          context: memory.context || null,
+        });
+        console.log(`Stored memory for persona ${personaId}: ${memory.key} = ${memory.value}`);
+      }
+    }
+  } catch (error) {
+    console.error("Error extracting memories:", error);
+    // Don't throw - memory extraction failure shouldn't break the conversation
   }
 }
