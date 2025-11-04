@@ -1,9 +1,9 @@
 import OpenAI from "openai";
 import { storage } from "./storage";
 import type { AiPersona, Message, InsertMemory } from "@shared/schema";
+import { getAIProvider, getModelName, type ConversationMessage, type ImageData } from "./ai/providers";
 
-// This is using Replit's AI Integrations service, which provides OpenAI-compatible API access
-// without requiring your own OpenAI API key. Charges are billed to your Replit credits.
+// Backward compatibility: OpenAI client for legacy persona selection
 const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
@@ -14,6 +14,7 @@ interface GenerateResponseOptions {
   personaId: string;
   userMessage: string;
   contextLimit?: number;
+  imageData?: ImageData; // Support for image input
 }
 
 interface SelectRespondingPersonaOptions {
@@ -28,10 +29,10 @@ async function buildConversationContext(
   conversationId: string,
   personaId: string,
   limit: number = 20
-): Promise<OpenAI.Chat.ChatCompletionMessageParam[]> {
+): Promise<ConversationMessage[]> {
   const messages = await storage.getMessagesByConversation(conversationId, limit, 0);
   
-  // Convert messages to OpenAI format (reverse to chronological order)
+  // Convert messages to provider-agnostic format (reverse to chronological order)
   return messages.reverse().map((msg: Message) => {
     if (msg.senderType === "user") {
       return {
@@ -85,7 +86,7 @@ async function buildSystemPrompt(
 export async function generateAIResponse(
   options: GenerateResponseOptions
 ): Promise<string> {
-  const { conversationId, personaId, userMessage, contextLimit = 20 } = options;
+  const { conversationId, personaId, userMessage, contextLimit = 20, imageData } = options;
   
   // Fetch persona
   const persona = await storage.getPersona(personaId);
@@ -99,6 +100,13 @@ export async function generateAIResponse(
     throw new Error("Conversation not found");
   }
   
+  // Get user's AI settings (defaults to Google Gemini 2.5 Pro)
+  const aiSettings = await storage.getAiSettings(conversation.userId);
+  
+  // Get AI provider based on settings
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings, persona.model);
+  
   // Build system prompt with personality and memories
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId);
   
@@ -109,28 +117,21 @@ export async function generateAIResponse(
     contextLimit
   );
   
-  // Prepare messages for OpenAI (conversationHistory already includes latest user message)
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    ...conversationHistory,
-  ];
-  
   // Apply response delay if specified
   if (persona.responseDelay > 0) {
     await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
   }
   
   try {
-    const response = await openai.chat.completions.create({
-      model: persona.model || "gpt-4o",
-      messages,
-      max_completion_tokens: 8192,
+    const response = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: conversationHistory,
+      maxTokens: 8192,
+      imageData,
     });
     
-    return response.choices[0]?.message?.content || "";
+    return response;
   } catch (error: any) {
     console.error("Error generating AI response:", error);
     throw new Error(`Failed to generate AI response: ${error.message}`);
@@ -142,8 +143,8 @@ export async function generateAIResponse(
  */
 export async function generateAIResponseStream(
   options: GenerateResponseOptions
-): Promise<AsyncIterable<OpenAI.Chat.Completions.ChatCompletionChunk>> {
-  const { conversationId, personaId, userMessage, contextLimit = 20 } = options;
+): Promise<AsyncIterable<any>> {
+  const { conversationId, personaId, userMessage, contextLimit = 20, imageData } = options;
   
   // Fetch persona
   const persona = await storage.getPersona(personaId);
@@ -157,6 +158,13 @@ export async function generateAIResponseStream(
     throw new Error("Conversation not found");
   }
   
+  // Get user's AI settings (defaults to Google Gemini 2.5 Pro)
+  const aiSettings = await storage.getAiSettings(conversation.userId);
+  
+  // Get AI provider based on settings
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings, persona.model);
+  
   // Build system prompt with personality and memories
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId);
   
@@ -167,26 +175,18 @@ export async function generateAIResponseStream(
     contextLimit
   );
   
-  // Prepare messages for OpenAI (conversationHistory already includes latest user message)
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    ...conversationHistory,
-  ];
-  
   // Apply response delay if specified
   if (persona.responseDelay > 0) {
     await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
   }
   
   try {
-    const stream = await openai.chat.completions.create({
-      model: persona.model || "gpt-4o",
-      messages,
-      max_completion_tokens: 8192,
-      stream: true,
+    const stream = await provider.generateResponseStream({
+      model,
+      systemPrompt,
+      messages: conversationHistory,
+      maxTokens: 8192,
+      imageData,
     });
     
     return stream;
