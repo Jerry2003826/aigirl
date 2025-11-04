@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Users, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { MobileHeader } from "@/components/mobile-header";
 
 type Conversation = {
   id: string;
@@ -26,7 +27,12 @@ type Persona = {
   personality: string;
 };
 
-export default function GroupsPage() {
+type GroupsPageProps = {
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
+};
+
+export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar = false }: GroupsPageProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -116,6 +122,13 @@ export default function GroupsPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title="群聊" 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       {/* Create Group Button */}
       <div className="p-4">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

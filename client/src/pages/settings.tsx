@@ -11,6 +11,7 @@ import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Settings as SettingsIcon, Sparkles, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { MobileHeader } from "@/components/mobile-header";
 
 type AiSettings = {
   id: string;
@@ -36,7 +37,12 @@ const settingsFormSchema = z.object({
 
 type SettingsFormData = z.infer<typeof settingsFormSchema>;
 
-export default function Settings() {
+type SettingsProps = {
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
+};
+
+export default function Settings({ onBackToList = () => {}, showMobileSidebar = false }: SettingsProps) {
   const { toast } = useToast();
 
   const { data: settings, isLoading } = useQuery<AiSettings>({
@@ -96,9 +102,16 @@ export default function Settings() {
 
   return (
     <div className="h-full overflow-y-auto">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title="设置" 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       <div className="container mx-auto max-w-4xl p-6">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-8 hidden md:block">
           <div className="flex items-center gap-3 mb-2">
             <SettingsIcon className="h-8 w-8 text-primary" />
             <h1 className="text-3xl font-bold" data-testid="text-page-title">设置</h1>

@@ -18,6 +18,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { insertAiPersonaSchema } from "@shared/schema";
+import { MobileHeader } from "@/components/mobile-header";
 
 type Persona = {
   id: string;
@@ -62,9 +63,11 @@ type PersonaFormData = z.infer<typeof personaFormSchema>;
 
 interface ContactDetailProps {
   personaId: string;
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
 }
 
-export default function ContactDetail({ personaId }: ContactDetailProps) {
+export default function ContactDetail({ personaId, onBackToList = () => {}, showMobileSidebar = false }: ContactDetailProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -380,8 +383,15 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title={persona.name} 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       {/* Header */}
-      <div className="border-b p-4">
+      <div className="border-b p-4 hidden md:block">
         <Button
           variant="ghost"
           size="sm"

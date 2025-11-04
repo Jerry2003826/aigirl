@@ -16,6 +16,7 @@ import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon, Loader
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { MobileHeader } from "@/components/mobile-header";
 
 type Persona = {
   id: string;
@@ -37,7 +38,12 @@ const personaFormSchema = insertAiPersonaSchema.extend({
 
 type PersonaFormData = z.infer<typeof personaFormSchema>;
 
-export default function Personas() {
+type PersonasProps = {
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
+};
+
+export default function Personas({ onBackToList = () => {}, showMobileSidebar = false }: PersonasProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -300,9 +306,16 @@ export default function Personas() {
 
   return (
     <div className="h-full overflow-y-auto">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title="AI角色" 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       <div className="container mx-auto max-w-7xl p-6">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between hidden md:flex">
           <div>
             <h1 className="text-3xl font-bold" data-testid="text-page-title">AI Personas</h1>
             <p className="text-muted-foreground" data-testid="text-page-description">

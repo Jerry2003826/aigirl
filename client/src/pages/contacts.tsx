@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { pinyin } from "pinyin-pro";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { MobileHeader } from "@/components/mobile-header";
 
 type Persona = {
   id: string;
@@ -46,7 +47,12 @@ function getFirstLetter(name: string): string {
   return "#";
 }
 
-export default function Contacts() {
+type ContactsProps = {
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
+};
+
+export default function Contacts({ onBackToList = () => {}, showMobileSidebar = false }: ContactsProps) {
   const [_, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
@@ -147,8 +153,15 @@ export default function Contacts() {
 
   return (
     <div className="flex h-full flex-col bg-background">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title="联系人" 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       {/* Header */}
-      <div className="border-b p-4">
+      <div className="border-b p-4 hidden md:block">
         <h1 className="mb-4 text-2xl font-bold" data-testid="text-page-title">联系人</h1>
         
         {/* Search Bar */}

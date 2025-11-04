@@ -11,6 +11,7 @@ import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { MobileHeader } from "@/components/mobile-header";
 import type { Moment, MomentLike, MomentComment, AiPersona, User } from "@shared/schema";
 
 interface MomentWithDetails extends Moment {
@@ -18,7 +19,12 @@ interface MomentWithDetails extends Moment {
   comments: MomentComment[];
 }
 
-export default function MomentsPage() {
+type MomentsPageProps = {
+  onBackToList?: () => void;
+  showMobileSidebar?: boolean;
+};
+
+export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar = false }: MomentsPageProps) {
   const { toast } = useToast();
   const [content, setContent] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -199,6 +205,13 @@ export default function MomentsPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
+      {/* Mobile Header */}
+      <MobileHeader 
+        title="动态" 
+        onBack={onBackToList} 
+        showMobileSidebar={showMobileSidebar}
+      />
+      
       {/* Publish Button */}
       <div className="p-4">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

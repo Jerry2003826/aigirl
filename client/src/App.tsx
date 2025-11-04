@@ -18,6 +18,7 @@ import ContactDetail from "@/pages/contact-detail";
 import Groups from "@/pages/groups";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -34,6 +35,18 @@ function Router() {
       // On mobile, when loading with a conversationId from URL,
       // hide sidebar to show the chat directly
       if (window.innerWidth < 768) {
+        setShowMobileSidebar(false);
+      }
+    }
+  }, [location]);
+
+  // Handle mobile sidebar visibility on route changes
+  useEffect(() => {
+    // On mobile (<768px), hide sidebar when navigating to content pages
+    // This ensures pages like /moments, /contacts, /groups show full-screen
+    if (window.innerWidth < 768) {
+      // Hide sidebar for all routes except root (which shows chat list by default)
+      if (location !== "/" && location !== "/chat") {
         setShowMobileSidebar(false);
       }
     }
@@ -86,13 +99,24 @@ function Router() {
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background">
-        <AppSidebar
-          selectedConversationId={selectedConversationId}
-          onConversationSelect={handleConversationSelect}
-          onNewChat={handleNewChat}
-          showMobileSidebar={showMobileSidebar}
-        />
-        <main className="flex-1 overflow-hidden">
+        {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
+        <div className={cn(
+          "md:flex",
+          showMobileSidebar ? "flex" : "hidden"
+        )}>
+          <AppSidebar
+            selectedConversationId={selectedConversationId}
+            onConversationSelect={handleConversationSelect}
+            onNewChat={handleNewChat}
+            showMobileSidebar={showMobileSidebar}
+          />
+        </div>
+        
+        {/* Main content: Always visible on md+, conditionally visible on mobile */}
+        <main className={cn(
+          "flex-1 overflow-hidden md:flex",
+          showMobileSidebar ? "hidden" : "flex"
+        )}>
           <Switch>
             <Route path="/">
               {() => (
@@ -114,14 +138,24 @@ function Router() {
                 />
               )}
             </Route>
-            <Route path="/moments" component={Moments} />
-            <Route path="/personas" component={Personas} />
-            <Route path="/contacts" component={Contacts} />
-            <Route path="/contacts/:id">
-              {(params) => <ContactDetail personaId={params.id} />}
+            <Route path="/moments">
+              {() => <Moments onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
             </Route>
-            <Route path="/groups" component={Groups} />
-            <Route path="/settings" component={Settings} />
+            <Route path="/personas">
+              {() => <Personas onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+            </Route>
+            <Route path="/contacts">
+              {() => <Contacts onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+            </Route>
+            <Route path="/contacts/:id">
+              {(params) => <ContactDetail personaId={params.id} onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+            </Route>
+            <Route path="/groups">
+              {() => <Groups onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+            </Route>
+            <Route path="/settings">
+              {() => <Settings onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+            </Route>
             <Route component={NotFound} />
           </Switch>
         </main>
