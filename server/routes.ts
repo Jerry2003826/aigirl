@@ -385,6 +385,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get single conversation details
+  app.get('/api/conversations/:conversationId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId } = req.params;
+      
+      // Get conversation
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this conversation" });
+      }
+      
+      // Get participants (personas)
+      const participants = await storage.getConversationParticipants(conversationId);
+      const personas = await Promise.all(
+        participants.map(async (p) => {
+          if (p.personaId) {
+            const persona = await storage.getPersona(p.personaId);
+            return persona ? { id: persona.id, name: persona.name, avatarUrl: persona.avatarUrl } : null;
+          }
+          return null;
+        })
+      );
+      
+      res.json({
+        ...conversation,
+        personas: personas.filter((p) => p !== null),
+      });
+    } catch (error) {
+      console.error("Error fetching conversation:", error);
+      res.status(500).json({ message: "Failed to fetch conversation" });
+    }
+  });
+
   app.get('/api/conversations/:conversationId/participants', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

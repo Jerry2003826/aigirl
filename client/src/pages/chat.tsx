@@ -83,6 +83,18 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     queryKey: ["/api/conversations"],
   });
 
+  // Independent query for selected conversation details
+  const { data: selectedConversationData } = useQuery<Conversation>({
+    queryKey: ["/api/conversations", selectedConversationId],
+    queryFn: async () => {
+      if (!selectedConversationId) throw new Error("No conversation selected");
+      const response = await fetch(`/api/conversations/${selectedConversationId}`);
+      if (!response.ok) throw new Error("Failed to fetch conversation");
+      return response.json();
+    },
+    enabled: !!selectedConversationId,
+  });
+
   const { data: aiStatus } = useQuery<{ isOnline: boolean; providers: { openai: boolean; google: boolean; custom: boolean }; message?: string }>({
     queryKey: ["/api/ai/status"],
     refetchInterval: 30000, // Refresh every 30 seconds
@@ -390,7 +402,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
   }, [selectedConversationId, messages]);
 
-  const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+  // Use independent query data if available, otherwise fall back to conversations list
+  const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
 
   return (
     <div className={cn(
