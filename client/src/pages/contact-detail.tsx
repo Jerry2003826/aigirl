@@ -10,13 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { MessageCircle, Edit, Trash2, Plus, ArrowLeft, Star, StarOff } from "lucide-react";
-import { useState } from "react";
+import { MessageCircle, Edit, Trash2, Plus, ArrowLeft, Star, StarOff, Upload, X as XIcon } from "lucide-react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { insertAiPersonaSchema } from "@shared/schema";
 
 type Persona = {
   id: string;
@@ -51,6 +52,14 @@ const memoryFormSchema = z.object({
 
 type MemoryFormData = z.infer<typeof memoryFormSchema>;
 
+const personaFormSchema = insertAiPersonaSchema.extend({
+  name: z.string().min(1, "名字不能为空").max(100),
+  personality: z.string().min(10, "性格描述至少10个字符"),
+  systemPrompt: z.string().min(20, "系统提示至少20个字符"),
+});
+
+type PersonaFormData = z.infer<typeof personaFormSchema>;
+
 interface ContactDetailProps {
   personaId: string;
 }
@@ -60,6 +69,9 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingMemory, setEditingMemory] = useState<Memory | null>(null);
+  const [personaDialogOpen, setPersonaDialogOpen] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: persona, isLoading: personaLoading } = useQuery<Persona>({
     queryKey: ["/api/personas", personaId],
@@ -76,6 +88,21 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
       value: "",
       context: "",
       importance: 5,
+    },
+  });
+
+  const personaForm = useForm<PersonaFormData>({
+    resolver: zodResolver(personaFormSchema),
+    defaultValues: {
+      name: "",
+      avatarUrl: "",
+      personality: "",
+      systemPrompt: "",
+      backstory: "",
+      greeting: "",
+      model: "gemini-2.5-pro",
+      responseDelay: 0,
+      userId: "",
     },
   });
 
@@ -144,6 +171,48 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
     },
   });
 
+  const updatePersonaMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<PersonaFormData> }) =>
+      apiRequest("PATCH", `/api/personas/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/personas", personaId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
+      setPersonaDialogOpen(false);
+      setAvatarPreview("");
+      toast({
+        title: "成功",
+        description: "AI角色已成功更新",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "更新角色失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deletePersonaMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/personas/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
+      toast({
+        title: "成功",
+        description: "AI角色已成功删除",
+      });
+      setLocation("/contacts");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "删除角色失败",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (data: MemoryFormData) => {
     if (editingMemory) {
       updateMemoryMutation.mutate({ id: editingMemory.id, data });
@@ -167,6 +236,79 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
     setEditingMemory(null);
     form.reset();
     setDialogOpen(true);
+  };
+
+  const openEditPersonaDialog = () => {
+    if (!persona) return;
+    personaForm.reset({
+      name: persona.name,
+      avatarUrl: persona.avatarUrl || "",
+      personality: persona.personality,
+      systemPrompt: persona.systemPrompt,
+      backstory: persona.backstory || "",
+      greeting: persona.greeting || "",
+      model: persona.model,
+      responseDelay: persona.responseDelay,
+      userId: "",
+    });
+    setAvatarPreview(persona.avatarUrl || "");
+    setPersonaDialogOpen(true);
+  };
+
+  const handlePersonaSubmit = (data: PersonaFormData) => {
+    updatePersonaMutation.mutate({ id: personaId, data });
+  };
+
+  const handlePersonaDelete = () => {
+    if (confirm(`确定要删除 ${persona?.name} 吗？这将删除所有相关的聊天记录和记忆。`)) {
+      deletePersonaMutation.mutate(personaId);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "错误",
+        description: "文件类型无效，请选择图片",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "错误",
+        description: "图片必须小于5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!res.ok) throw new Error("上传失败");
+
+      const data = await res.json();
+      personaForm.setValue("avatarUrl", data.url);
+      setAvatarPreview(data.url);
+    } catch (error) {
+      toast({
+        title: "错误",
+        description: "上传头像失败",
+        variant: "destructive",
+      });
+    }
   };
 
   const getImportanceLabel = (importance: number): string => {
@@ -227,13 +369,32 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
             <p className="text-muted-foreground" data-testid="text-persona-personality">{persona.personality}</p>
           </div>
 
-          <Button
-            onClick={() => setLocation("/chat")}
-            data-testid="button-start-chat"
-          >
-            <MessageCircle className="mr-2 h-4 w-4" />
-            发消息
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setLocation("/chat")}
+              data-testid="button-start-chat"
+            >
+              <MessageCircle className="mr-2 h-4 w-4" />
+              发消息
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={openEditPersonaDialog}
+              data-testid="button-edit-persona"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={handlePersonaDelete}
+              disabled={deletePersonaMutation.isPending}
+              data-testid="button-delete-persona"
+            >
+              <Trash2 className="h-4 w-4 text-destructive" />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -455,6 +616,247 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit Persona Dialog */}
+      <Dialog open={personaDialogOpen} onOpenChange={setPersonaDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>编辑AI女友</DialogTitle>
+            <DialogDescription>
+              修改AI女友的详细信息
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...personaForm}>
+            <form onSubmit={personaForm.handleSubmit(handlePersonaSubmit)} className="space-y-4">
+              {/* Avatar Upload */}
+              <div className="flex flex-col items-center gap-4">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={avatarPreview || persona?.avatarUrl || undefined} />
+                  <AvatarFallback className="bg-primary/10 text-2xl font-semibold text-primary">
+                    {personaForm.watch("name")?.substring(0, 2) || "AI"}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    data-testid="button-upload-avatar"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    上传头像
+                  </Button>
+                  {avatarPreview && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setAvatarPreview("");
+                        personaForm.setValue("avatarUrl", "");
+                      }}
+                      data-testid="button-remove-avatar"
+                    >
+                      <XIcon className="mr-2 h-4 w-4" />
+                      移除
+                    </Button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+
+              <FormField
+                control={personaForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>名字</FormLabel>
+                    <FormControl>
+                      <Input placeholder="例如：小美" {...field} data-testid="input-persona-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="personality"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>性格</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="例如：温柔体贴、善解人意、喜欢浪漫"
+                        rows={3}
+                        {...field}
+                        data-testid="input-persona-personality"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      描述AI的性格特点，这将影响她的对话风格
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="systemPrompt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>系统提示</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="例如：你是一个温柔的AI女友，总是关心用户的感受..."
+                        rows={4}
+                        {...field}
+                        data-testid="input-persona-systemprompt"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      定义AI的行为和对话方式的核心指令
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="backstory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>背景故事（可选）</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="例如：我在大学学习计算机科学，喜欢音乐和绘画..."
+                        rows={3}
+                        {...field}
+                        data-testid="input-persona-backstory"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      添加背景故事让对话更有深度
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="greeting"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>问候语（可选）</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="例如：嗨！很高兴见到你~"
+                        {...field}
+                        data-testid="input-persona-greeting"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      首次对话时的开场白
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="model"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>AI模型</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-persona-model">
+                          <SelectValue placeholder="选择AI模型" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro（推荐）</SelectItem>
+                        <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                        <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                        <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      选择不同的AI模型获得不同的对话体验
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={personaForm.control}
+                name="responseDelay"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>回复延迟（秒）</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="0"
+                        max="10"
+                        placeholder="0"
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                        data-testid="input-persona-delay"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      模拟真实的思考时间（0-10秒）
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPersonaDialogOpen(false);
+                    setAvatarPreview("");
+                  }}
+                  data-testid="button-cancel-persona"
+                >
+                  取消
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={updatePersonaMutation.isPending}
+                  data-testid="button-submit-persona"
+                >
+                  {updatePersonaMutation.isPending ? (
+                    <>
+                      <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                      保存中...
+                    </>
+                  ) : "保存"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
