@@ -159,6 +159,26 @@ export const momentComments = pgTable(
   ],
 );
 
+// AI Settings table (per-user AI configuration)
+export const aiSettings = pgTable(
+  "ai_settings",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+    provider: text("provider").default("google").notNull(), // 'google', 'openai'
+    model: text("model").default("gemini-2.5-pro").notNull(), // Model name
+    customApiKey: text("custom_api_key"), // Optional custom API key for RAG embeddings
+    ragEnabled: boolean("rag_enabled").default(false).notNull(), // Enable RAG features
+    searchEnabled: boolean("search_enabled").default(true).notNull(), // Enable web search
+    language: text("language").default("zh").notNull(), // UI language: 'zh' or 'en'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_ai_settings_user_id").on(table.userId),
+  ],
+);
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -221,6 +241,19 @@ export const insertMomentCommentSchema = createInsertSchema(momentComments).omit
   createdAt: true,
 });
 
+export const insertAiSettingsSchema = createInsertSchema(aiSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateAiSettingsSchema = createInsertSchema(aiSettings).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial();
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -249,3 +282,7 @@ export type InsertMomentLike = z.infer<typeof insertMomentLikeSchema>;
 
 export type MomentComment = typeof momentComments.$inferSelect;
 export type InsertMomentComment = z.infer<typeof insertMomentCommentSchema>;
+
+export type AiSettings = typeof aiSettings.$inferSelect;
+export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
+export type UpdateAiSettings = z.infer<typeof updateAiSettingsSchema>;

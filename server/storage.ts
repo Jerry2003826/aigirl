@@ -8,6 +8,7 @@ import {
   type Moment, type InsertMoment,
   type MomentLike, type InsertMomentLike,
   type MomentComment, type InsertMomentComment,
+  type AiSettings, type InsertAiSettings, type UpdateAiSettings,
   users,
   aiPersonas,
   conversations,
@@ -16,7 +17,8 @@ import {
   memories,
   moments,
   momentLikes,
-  momentComments
+  momentComments,
+  aiSettings
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -80,6 +82,11 @@ export interface IStorage {
   createMomentComment(comment: InsertMomentComment): Promise<MomentComment>;
   getMomentComments(momentId: string): Promise<MomentComment[]>;
   deleteMomentComment(id: string): Promise<boolean>;
+  
+  // AI Settings operations
+  getAiSettings(userId: string): Promise<AiSettings | undefined>;
+  createAiSettings(settings: InsertAiSettings): Promise<AiSettings>;
+  updateAiSettings(userId: string, settings: UpdateAiSettings): Promise<AiSettings | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -705,6 +712,30 @@ export class DatabaseStorage implements IStorage {
   async deleteMomentComment(id: string): Promise<boolean> {
     const result = await db.delete(momentComments).where(eq(momentComments.id, id)).returning();
     return result.length > 0;
+  }
+
+  // AI Settings operations
+  async getAiSettings(userId: string): Promise<AiSettings | undefined> {
+    const result = await db
+      .select()
+      .from(aiSettings)
+      .where(eq(aiSettings.userId, userId))
+      .limit(1);
+    return result[0];
+  }
+
+  async createAiSettings(settings: InsertAiSettings): Promise<AiSettings> {
+    const result = await db.insert(aiSettings).values(settings).returning();
+    return result[0];
+  }
+
+  async updateAiSettings(userId: string, updates: UpdateAiSettings): Promise<AiSettings | undefined> {
+    const result = await db
+      .update(aiSettings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(aiSettings.userId, userId))
+      .returning();
+    return result[0];
   }
 }
 
