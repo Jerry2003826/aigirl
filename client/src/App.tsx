@@ -57,8 +57,12 @@ function Router() {
         />
         <main className="flex-1 overflow-hidden">
           <Switch>
-            <Route path="/" component={Chat} />
-            <Route path="/chat" component={Chat} />
+            <Route path="/">
+              {() => <Chat selectedConversationId={selectedConversationId} />}
+            </Route>
+            <Route path="/chat">
+              {() => <Chat selectedConversationId={selectedConversationId} />}
+            </Route>
             <Route path="/moments" component={Moments} />
             <Route path="/personas" component={Personas} />
             <Route component={NotFound} />
