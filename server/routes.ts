@@ -138,7 +138,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const conversations = await storage.getConversationsByUser(userId);
-      res.json(conversations);
+      
+      // Batch fetch all participants and personas first
+      const allParticipants = await Promise.all(
+        conversations.map(conv => storage.getConversationParticipants(conv.id))
+      );
+      
+      // Get unique persona IDs
+      const personaIds = new Set<string>();
+      allParticipants.forEach(participants => {
+        participants.forEach(p => personaIds.add(p.personaId));
+      });
+      
+      // Batch fetch all personas
+      const personasMap = new Map();
+      await Promise.all(
+        Array.from(personaIds).map(async (id) => {
+          const persona = await storage.getPersona(id);
+          if (persona) personasMap.set(id, persona);
+        })
+      );
+      
+      // Enrich conversations with stats and personas
+      const enrichedConversations = await Promise.all(
+        conversations.map(async (conv, index) => {
+          const stats = await storage.getConversationStats(conv.id);
+          const participants = allParticipants[index];
+          const personas = participants.map(p => personasMap.get(p.personaId)).filter(Boolean);
+          
+          return {
+            ...conv,
+            unreadCount: stats.unreadCount,
+            lastMessage: stats.lastMessage ? {
+              content: stats.lastMessage.content,
+              senderType: stats.lastMessage.senderType,
+              createdAt: stats.lastMessage.createdAt,
+            } : null,
+            personas,
+          };
+        })
+      );
+      
+      res.json(enrichedConversations);
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ message: "Failed to fetch conversations" });

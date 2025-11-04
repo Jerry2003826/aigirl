@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -26,6 +27,12 @@ type Conversation = {
   title: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
+  unreadCount?: number;
+  lastMessage?: {
+    content: string;
+    senderType: string;
+    createdAt: Date;
+  } | null;
   personas?: { name: string; avatarUrl: string | null }[];
 };
 
@@ -212,26 +219,48 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                   data-testid={`button-conversation-${conversation.id}`}
                 >
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
-                      <AvatarFallback className="bg-primary/10 text-primary">
-                        {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary">
+                          {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
+                        </AvatarFallback>
+                      </Avatar>
+                      {conversation.unreadCount && conversation.unreadCount > 0 && (
+                        <Badge 
+                          className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center bg-primary text-primary-foreground text-xs"
+                          data-testid={`badge-unread-${conversation.id}`}
+                        >
+                          {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
+                        </Badge>
+                      )}
+                    </div>
                     <div className="flex-1 overflow-hidden">
                       <div className="flex items-center justify-between mb-1">
-                        <p className="truncate font-medium text-sm" data-testid={`text-conversation-title-${conversation.id}`}>
+                        <p className={cn(
+                          "truncate text-sm",
+                          conversation.unreadCount && conversation.unreadCount > 0 ? "font-semibold" : "font-medium"
+                        )} data-testid={`text-conversation-title-${conversation.id}`}>
                           {conversation.title || conversation.personas?.[0]?.name || "新聊天"}
                         </p>
                         {conversation.lastMessageAt && (
-                          <span className="text-xs text-muted-foreground ml-2">
+                          <span className="text-xs text-muted-foreground ml-2 shrink-0">
                             {format(new Date(conversation.lastMessageAt), "HH:mm")}
                           </span>
                         )}
                       </div>
-                      <p className="truncate text-xs text-muted-foreground">
-                        暂无消息
-                      </p>
+                      <div className="flex items-center gap-1">
+                        <p className={cn(
+                          "truncate text-xs",
+                          conversation.unreadCount && conversation.unreadCount > 0 
+                            ? "text-foreground font-medium" 
+                            : "text-muted-foreground"
+                        )} data-testid={`text-last-message-${conversation.id}`}>
+                          {conversation.lastMessage 
+                            ? `${conversation.lastMessage.senderType === 'ai' ? '' : '我: '}${conversation.lastMessage.content}`
+                            : '暂无消息'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </button>

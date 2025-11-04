@@ -20,7 +20,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, count } from "drizzle-orm";
 
 // Storage interface with all CRUD methods needed for the AI chat app
 export interface IStorage {
@@ -53,6 +53,7 @@ export interface IStorage {
   // Message operations
   getMessage(id: string): Promise<Message | undefined>;
   getMessagesByConversation(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string): Promise<void>;
   markMessageAsRead(id: string): Promise<void>;
@@ -334,6 +335,17 @@ export class MemStorage implements IStorage {
     });
   }
 
+  async getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }> {
+    const conversationMessages = Array.from(this.messages.values())
+      .filter((m) => m.conversationId === conversationId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    
+    const lastMessage = conversationMessages[0] || null;
+    const unreadCount = conversationMessages.filter(m => m.senderType === 'ai' && !m.isRead).length;
+    
+    return { lastMessage, unreadCount };
+  }
+
   // Memory operations
   async getMemory(id: string): Promise<Memory | undefined> {
     return this.memories.get(id);
@@ -549,6 +561,33 @@ export class DatabaseStorage implements IStorage {
         eq(messages.isRead, false)
       )
     );
+  }
+
+  async getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }> {
+    // Get last message with a single query
+    const lastMessageResult = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+    
+    // Count unread AI messages with an optimized COUNT query
+    const unreadResult = await db
+      .select({ count: count() })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.senderType, 'ai'),
+          eq(messages.isRead, false)
+        )
+      );
+    
+    return {
+      lastMessage: lastMessageResult[0] || null,
+      unreadCount: unreadResult[0]?.count || 0,
+    };
   }
 
   // Memory operations
