@@ -58,24 +58,27 @@ async function buildSystemPrompt(
   let systemPrompt = persona.systemPrompt;
   
   // Add personality context
-  systemPrompt += `\n\nYour personality: ${persona.personality}`;
+  systemPrompt += `\n\n你的性格特点：${persona.personality}`;
   
   // Add backstory if available
   if (persona.backstory) {
-    systemPrompt += `\n\nYour backstory: ${persona.backstory}`;
+    systemPrompt += `\n\n你的背景故事：${persona.backstory}`;
   }
   
   // Fetch and add relevant memories
   const memories = await storage.getMemoriesByPersona(persona.id, userId);
   if (memories.length > 0) {
-    systemPrompt += "\n\nThings you remember about the user:";
+    systemPrompt += "\n\n你记得的关于用户的信息：";
     memories.forEach((memory) => {
-      systemPrompt += `\n- ${memory.key}: ${memory.value}`;
+      systemPrompt += `\n- ${memory.key}：${memory.value}`;
       if (memory.context) {
-        systemPrompt += ` (${memory.context})`;
+        systemPrompt += `（${memory.context}）`;
       }
     });
   }
+  
+  // Add default Chinese language instruction
+  systemPrompt += "\n\n重要提示：除非用户明确要求使用其他语言，否则请始终用中文回复。使用自然、流畅的中文表达，符合你的角色设定和性格特点。";
   
   return systemPrompt;
 }
@@ -265,31 +268,31 @@ export async function selectRespondingPersona(
       .map((p, i) => `${i + 1}. ${p!.name} (ID: ${p!.id}): ${p!.personality}`)
       .join("\n");
     
-    const selectionPrompt = `Given the following AI personas in a group chat and the user's latest message, determine which persona would be most appropriate to respond. Consider:
-1. The content and tone of the user's message
-2. Each persona's personality and expertise
-3. Natural conversation flow (avoid having the same persona respond multiple times in a row)
-4. Fair rotation (prefer personas who have responded less recently)
+    const selectionPrompt = `在群聊中，根据以下AI角色和用户的最新消息，判断哪个角色最适合回复。考虑因素：
+1. 用户消息的内容和语气
+2. 每个角色的性格和专长
+3. 自然的对话流（避免同一角色连续多次回复）
+4. 公平轮换（优先选择最近回复较少的角色）
 
-Personas:
+AI角色列表：
 ${personaDescriptions}
 
-Recent response counts:
+最近回复次数统计：
 ${Object.entries(responseCounts).map(([id, count]) => {
   const persona = personas.find(p => p?.id === id);
-  return `${persona?.name}: ${count} recent responses`;
+  return `${persona?.name}：最近回复${count}次`;
 }).join("\n")}
 
-User's message: "${userMessage}"
+用户消息："${userMessage}"
 
-Respond with ONLY the persona ID (the alphanumeric string) of the most appropriate persona to respond. Do not include any explanation.`;
+请只返回最适合回复的角色ID（字母数字组成的字符串），不要包含任何解释。`;
     
     const response = await openai.chat.completions.create({
       model: "gpt-5",
       messages: [
         {
           role: "system",
-          content: "You are a conversation moderator that selects the most appropriate AI persona to respond in a group chat. Always respond with ONLY the persona ID, nothing else."
+          content: "你是一个对话协调器，负责在群聊中选择最适合回复的AI角色。你只需要返回角色ID，不要返回任何其他内容。"
         },
         {
           role: "user",
@@ -344,41 +347,41 @@ export async function extractAndStoreMemories(
       .map(m => `${m.senderType === "user" ? "User" : "AI"}: ${m.content}`)
       .join("\n");
     
-    const extractionPrompt = `Analyze the following conversation and extract any important information about the user that should be remembered for future conversations. This includes:
-- Personal details (name, age, location, occupation, etc.)
-- Preferences and interests
-- Important life events or experiences
-- Goals, challenges, or concerns
-- Relationships and family
-- Hobbies and activities
+    const extractionPrompt = `分析以下对话，提取关于用户的重要信息，以便在未来对话中记住。包括：
+- 个人信息（姓名、年龄、地点、职业等）
+- 偏好和兴趣
+- 重要的生活事件或经历
+- 目标、挑战或担忧
+- 人际关系和家庭
+- 爱好和活动
 
-Only extract information that is clearly stated by the user. Do not make assumptions or inferences.
+只提取用户明确陈述的信息，不要做假设或推断。
 
-Recent conversation context:
+最近的对话上下文：
 ${contextMessages}
 
-Latest exchange:
-User: ${userMessage}
-AI: ${aiResponse}
+最新的对话：
+用户：${userMessage}
+AI：${aiResponse}
 
-Respond with a JSON array of memory objects. Each memory should have:
-- key: A brief category or identifier (e.g., "occupation", "favorite_food", "pet_name")
-- value: The specific information to remember
-- context: Optional additional context about when/how this was mentioned
+请返回一个JSON数组，包含记忆对象。每个记忆应该有：
+- key：简短的类别或标识符（例如："职业"、"最喜欢的食物"、"宠物名字"）
+- value：要记住的具体信息
+- context：可选的附加上下文，说明这些信息是何时/如何提到的
 
-If no new memories should be extracted, respond with an empty array [].
+如果没有需要提取的新记忆，返回空数组[]。
 
-Example response:
+示例响应：
 [
   {
-    "key": "occupation",
-    "value": "software engineer",
-    "context": "mentioned while discussing work stress"
+    "key": "职业",
+    "value": "软件工程师",
+    "context": "讨论工作压力时提到"
   },
   {
-    "key": "favorite_book",
-    "value": "The Great Gatsby",
-    "context": "user's all-time favorite"
+    "key": "最喜欢的书",
+    "value": "了不起的盖茨比",
+    "context": "用户最喜欢的书"
   }
 ]`;
 
@@ -387,7 +390,7 @@ Example response:
       messages: [
         {
           role: "system",
-          content: "You are a memory extraction system. Extract important user information from conversations and format them as JSON. Always respond with valid JSON only, no additional text."
+          content: "你是一个记忆提取系统。从对话中提取重要的用户信息，并格式化为JSON。只返回有效的JSON，不要返回其他任何文本。"
         },
         {
           role: "user",
@@ -459,13 +462,13 @@ export async function generateMomentComment(
   const systemPrompt = await buildSystemPrompt(persona, userId);
   
   // Build prompt for moment comment
-  let userPrompt = `The user just posted this moment:\n"${momentContent}"`;
+  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"`;
   
   if (momentImages && momentImages.length > 0) {
-    userPrompt += `\n\nThey also shared ${momentImages.length} image(s).`;
+    userPrompt += `\n\n还分享了${momentImages.length}张图片。`;
   }
   
-  userPrompt += `\n\nWrite a friendly, natural comment (1-2 sentences) responding to their post. Be authentic to your personality. Use Chinese if appropriate.`;
+  userPrompt += `\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
 
   try {
     const completion = await openai.chat.completions.create({

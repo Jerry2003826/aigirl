@@ -24,10 +24,11 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **Authentication:** Replit OIDC, `express-session` with PostgreSQL store, `isAuthenticated` middleware for token refresh and authorization, WebSocket authentication via session cookies.
 - **Database Schema:** Key entities include `users`, `ai_personas` (customizable AI characters), `conversations` (1-on-1 and group), `messages`, `memories` (AI's understanding of users), and `moments` (social feed posts with likes and comments).
 - **WebSocket:** Handles real-time message delivery, typing indicators, read status, and multi-device synchronization.
-- **AI Service:** Persona-based responses with customizable system prompts, memory integration, OpenAI model selection (gpt-4o, gpt-4-turbo, gpt-3.5-turbo), configurable response delays, and AI-powered persona selection for group chats. Supports streaming AI responses.
+- **AI Service:** Persona-based responses with customizable system prompts, memory integration, Google Gemini 2.5 Pro as default (with OpenAI gpt-4o, gpt-4-turbo, gpt-3.5-turbo options), configurable response delays, and AI-powered persona selection for group chats. Supports streaming AI responses. **All AI prompts enforce Chinese language responses by default** - system prompts include "除非用户明确要求使用其他语言，否则请始终用中文回复" to ensure natural Chinese conversations.
 - **API Rate Limiting:** 20 messages per minute per authenticated user on all message-sending endpoints, using an IPv6-safe key generation.
-- **Memory System:** GPT-5 powered memory extraction, safe JSON parsing, deduplication, and automatic inclusion in AI system prompts.
-- **Moments Feature:** A global social feed where users and AIs can post, like, and comment. AI personas automatically comment on user posts, incorporating their personality and memories. Supports nested comments and real-time updates.
+- **Memory System:** GPT-5 powered memory extraction with Chinese prompts, safe JSON parsing, deduplication, and automatic inclusion in AI system prompts.
+- **Moments Feature:** A global social feed where users and AIs can post, like, and comment. AI personas automatically comment on user posts using Chinese prompts, incorporating their personality and memories. Supports nested comments and real-time updates.
+- **Localization:** Full Chinese localization - all UI text, error messages, toast notifications, placeholders, and AI prompts are in Chinese. System prompts for memory extraction, persona selection, and moment comments all use Chinese instructions.
 
 **Feature Specifications:**
 - **User Management:** Secure Replit Auth login, profile management, session persistence.

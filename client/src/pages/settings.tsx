@@ -69,14 +69,14 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/ai"] });
       toast({
-        title: "Settings saved",
-        description: "Your AI settings have been updated successfully",
+        title: "设置已保存",
+        description: "您的AI设置已成功更新",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update settings",
+        title: "错误",
+        description: error.message || "更新设置失败",
         variant: "destructive",
       });
     },
@@ -90,13 +90,13 @@ export default function Settings() {
     try {
       await apiRequest("POST", "/api/seed/default-persona", {});
       toast({
-        title: "Success",
-        description: "Default test persona created successfully",
+        title: "成功",
+        description: "默认测试角色已成功创建",
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to create default persona",
+        title: "错误",
+        description: error.message || "创建默认角色失败",
         variant: "destructive",
       });
     }
@@ -117,10 +117,10 @@ export default function Settings() {
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <SettingsIcon className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">Settings</h1>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">设置</h1>
           </div>
           <p className="text-muted-foreground" data-testid="text-page-description">
-            Configure your AI preferences and application settings
+            配置您的AI偏好和应用设置
           </p>
         </div>
 

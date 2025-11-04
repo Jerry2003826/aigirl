@@ -72,14 +72,14 @@ export default function Personas() {
       setDialogOpen(false);
       form.reset();
       toast({
-        title: "Success",
-        description: "AI persona created successfully",
+        title: "成功",
+        description: "AI角色已成功创建",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to create persona",
+        title: "错误",
+        description: error.message || "创建角色失败",
         variant: "destructive",
       });
     },
@@ -94,14 +94,14 @@ export default function Personas() {
       setEditingPersona(null);
       form.reset();
       toast({
-        title: "Success",
-        description: "AI persona updated successfully",
+        title: "成功",
+        description: "AI角色已成功更新",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update persona",
+        title: "错误",
+        description: error.message || "更新角色失败",
         variant: "destructive",
       });
     },
@@ -113,14 +113,14 @@ export default function Personas() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
       toast({
-        title: "Success",
-        description: "AI persona deleted successfully",
+        title: "成功",
+        description: "AI角色已成功删除",
       });
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to delete persona",
+        title: "错误",
+        description: error.message || "删除角色失败",
         variant: "destructive",
       });
     },
@@ -148,8 +148,8 @@ export default function Personas() {
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to start chat",
+        title: "错误",
+        description: error.message || "开始聊天失败",
         variant: "destructive",
       });
     },
@@ -169,8 +169,8 @@ export default function Personas() {
 
     if (!file.type.startsWith("image/")) {
       toast({
-        title: "Invalid file",
-        description: "Please upload an image file",
+        title: "文件无效",
+        description: "请上传图片文件",
         variant: "destructive",
       });
       return;
@@ -178,8 +178,8 @@ export default function Personas() {
 
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: "File too large",
-        description: "Please upload an image smaller than 5MB",
+        title: "文件过大",
+        description: "请上传小于5MB的图片",
         variant: "destructive",
       });
       return;

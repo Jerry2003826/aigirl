@@ -65,7 +65,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
       const response = await fetch(
         `/api/conversations/${selectedConversationId}/messages?limit=${messageLimit}&offset=0`
       );
-      if (!response.ok) throw new Error("Failed to fetch messages");
+      if (!response.ok) throw new Error("获取消息失败");
       return response.json();
     },
     enabled: !!selectedConversationId,
@@ -83,8 +83,8 @@ export default function Chat({ selectedConversationId }: ChatProps) {
     // Check file type
     if (!file.type.startsWith("image/")) {
       toast({
-        title: "Invalid file type",
-        description: "Please select an image file",
+        title: "文件类型无效",
+        description: "请选择图片文件",
         variant: "destructive",
       });
       return;
@@ -93,8 +93,8 @@ export default function Chat({ selectedConversationId }: ChatProps) {
     // Check file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: "File too large",
-        description: "Image must be smaller than 5MB",
+        title: "文件过大",
+        description: "图片必须小于5MB",
         variant: "destructive",
       });
       return;
@@ -159,7 +159,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
             queryKey: ["/api/conversations/participants", conversationId],
             queryFn: async () => {
               const response = await fetch(`/api/conversations/${conversationId}/participants`);
-              if (!response.ok) throw new Error("Failed to fetch participants");
+              if (!response.ok) throw new Error("获取参与者失败");
               return response.json();
             },
           });
@@ -180,14 +180,14 @@ export default function Chat({ selectedConversationId }: ChatProps) {
         queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       } catch (error) {
         setIsTyping(false);
-        console.error("Error generating AI response:", error);
+        console.error("生成AI回复时出错:", error);
       }
     },
     onError: (error: any, variables) => {
       setFailedMessageId(variables.conversationId);
       toast({
-        title: "Error",
-        description: error.message || "Failed to send message",
+        title: "错误",
+        description: error.message || "发送消息失败",
         variant: "destructive",
       });
     },
@@ -258,7 +258,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                 </h3>
                 {isTyping && (
                   <p className="text-sm text-muted-foreground" data-testid="text-typing-indicator">
-                    Typing...
+                    正在输入...
                   </p>
                 )}
               </div>
@@ -278,7 +278,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                     }}
                     data-testid="button-load-more"
                   >
-                    Load More Messages
+                    加载更多消息
                   </Button>
                 </div>
               )}
@@ -290,9 +290,9 @@ export default function Chat({ selectedConversationId }: ChatProps) {
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                   <MessageCircle className="mb-4 h-16 w-16 text-muted-foreground" />
-                  <p className="text-lg font-medium" data-testid="text-no-messages">Start the conversation</p>
+                  <p className="text-lg font-medium" data-testid="text-no-messages">开始对话</p>
                   <p className="text-sm text-muted-foreground">
-                    Send a message to begin chatting
+                    发送消息开始聊天
                   </p>
                 </div>
               ) : (
@@ -449,10 +449,10 @@ export default function Chat({ selectedConversationId }: ChatProps) {
           <div className="text-center">
             <MessageCircle className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
             <p className="text-lg font-medium" data-testid="text-no-conversation-selected">
-              Select a conversation
+              选择一个对话
             </p>
             <p className="text-sm text-muted-foreground">
-              Choose a conversation from the list to start chatting
+              从列表中选择一个对话开始聊天
             </p>
           </div>
         </div>
