@@ -10,6 +10,27 @@ import { triggerAIPostMoment, canAIPostMoment } from "./aiService";
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * Check if user has valid Gemini API key configured
+ */
+async function hasValidGeminiKey(userId: string): Promise<boolean> {
+  try {
+    const settings = await storage.getAiSettings(userId);
+    
+    // Check if user has custom API key configured
+    if (settings?.customApiKey) {
+      return true;
+    }
+    
+    // Check if global Gemini API key is available
+    const hasGlobalKey = !!(process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY);
+    return hasGlobalKey;
+  } catch (error) {
+    console.error(`[AI Scheduler] Error checking API key for user ${userId}:`, error);
+    return false;
+  }
+}
+
+/**
  * Check all AI personas and trigger moment posts for eligible ones
  */
 async function checkAndPostMoments() {
@@ -20,6 +41,13 @@ async function checkAndPostMoments() {
     const users = await storage.getAllUsers();
     
     for (const user of users) {
+      // Check if user has valid Gemini API key before posting
+      const hasApiKey = await hasValidGeminiKey(user.id);
+      if (!hasApiKey) {
+        console.log(`[AI Scheduler] User ${user.id} has no valid Gemini API key, skipping moment posting`);
+        continue;
+      }
+      
       // Get this user's AI personas
       const personas = await storage.getPersonasByUser(user.id);
       

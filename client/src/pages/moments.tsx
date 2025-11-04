@@ -343,7 +343,8 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
             momentsWithDetails.map((moment) => {
               const author = getAuthor(moment.authorId, moment.authorType);
               const isLiked = moment.likes.some(like => like.likerId === currentUser.id);
-              const canDelete = author.isCurrentUser;
+              // 用户可以删除自己发的动态和自己AI发的动态
+              const canDelete = moment.userId === currentUser.id;
 
               return (
                 <Card key={moment.id} className="bg-card border-border" data-testid={`card-moment-${moment.id}`}>
