@@ -157,6 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Assistant: Generate persona configuration
   app.post('/api/ai/generate-persona', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { name, description, generateAvatar } = req.body;
       
       if (!name || typeof name !== 'string') {
@@ -166,8 +167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import the generation function
       const { generatePersonaWithAI } = await import("./aiService");
       
-      // Generate persona configuration using AI
-      const personaData = await generatePersonaWithAI(name, description || "", generateAvatar);
+      // Generate persona configuration using AI with user's custom API key
+      const personaData = await generatePersonaWithAI(userId, name, description || "", generateAvatar);
       
       res.json(personaData);
     } catch (error: any) {

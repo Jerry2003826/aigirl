@@ -959,8 +959,10 @@ async function generateCommentReply(
 
 /**
  * Generate persona configuration using AI with web search
+ * SECURITY: Uses user's custom API key to ensure no built-in keys are used
  */
 export async function generatePersonaWithAI(
+  userId: string,
   name: string,
   description: string,
   generateAvatar: boolean
@@ -974,12 +976,13 @@ export async function generatePersonaWithAI(
   model: string;
   responseDelay: number;
 }> {
-  console.log(`Generating persona for "${name}" with AI...`);
+  console.log(`Generating persona for "${name}" with AI (user: ${userId})...`);
   
   try {
-    // Import Google Gemini provider
-    const { GoogleAI } = await import("./ai/providers");
-    const google = new GoogleAI();
+    // Get user's AI settings to use their custom API key
+    const aiSettings = await storage.getAiSettings(userId);
+    const provider = getAIProvider(aiSettings);
+    const model = getModelName(aiSettings);
     
     // Construct search query
     const searchQuery = `${name} ${description}`.trim();
@@ -1007,17 +1010,13 @@ export async function generatePersonaWithAI(
 
     const userPrompt = `请为"${searchQuery}"生成AI女友配置。名字：${name}${description ? `，补充描述：${description}` : ''}`;
     
-    // Use Google Gemini with Web Search
-    const response = await google.generateResponse({
-      model: "gemini-2.0-flash-exp",
+    // Use user's AI provider with Web Search enabled
+    const response = await provider.generateResponse({
+      model,
       systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
       maxTokens: 2000,
-      config: {
-        tools: [{
-          googleSearch: {},
-        }],
-      },
+      searchEnabled: true, // Enable Google Search grounding
     });
     
     // Parse JSON from response
