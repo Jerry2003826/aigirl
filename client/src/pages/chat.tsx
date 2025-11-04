@@ -541,7 +541,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             </div>
 
             {/* Message Input */}
-            <div className="border-t bg-background px-3 py-2.5">
+            <div className="border-t bg-background px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               {failedMessageId === selectedConversationId && (
                 <div className="mb-2 flex items-center gap-2 text-sm text-destructive">
                   <span>Message failed to send</span>
@@ -577,7 +577,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 </div>
               )}
               
-              <div className="flex gap-2.5 items-end">
+              <div className="flex gap-2.5 items-center">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -589,7 +589,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-11 w-11 shrink-0"
+                  className="h-10 w-10 shrink-0"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="button-upload-image"
                 >
@@ -600,14 +600,15 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder="输入消息..."
-                  className="min-h-[44px] max-h-[110px] resize-none text-base leading-relaxed"
+                  rows={1}
+                  className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
                   size="icon"
-                  className="h-11 w-11 shrink-0 rounded-full bg-primary hover:bg-primary/90"
+                  className="h-10 w-10 shrink-0 rounded-full bg-primary hover:bg-primary/90"
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
