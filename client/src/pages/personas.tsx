@@ -141,19 +141,26 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
 
   const startChatMutation = useMutation({
     mutationFn: async (personaId: string) => {
-      // Create conversation
-      const convResponse = await apiRequest("POST", "/api/conversations", {
+      // Check if conversation already exists
+      const conversations: any[] = await queryClient.fetchQuery({
+        queryKey: ["/api/conversations"],
+      });
+      
+      const existingConversation = conversations.find(
+        (conv) => !conv.isGroup && conv.personas?.[0]?.id === personaId
+      );
+
+      if (existingConversation) {
+        return existingConversation;
+      }
+
+      // Create new conversation
+      const res = await apiRequest("POST", "/api/conversations", {
         title: null,
         isGroup: false,
+        personaIds: [personaId],
       });
-      const conv = await convResponse.json();
-      
-      // Add persona as participant
-      await apiRequest("POST", `/api/conversations/${conv.id}/participants`, {
-        personaId,
-      });
-      
-      return conv;
+      return await res.json();
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
