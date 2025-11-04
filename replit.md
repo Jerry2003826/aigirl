@@ -195,6 +195,69 @@ This starts both the Express backend and Vite frontend on port 5000.
 - No secret/key exposure in logs or responses
 - Zod validation on all input
 
+## Testing
+
+### Manual Testing Procedure: Multi-Device Synchronization
+
+To verify that multi-device real-time synchronization works correctly, follow these steps:
+
+**Prerequisites:**
+- Two different browser windows/tabs (or use incognito mode for second device)
+- One Replit account for testing
+
+**Test Steps:**
+
+1. **Device 1 - Initial Login & Setup:**
+   - Open the application in Browser Window 1
+   - Click "Login" and authenticate via Replit Auth
+   - Navigate to "Personas" page
+   - Create a new AI persona with any configuration
+   - Click on the persona to start a conversation
+   - Send a message: "Hello from Device 1"
+   - Wait for AI response
+
+2. **Device 2 - Second Device Login:**
+   - Open the application in Browser Window 2 (or incognito window)
+   - Login with the SAME Replit account as Device 1
+   - Verify the conversation with the AI persona appears in the conversations list
+   - Click on the conversation to open it
+
+3. **Verify Real-Time Sync - Device 2 to Device 1:**
+   - On Device 2, send a message: "Hello from Device 2"
+   - **Verify on Device 1:** The message should appear in real-time WITHOUT refreshing
+   - Wait for AI response
+   - **Verify on Device 1:** AI response appears in real-time
+
+4. **Verify Real-Time Sync - Device 1 to Device 2:**
+   - On Device 1, send a message: "Testing real-time sync"
+   - **Verify on Device 2:** The message should appear in real-time WITHOUT refreshing
+   - Wait for AI response
+   - **Verify on Device 2:** AI response appears in real-time
+
+5. **Verify Conversation History Sync:**
+   - Compare the conversation history on both devices
+   - All messages should be in the same order
+   - All timestamps should match
+   - Message counts should be identical
+
+6. **Test Group Chat (Optional):**
+   - Create a group chat with multiple AI personas
+   - Repeat steps 3-5 with group chat
+   - Verify persona selection and AI responses sync across devices
+
+**Expected Results:**
+- ✅ Messages sent from one device appear instantly on all other devices
+- ✅ AI responses appear in real-time on all devices
+- ✅ No page refresh required for synchronization
+- ✅ Conversation history matches exactly across all devices
+- ✅ Typing indicators appear on all devices (if user is typing)
+- ✅ Read status updates sync across devices
+
+**Known Behavior:**
+- WebSocket connection is established when opening a conversation
+- If connection drops, page refresh is required to reconnect
+- First message after opening conversation may have slight delay
+
 ## Known Limitations
 - Memory extraction is async (doesn't block message sending)
 - Rate limiting uses in-memory store (resets on server restart)
