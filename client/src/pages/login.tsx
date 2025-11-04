@@ -27,13 +27,15 @@ export default function Login() {
           </p>
 
           {/* Login Button */}
-          <Button
-            onClick={handleLogin}
-            className="w-full h-12 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-medium rounded-lg shadow-lg shadow-pink-500/30 transition-all duration-200 hover:shadow-pink-500/50 mb-6"
-            data-testid="button-login"
-          >
-            使用 Replit 登录
-          </Button>
+          <div className="w-full h-12 bg-gradient-to-r from-pink-500 to-pink-600 rounded-lg shadow-lg shadow-pink-500/30 mb-6 p-[2px]">
+            <Button
+              onClick={handleLogin}
+              className="w-full h-full bg-pink-500 text-white font-medium border-0"
+              data-testid="button-login"
+            >
+              使用 Replit 登录
+            </Button>
+          </div>
 
           {/* Divider */}
           <div className="relative my-6">
@@ -51,15 +53,17 @@ export default function Login() {
           <div className="flex justify-center gap-4 mb-8">
             <button
               onClick={handleLogin}
-              className="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center transition-colors border border-gray-700"
+              className="w-12 h-12 rounded-full bg-gray-800 hover-elevate active-elevate-2 flex items-center justify-center border border-gray-700"
               aria-label="Login with Google"
+              data-testid="button-login-google"
             >
               <SiGoogle className="w-5 h-5 text-gray-300" />
             </button>
             <button
               onClick={handleLogin}
-              className="w-12 h-12 rounded-full bg-gray-800 hover:bg-gray-700 flex items-center justify-center transition-colors border border-gray-700"
+              className="w-12 h-12 rounded-full bg-gray-800 hover-elevate active-elevate-2 flex items-center justify-center border border-gray-700"
               aria-label="Login with Microsoft"
+              data-testid="button-login-microsoft"
             >
               <SiMicrosoft className="w-5 h-5 text-gray-300" />
             </button>
@@ -80,11 +84,11 @@ export default function Login() {
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-400">
             通过登录，您同意我们的
-            <button className="text-pink-400 hover:text-pink-300 ml-1">
+            <button className="text-pink-400 hover-elevate ml-1" data-testid="link-terms">
               服务条款
             </button>
             {" "}和{" "}
-            <button className="text-pink-400 hover:text-pink-300">
+            <button className="text-pink-400 hover-elevate" data-testid="link-privacy">
               隐私政策
             </button>
           </p>
