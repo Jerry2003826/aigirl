@@ -71,7 +71,7 @@ export class GeminiProvider implements AIProvider {
 
   async generateResponse(params: GenerateParams): Promise<string> {
     if (!this.isConfigured || !this.client) {
-      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
     const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
@@ -144,7 +144,7 @@ ${originalText}`;
 
   async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
     if (!this.isConfigured || !this.client) {
-      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
     const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
@@ -255,7 +255,7 @@ export class OpenAIProvider implements AIProvider {
 
   async generateResponse(params: GenerateParams): Promise<string> {
     if (!this.isConfigured || !this.client) {
-      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
     const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
@@ -311,7 +311,7 @@ export class OpenAIProvider implements AIProvider {
 
   async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
     if (!this.isConfigured || !this.client) {
-      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
     const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
