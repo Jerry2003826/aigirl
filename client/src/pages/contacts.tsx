@@ -6,6 +6,7 @@ import { Search, Plus } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { pinyin } from "pinyin-pro";
 
 type Persona = {
   id: string;
@@ -19,7 +20,7 @@ type Persona = {
   responseDelay: number;
 };
 
-// Get first letter of Chinese name (using Unicode)
+// Get first letter of name using pinyin for Chinese characters
 function getFirstLetter(name: string): string {
   if (!name) return "#";
   const firstChar = name.charAt(0);
@@ -29,8 +30,18 @@ function getFirstLetter(name: string): string {
     return firstChar.toUpperCase();
   }
   
-  // For Chinese characters, use the first character as the group
-  return firstChar;
+  // For Chinese characters, get pinyin and return first letter
+  try {
+    const pinyinStr = pinyin(firstChar, { pattern: 'first', toneType: 'none' });
+    if (pinyinStr && /[A-Za-z]/.test(pinyinStr)) {
+      return pinyinStr.toUpperCase();
+    }
+  } catch (e) {
+    console.error("Error getting pinyin:", e);
+  }
+  
+  // Fallback to # for special characters
+  return "#";
 }
 
 export default function Contacts() {
@@ -111,7 +122,7 @@ export default function Contacts() {
       </div>
 
       {/* Contacts List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto pb-4">
         {groupedPersonas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-muted-foreground" data-testid="text-no-contacts">没有找到联系人</p>
@@ -160,19 +171,6 @@ export default function Contacts() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Create New AI Button */}
-      <div className="border-t p-4">
-        <Button
-          className="w-full"
-          size="lg"
-          onClick={() => setLocation("/personas")}
-          data-testid="button-create-persona"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          创建新AI女友
-        </Button>
       </div>
     </div>
   );
