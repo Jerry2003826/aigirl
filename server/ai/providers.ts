@@ -34,7 +34,8 @@ export class GeminiProvider implements AIProvider {
   private isConfigured: boolean = false;
 
   constructor(customApiKey?: string | null) {
-    // Priority: customApiKey > Replit AI Integrations
+    // SECURITY: ONLY use user-provided custom API key
+    // NO fallback to Replit AI Integrations or any built-in keys
     let apiKey: string | undefined;
     let baseUrl: string | undefined;
 
@@ -42,18 +43,13 @@ export class GeminiProvider implements AIProvider {
       // User provided custom API key - use official Google AI API
       apiKey = customApiKey;
       baseUrl = "https://generativelanguage.googleapis.com/v1beta";
-      console.log("Using custom Google AI API key");
+      console.log("✅ Using user's custom Google AI API key");
     } else {
-      // Fallback to Replit AI Integrations
-      baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-      apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
-      
-      if (!baseUrl || !apiKey) {
-        console.error("❌ CRITICAL: No API key available. User MUST provide custom API key in settings.");
-        this.isConfigured = false;
-        return;
-      }
-      console.log("Using Replit AI Integrations (Gemini)");
+      // NO FALLBACK - User must provide their own API key
+      console.error("❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.");
+      console.error("   Go to Settings → AI Configuration → Enter your Google AI API key");
+      this.isConfigured = false;
+      return;
     }
 
     // Initialize client
@@ -66,8 +62,9 @@ export class GeminiProvider implements AIProvider {
         },
       });
       this.isConfigured = true;
+      console.log("✅ Google AI client initialized successfully");
     } catch (error) {
-      console.error("Failed to initialize Gemini client:", error);
+      console.error("❌ Failed to initialize Gemini client:", error);
       this.isConfigured = false;
     }
   }
@@ -224,7 +221,8 @@ export class OpenAIProvider implements AIProvider {
   private isConfigured: boolean = false;
 
   constructor(customApiKey?: string | null) {
-    // Priority: customApiKey > Replit AI Integrations
+    // SECURITY: ONLY use user-provided custom API key
+    // NO fallback to Replit AI Integrations or any built-in keys
     let apiKey: string | undefined;
     let baseURL: string | undefined;
 
@@ -232,18 +230,13 @@ export class OpenAIProvider implements AIProvider {
       // User provided custom API key - use official OpenAI API
       apiKey = customApiKey;
       baseURL = "https://api.openai.com/v1";
-      console.log("Using custom OpenAI API key");
+      console.log("✅ Using user's custom OpenAI API key");
     } else {
-      // Fallback to Replit AI Integrations
-      baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-      apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-
-      if (!baseURL || !apiKey) {
-        console.error("❌ CRITICAL: No API key available. User MUST provide custom API key in settings.");
-        this.isConfigured = false;
-        return;
-      }
-      console.log("Using Replit AI Integrations (OpenAI)");
+      // NO FALLBACK - User must provide their own API key
+      console.error("❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.");
+      console.error("   Go to Settings → AI Configuration → Enter your OpenAI API key");
+      this.isConfigured = false;
+      return;
     }
 
     // Initialize client
@@ -253,8 +246,9 @@ export class OpenAIProvider implements AIProvider {
         apiKey,
       });
       this.isConfigured = true;
+      console.log("✅ OpenAI client initialized successfully");
     } catch (error) {
-      console.error("Failed to initialize OpenAI client:", error);
+      console.error("❌ Failed to initialize OpenAI client:", error);
       this.isConfigured = false;
     }
   }
