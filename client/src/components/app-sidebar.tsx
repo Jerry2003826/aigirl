@@ -188,7 +188,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
     <Sidebar 
       collapsible="none"
       className={cn(
-        "border-r-0",
+        "border-r-0 w-full md:w-[var(--sidebar-width)]",
         // Mobile: only show when showMobileSidebar is true
         "md:block",
         !showMobileSidebar && "hidden"
