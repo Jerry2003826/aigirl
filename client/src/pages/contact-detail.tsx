@@ -213,6 +213,42 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
     },
   });
 
+  const startChatMutation = useMutation({
+    mutationFn: async (personaId: string) => {
+      // Check if conversation already exists
+      const conversations: any[] = await queryClient.fetchQuery({
+        queryKey: ["/api/conversations"],
+      });
+      
+      const existingConversation = conversations.find(
+        (conv) => !conv.isGroup && conv.personas?.[0]?.id === personaId
+      );
+
+      if (existingConversation) {
+        return existingConversation;
+      }
+
+      // Create new conversation
+      return apiRequest("POST", "/api/conversations", {
+        title: null,
+        isGroup: false,
+        personaIds: [personaId],
+      });
+    },
+    onSuccess: (conversation) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      // Navigate to chat with conversation ID
+      setLocation(`/chat?conversationId=${conversation.id}`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "无法创建对话",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (data: MemoryFormData) => {
     if (editingMemory) {
       updateMemoryMutation.mutate({ id: editingMemory.id, data });
@@ -371,11 +407,21 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
 
           <div className="flex gap-2">
             <Button
-              onClick={() => setLocation("/chat")}
+              onClick={() => startChatMutation.mutate(personaId)}
+              disabled={startChatMutation.isPending}
               data-testid="button-start-chat"
             >
-              <MessageCircle className="mr-2 h-4 w-4" />
-              发消息
+              {startChatMutation.isPending ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                  创建中...
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  发消息
+                </>
+              )}
             </Button>
             <Button
               variant="outline"
@@ -741,6 +787,7 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
                         placeholder="例如：我在大学学习计算机科学，喜欢音乐和绘画..."
                         rows={3}
                         {...field}
+                        value={field.value || ""}
                         data-testid="input-persona-backstory"
                       />
                     </FormControl>
@@ -762,6 +809,7 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
                       <Input
                         placeholder="例如：嗨！很高兴见到你~"
                         {...field}
+                        value={field.value || ""}
                         data-testid="input-persona-greeting"
                       />
                     </FormControl>
