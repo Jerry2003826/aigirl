@@ -91,12 +91,14 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   const userEmail = (user as any)?.email;
 
   return (
-    <Sidebar className={cn(
-      "border-r-0",
-      // Mobile: only show when showMobileSidebar is true
-      "md:block",
-      !showMobileSidebar && "hidden"
-    )}>
+    <Sidebar 
+      collapsible="none"
+      className={cn(
+        "border-r-0",
+        // Mobile: only show when showMobileSidebar is true
+        "md:block",
+        !showMobileSidebar && "hidden"
+      )}>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         {/* User Info Section */}
         <div className="flex items-center justify-between mb-4">
