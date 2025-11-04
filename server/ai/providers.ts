@@ -30,7 +30,8 @@ export interface ImageData {
 
 // Google Gemini Provider (using Replit AI Integrations - gemini-2.5-pro default)
 export class GeminiProvider implements AIProvider {
-  private client: GoogleGenAI;
+  private client: GoogleGenAI | null = null;
+  private isConfigured: boolean = false;
 
   constructor() {
     // Validate required environment variables
@@ -38,20 +39,32 @@ export class GeminiProvider implements AIProvider {
     const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
     
     if (!baseUrl || !apiKey) {
-      throw new Error("Gemini AI Integrations not configured. Missing AI_INTEGRATIONS_GEMINI_BASE_URL or AI_INTEGRATIONS_GEMINI_API_KEY");
+      console.warn("Gemini AI Integrations not configured. Missing AI_INTEGRATIONS_GEMINI_BASE_URL or AI_INTEGRATIONS_GEMINI_API_KEY");
+      this.isConfigured = false;
+      return;
     }
 
     // This uses Replit AI Integrations - no API key needed, billed to credits
-    this.client = new GoogleGenAI({
-      apiKey,
-      httpOptions: {
-        apiVersion: "",
-        baseUrl,
-      },
-    });
+    try {
+      this.client = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          apiVersion: "",
+          baseUrl,
+        },
+      });
+      this.isConfigured = true;
+    } catch (error) {
+      console.error("Failed to initialize Gemini client:", error);
+      this.isConfigured = false;
+    }
   }
 
   async generateResponse(params: GenerateParams): Promise<string> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+    }
+
     const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
 
     // Build contents array for Gemini (convert conversation history)
@@ -121,6 +134,10 @@ ${originalText}`;
   }
 
   async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+    }
+
     const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
 
     // Build contents array
@@ -191,17 +208,37 @@ ${originalText}`;
 
 // OpenAI Provider (using Replit AI Integrations)
 export class OpenAIProvider implements AIProvider {
-  private client: OpenAI;
+  private client: OpenAI | null = null;
+  private isConfigured: boolean = false;
 
   constructor() {
+    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+    if (!baseURL || !apiKey) {
+      console.warn("OpenAI AI Integrations not configured. Missing AI_INTEGRATIONS_OPENAI_BASE_URL or AI_INTEGRATIONS_OPENAI_API_KEY");
+      this.isConfigured = false;
+      return;
+    }
+
     // This uses Replit AI Integrations for OpenAI
-    this.client = new OpenAI({
-      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-    });
+    try {
+      this.client = new OpenAI({
+        baseURL,
+        apiKey,
+      });
+      this.isConfigured = true;
+    } catch (error) {
+      console.error("Failed to initialize OpenAI client:", error);
+      this.isConfigured = false;
+    }
   }
 
   async generateResponse(params: GenerateParams): Promise<string> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+    }
+
     const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
 
     // Build OpenAI messages
@@ -254,6 +291,10 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥，或联系管理员配置Replit AI集成。");
+    }
+
     const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
 
     // Build OpenAI messages

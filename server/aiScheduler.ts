@@ -21,8 +21,17 @@ async function hasValidGeminiKey(userId: string): Promise<boolean> {
       return true;
     }
     
-    // Check if global Gemini API key is available
-    const hasGlobalKey = !!(process.env.AI_INTEGRATIONS_GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY);
+    // Check if Replit AI Integrations (Gemini) are configured
+    const hasGeminiIntegration = !!(
+      process.env.AI_INTEGRATIONS_GEMINI_API_KEY && 
+      process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
+    );
+    
+    // Check legacy/standalone Google API key
+    const hasGoogleKey = !!process.env.GOOGLE_AI_API_KEY;
+    
+    // Global key is available if ANY source is configured
+    const hasGlobalKey = hasGeminiIntegration || hasGoogleKey;
     return hasGlobalKey;
   } catch (error) {
     console.error(`[AI Scheduler] Error checking API key for user ${userId}:`, error);

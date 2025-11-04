@@ -83,7 +83,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     queryKey: ["/api/conversations"],
   });
 
-  const { data: aiStatus } = useQuery<{ isOnline: boolean; providers: { openai: boolean; google: boolean } }>({
+  const { data: aiStatus } = useQuery<{ isOnline: boolean; providers: { openai: boolean; google: boolean; custom: boolean }; message?: string }>({
     queryKey: ["/api/ai/status"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -325,9 +325,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         });
         setIsTyping(false);
         queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
-      } catch (error) {
+      } catch (error: any) {
         setIsTyping(false);
         console.error("生成AI回复时出错:", error);
+        toast({
+          title: "AI服务错误",
+          description: error.message || "AI回复生成失败",
+          variant: "destructive",
+        });
       }
     },
     onError: (error: any, variables) => {
@@ -429,11 +434,22 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                       ? "bg-blue-500" 
                       : aiStatus?.isOnline 
                         ? "bg-green-500" 
-                        : "bg-gray-400"
+                        : "bg-red-500"
                   )} data-testid="status-indicator"></div>
-                  <p className="text-sm text-muted-foreground" data-testid="text-status">
-                    {isTyping ? "正在输入中..." : aiStatus?.isOnline ? "在线" : "离线"}
-                  </p>
+                  <div className="flex flex-col">
+                    <p className="text-sm text-muted-foreground" data-testid="text-status">
+                      {isTyping ? "正在输入中..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
+                    </p>
+                    {!aiStatus?.isOnline && !isTyping && (
+                      <button 
+                        onClick={() => setLocation("/settings")}
+                        className="text-xs text-primary hover:underline text-left"
+                        data-testid="link-configure-api"
+                      >
+                        点击配置API密钥
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

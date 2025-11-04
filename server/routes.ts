@@ -1044,18 +1044,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       
-      // Check global environment variables
-      const hasOpenAI = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
-      const hasGoogle = !!process.env.GOOGLE_AI_API_KEY;
+      // Check Replit AI Integrations environment variables (preferred method)
+      const hasGeminiIntegration = !!(
+        process.env.AI_INTEGRATIONS_GEMINI_API_KEY && 
+        process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
+      );
+      const hasOpenAIIntegration = !!(
+        process.env.AI_INTEGRATIONS_OPENAI_API_KEY && 
+        process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
+      );
+      
+      // Check legacy/standalone API keys
+      const hasGoogleKey = !!process.env.GOOGLE_AI_API_KEY;
       
       // Check user-specific AI settings
       const userSettings = await storage.getAiSettings(userId);
       const hasCustomKey = !!(userSettings?.customApiKey);
       
-      // User is online if they have:
-      // 1. Custom API key configured, OR
-      // 2. Global API keys available (OpenAI or Google)
-      const isOnline = hasCustomKey || hasOpenAI || hasGoogle;
+      // Determine which providers are available
+      const hasGoogle = hasGeminiIntegration || hasGoogleKey;
+      const hasOpenAI = hasOpenAIIntegration;
+      
+      // User is online if ANY API source is configured:
+      // 1. Replit AI Integrations (Gemini or OpenAI), OR
+      // 2. Legacy Google API key, OR
+      // 3. Custom user API key
+      const isOnline = hasGoogle || hasOpenAI || hasCustomKey;
       
       res.json({
         isOnline,
@@ -1063,7 +1077,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           openai: hasOpenAI,
           google: hasGoogle,
           custom: hasCustomKey,
-        }
+        },
+        message: isOnline 
+          ? "AI服务已就绪" 
+          : "AI服务未配置。请前往设置页面配置您的API密钥。"
       });
     } catch (error) {
       console.error("Error checking AI status:", error);
