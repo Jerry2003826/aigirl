@@ -321,20 +321,6 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
             );
           })}
         </div>
-
-        {/* CTA Button */}
-        {!isImmersive && (
-          <div className="p-4">
-            <Button
-              onClick={onNewChat}
-              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base touch-target-md"
-              data-testid="button-create-ai-girlfriend"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              创建新AI女友
-            </Button>
-          </div>
-        )}
       </SidebarFooter>
     </Sidebar>
   );
