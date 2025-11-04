@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff, Trash2 } from "lucide-react";
+import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -74,32 +74,6 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
       title: "已刷新",
       description: "数据已同步",
     });
-  };
-
-  const deleteConversationMutation = useMutation({
-    mutationFn: (conversationId: string) =>
-      apiRequest("DELETE", `/api/conversations/${conversationId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      toast({
-        title: "成功",
-        description: "对话已删除",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "错误",
-        description: error.message || "删除对话失败",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const handleDeleteConversation = (conversationId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (confirm("确定要删除这个对话吗？所有消息将被永久删除。")) {
-      deleteConversationMutation.mutate(conversationId);
-    }
   };
 
   const navItems = [
@@ -318,15 +292,6 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                       </div>
                     </div>
                   </button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="absolute top-2 right-2 h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => handleDeleteConversation(conversation.id, e)}
-                    data-testid={`button-delete-conversation-${conversation.id}`}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
                 </div>
               ))}
             </div>
