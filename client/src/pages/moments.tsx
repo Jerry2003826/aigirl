@@ -224,13 +224,13 @@ export default function MomentsPage() {
               {/* User Info */}
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12 ring-2 ring-purple-100">
-                  <AvatarImage src={currentUser.avatarUrl || undefined} />
+                  <AvatarImage src={currentUser.profileImageUrl || undefined} />
                   <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-semibold text-lg">
-                    {currentUser.username?.[0] || currentUser.email?.[0]}
+                    {currentUser.username?.[0] || '我'}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <div className="font-semibold text-base">{currentUser.username || currentUser.email}</div>
+                  <div className="font-semibold text-base">{currentUser.username || '我'}</div>
                   <div className="text-sm text-muted-foreground">公开</div>
                 </div>
               </div>
