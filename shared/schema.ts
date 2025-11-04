@@ -194,6 +194,12 @@ export const upsertUserSchema = createInsertSchema(users).omit({
   username: true,
 }).required({ id: true });
 
+// Update user profile schema (for username and avatar changes)
+export const updateUserProfileSchema = z.object({
+  username: z.string().min(1, "昵称不能为空").max(50, "昵称最多50个字符").optional(),
+  profileImageUrl: z.string().min(1, "头像URL不能为空").optional(), // Allow relative URLs like /uploads/...
+});
+
 export const insertAiPersonaSchema = createInsertSchema(aiPersonas).omit({
   id: true,
   createdAt: true,
@@ -259,6 +265,7 @@ export const updateAiSettingsSchema = createInsertSchema(aiSettings).omit({
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
+export type UpdateUserProfile = z.infer<typeof updateUserProfileSchema>;
 
 export type AiPersona = typeof aiPersonas.$inferSelect;
 export type InsertAiPersona = z.infer<typeof insertAiPersonaSchema>;

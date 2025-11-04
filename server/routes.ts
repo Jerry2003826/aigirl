@@ -14,7 +14,8 @@ import {
   insertMessageSchema,
   insertConversationParticipantSchema,
   insertMomentSchema,
-  insertMomentCommentSchema
+  insertMomentCommentSchema,
+  updateUserProfileSchema
 } from "@shared/schema";
 
 // Configure multer for file uploads
@@ -75,6 +76,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Update user profile route
+  app.patch('/api/user/profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Validate request body
+      const validatedData = updateUserProfileSchema.parse(req.body);
+      
+      // Update user profile
+      const updatedUser = await storage.updateUserProfile(userId, validatedData);
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "用户不存在" });
+      }
+      
+      res.json(updatedUser);
+    } catch (error: any) {
+      console.error("Error updating user profile:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "数据验证失败", errors: error.errors });
+      }
+      res.status(500).json({ message: "更新用户资料失败" });
     }
   });
 

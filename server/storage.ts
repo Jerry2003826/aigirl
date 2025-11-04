@@ -1,5 +1,5 @@
 import { 
-  type User, type InsertUser, type UpsertUser,
+  type User, type InsertUser, type UpsertUser, type UpdateUserProfile,
   type AiPersona, type InsertAiPersona,
   type Conversation, type InsertConversation,
   type ConversationParticipant, type InsertConversationParticipant,
@@ -33,6 +33,7 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined>;
   
   // AI Persona operations
   getPersona(id: string): Promise<AiPersona | undefined>;
@@ -177,6 +178,23 @@ export class MemStorage implements IStorage {
       this.users.set(upsertData.id, newUser);
       return newUser;
     }
+  }
+
+  async updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined> {
+    const existingUser = this.users.get(userId);
+    if (!existingUser) {
+      return undefined;
+    }
+    
+    const updated: User = {
+      ...existingUser,
+      username: profile.username ?? existingUser.username,
+      profileImageUrl: profile.profileImageUrl ?? existingUser.profileImageUrl,
+      updatedAt: new Date(),
+    };
+    
+    this.users.set(userId, updated);
+    return updated;
   }
 
   // AI Persona operations
@@ -449,6 +467,18 @@ export class DatabaseStorage implements IStorage {
           updatedAt: new Date(),
         },
       })
+      .returning();
+    return result[0];
+  }
+
+  async updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({
+        ...profile,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
       .returning();
     return result[0];
   }

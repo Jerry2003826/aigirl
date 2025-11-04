@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff } from "lucide-react";
+import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut, Eye, EyeOff, Edit2, Upload } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { useState, useRef } from "react";
 
 type Conversation = {
   id: string;
@@ -50,6 +52,13 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   const { theme, toggleTheme } = useTheme();
   const { isImmersive, toggleImmersive } = useImmersiveMode();
   const { toast } = useToast();
+  
+  // Profile edit state
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
+  const [username, setUsername] = useState("");
+  const [profileImageUrl, setProfileImageUrl] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -69,6 +78,91 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
     },
   });
 
+  // Update profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { username?: string; profileImageUrl?: string }) => {
+      return await apiRequest("PATCH", "/api/user/profile", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setIsEditProfileOpen(false);
+      toast({
+        title: "成功",
+        description: "资料已更新",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "更新资料失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+
+      const data = await response.json();
+      setProfileImageUrl(data.url);
+      toast({
+        title: "成功",
+        description: "头像已上传",
+      });
+    } catch (error: any) {
+      toast({
+        title: "错误",
+        description: error.message || "上传头像失败",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  // Open edit dialog with current user data
+  const handleOpenEditProfile = () => {
+    setUsername((user as any)?.username || "");
+    setProfileImageUrl((user as any)?.profileImageUrl || "");
+    setIsEditProfileOpen(true);
+  };
+
+  // Submit profile update
+  const handleSubmitProfile = () => {
+    const updates: { username?: string; profileImageUrl?: string } = {};
+    
+    if (username && username !== (user as any)?.username) {
+      updates.username = username;
+    }
+    if (profileImageUrl && profileImageUrl !== (user as any)?.profileImageUrl) {
+      updates.profileImageUrl = profileImageUrl;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      setIsEditProfileOpen(false);
+      return;
+    }
+
+    updateProfileMutation.mutate(updates);
+  };
+
   const handleRefresh = () => {
     queryClient.invalidateQueries();
     toast({
@@ -86,7 +180,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
   const currentNav = navItems.find(item => location === item.path) || navItems[0];
 
-  const userProfileImage = (user as any)?.profileImage;
+  const userProfileImage = (user as any)?.profileImageUrl;
   const userName = (user as any)?.username;
   const userEmail = (user as any)?.email;
 
@@ -100,25 +194,34 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         !showMobileSidebar && "hidden"
       )}>
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        {/* User Info Section */}
-        <div className="flex items-center justify-between mb-4">
+        {/* User Info Section - Clickable */}
+        <button
+          onClick={handleOpenEditProfile}
+          className="flex items-center justify-between mb-4 w-full hover-elevate rounded-lg p-2 -m-2 transition-colors"
+          data-testid="button-edit-profile"
+        >
           <div className="flex items-center gap-3">
-            <Avatar className="h-11 w-11">
-              <AvatarImage src={userProfileImage || undefined} />
-              <AvatarFallback className="bg-primary/20 text-primary text-base">
-                {userName?.substring(0, 2).toUpperCase() || "我"}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 overflow-hidden">
+            <div className="relative">
+              <Avatar className="h-11 w-11">
+                <AvatarImage src={userProfileImage || undefined} />
+                <AvatarFallback className="bg-primary/20 text-primary text-base">
+                  {userName?.substring(0, 2).toUpperCase() || "我"}
+                </AvatarFallback>
+              </Avatar>
+              <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                <Edit2 className="h-3 w-3 text-primary-foreground" />
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden text-left">
               <p className="font-semibold text-base truncate" data-testid="text-user-name">
-                我
+                {userName || "我"}
               </p>
               <p className="text-sm text-muted-foreground truncate" data-testid="text-user-id">
                 {userEmail || "2054634601@qq..."}
               </p>
             </div>
           </div>
-        </div>
+        </button>
 
         {/* Icon Toolbar */}
         <div className="flex items-center gap-2 mb-4">
@@ -330,6 +433,81 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
           })}
         </div>
       </SidebarFooter>
+
+      {/* Edit Profile Dialog */}
+      <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑资料</DialogTitle>
+            <DialogDescription>
+              修改你的昵称和头像
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Avatar Upload */}
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={profileImageUrl || userProfileImage || undefined} />
+                  <AvatarFallback className="bg-primary/20 text-primary text-2xl">
+                    {username?.substring(0, 2).toUpperCase() || userName?.substring(0, 2).toUpperCase() || "我"}
+                  </AvatarFallback>
+                </Avatar>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover-elevate active-elevate-2"
+                  disabled={uploadingAvatar}
+                  data-testid="button-upload-avatar"
+                >
+                  <Upload className="h-4 w-4" />
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+              {uploadingAvatar && (
+                <p className="text-sm text-muted-foreground">上传中...</p>
+              )}
+            </div>
+
+            {/* Username Input */}
+            <div className="space-y-2">
+              <Label htmlFor="username">昵称</Label>
+              <Input
+                id="username"
+                placeholder="输入昵称"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                data-testid="input-edit-username"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setIsEditProfileOpen(false)}
+              data-testid="button-cancel-edit"
+            >
+              取消
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSubmitProfile}
+              disabled={updateProfileMutation.isPending}
+              data-testid="button-save-profile"
+            >
+              {updateProfileMutation.isPending ? "保存中..." : "保存"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Sidebar>
   );
 }
