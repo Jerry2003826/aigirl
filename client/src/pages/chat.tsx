@@ -61,7 +61,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [messageInput, setMessageInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
-  const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
+  const [failedMessages, setFailedMessages] = useState<Map<string, { content: string; imageData?: string | null }>>(new Map());
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -271,10 +271,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const imageMessagesCount = allMessages.filter(m => isImageMessage(m)).length;
 
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, imageData }: { 
+    mutationFn: async ({ conversationId, content, imageData, tempId }: { 
       conversationId: string; 
       content: string;
       imageData?: string | null;
+      tempId: string;
     }) => {
       // Send user message (with optional image)
       return apiRequest("POST", "/api/messages", {
@@ -284,7 +285,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         imageData: imageData || undefined,
       });
     },
-    onSuccess: async (_, { conversationId, content }) => {
+    onSuccess: async (_, { conversationId, content, tempId }) => {
+      // Remove from failed messages if it was a retry
+      setFailedMessages(prev => {
+        const newMap = new Map(prev);
+        newMap.delete(tempId);
+        return newMap;
+      });
+      
       queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setMessageInput("");
@@ -341,31 +349,46 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         });
       }
     },
-    onError: (error: any, variables) => {
-      setFailedMessageId(variables.conversationId);
+    onError: (error: any, { tempId, content, imageData }) => {
+      // Store the failed message
+      setFailedMessages(prev => {
+        const newMap = new Map(prev);
+        newMap.set(tempId, { content, imageData });
+        return newMap;
+      });
+      
       toast({
-        title: "错误",
-        description: error.message || "发送消息失败",
+        title: "发送失败",
+        description: error.message || "消息发送失败，请点击消息旁边的重试按钮",
         variant: "destructive",
       });
     },
   });
 
-  const retryLastMessage = () => {
-    if (failedMessageId && messageInput.trim()) {
-      setFailedMessageId(null);
-      handleSendMessage();
-    }
+  const retryFailedMessage = (tempId: string) => {
+    const failedMsg = failedMessages.get(tempId);
+    if (!failedMsg || !selectedConversationId) return;
+    
+    sendMessageMutation.mutate({
+      conversationId: selectedConversationId,
+      content: failedMsg.content,
+      imageData: failedMsg.imageData,
+      tempId,
+    });
   };
 
   const handleSendMessage = () => {
     if (!selectedConversationId) return;
     if (!messageInput.trim() && !imageData) return;
     
+    // Generate a temporary ID for this message
+    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    
     sendMessageMutation.mutate({
       conversationId: selectedConversationId,
       content: messageInput.trim(),
       imageData,
+      tempId,
     });
   };
 
@@ -600,6 +623,36 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     );
                   })}
                   
+                  {/* Failed Messages */}
+                  {Array.from(failedMessages.entries()).map(([tempId, failedMsg]) => (
+                    <div
+                      key={tempId}
+                      className="flex gap-3 justify-end"
+                      data-testid={`failed-message-${tempId}`}
+                    >
+                      <div className="flex flex-col items-end gap-2 max-w-[75%] md:max-w-md lg:max-w-lg">
+                        <div className="rounded-3xl px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-br-md">
+                          <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-destructive">
+                            {failedMsg.content || "[图片]"}
+                          </p>
+                          <p className="mt-1.5 text-sm opacity-70 text-destructive-foreground">
+                            发送失败
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => retryFailedMessage(tempId)}
+                          className="text-xs h-7"
+                          data-testid={`button-retry-${tempId}`}
+                        >
+                          <Send className="h-3 w-3 mr-1" />
+                          重试
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  
                   {/* Typing Indicator */}
                   {isTyping && (
                     <div className="flex gap-3 justify-start" data-testid="typing-indicator">
@@ -627,20 +680,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
             {/* Message Input */}
             <div className="border-t bg-background px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-              {failedMessageId === selectedConversationId && (
-                <div className="mb-2 flex items-center gap-2 text-sm text-destructive">
-                  <span>Message failed to send</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={retryLastMessage}
-                    data-testid="button-retry-message"
-                  >
-                    Retry
-                  </Button>
-                </div>
-              )}
-              
               {/* Image Preview */}
               {imagePreview && (
                 <div className="mb-2 relative inline-block">
