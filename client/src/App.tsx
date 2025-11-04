@@ -4,11 +4,12 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger } from "@/components/ui/sidebar";
-import { MessageCircle, Sparkles, LogOut } from "lucide-react";
+import { MessageCircle, Sparkles, LogOut, Camera } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
+import Moments from "@/pages/moments";
 import NotFound from "@/pages/not-found";
 
 function AppSidebar() {
@@ -16,6 +17,7 @@ function AppSidebar() {
 
   const menuItems = [
     { title: "Chat", path: "/chat", icon: MessageCircle },
+    { title: "Moments", path: "/moments", icon: Camera },
     { title: "Personas", path: "/personas", icon: Sparkles },
   ];
 
@@ -92,6 +94,7 @@ function Router() {
             <Switch>
               <Route path="/" component={Chat} />
               <Route path="/chat" component={Chat} />
+              <Route path="/moments" component={Moments} />
               <Route path="/personas" component={Personas} />
               <Route component={NotFound} />
             </Switch>

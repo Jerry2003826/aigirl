@@ -32,15 +32,15 @@
 
   --sidebar-border: 0 0% 87%;
 
-  --sidebar-primary: 215 85% 45%;
+  --sidebar-primary: 150 94% 38%;
 
   --sidebar-primary-foreground: 0 0% 98%;
 
-  --sidebar-accent: 215 12% 88%;
+  --sidebar-accent: 150 12% 88%;
 
   --sidebar-accent-foreground: 0 0% 12%;
 
-  --sidebar-ring: 215 85% 45%;
+  --sidebar-ring: 150 94% 38%;
 
   --popover: 0 0% 92%;
 
@@ -48,9 +48,16 @@
 
   --popover-border: 0 0% 85%;
 
-  --primary: 215 85% 45%;
+  --primary: 150 94% 38%;
 
   --primary-foreground: 0 0% 98%;
+  
+  /* Chat-specific colors - WeChat style */
+  --message-user: 150 85% 73%; /* #95EC69 light green for user messages */
+  --message-user-foreground: 0 0% 0%;
+  --message-ai: 0 0% 100%; /* White for AI messages */
+  --message-ai-foreground: 0 0% 0%;
+  --chat-bg: 0 0% 94%;
 
   --secondary: 0 0% 86%;
 
@@ -150,15 +157,15 @@
 
   --sidebar-border: 0 0% 20%;
 
-  --sidebar-primary: 215 80% 48%;
+  --sidebar-primary: 150 94% 38%;
 
-  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-primary-foreground: 0 0% 0%;
 
-  --sidebar-accent: 215 12% 18%;
+  --sidebar-accent: 150 12% 18%;
 
   --sidebar-accent-foreground: 0 0% 92%;
 
-  --sidebar-ring: 215 80% 48%;
+  --sidebar-ring: 150 94% 38%;
 
   --popover: 0 0% 14%;
 
@@ -166,9 +173,16 @@
 
   --popover-border: 0 0% 22%;
 
-  --primary: 215 80% 48%;
+  --primary: 150 94% 38%;
 
   --primary-foreground: 0 0% 98%;
+  
+  /* Chat-specific colors - WeChat dark mode */
+  --message-user: 150 88% 24%; /* #056F3A dark green for user messages */
+  --message-user-foreground: 0 0% 100%;
+  --message-ai: 0 0% 17%; /* #2C2C2C dark gray for AI messages */
+  --message-ai-foreground: 0 0% 92%;
+  --chat-bg: 0 0% 6%;
 
   --secondary: 0 0% 20%;
 

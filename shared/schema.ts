@@ -106,6 +106,59 @@ export const memories = pgTable(
   ],
 );
 
+// Moments table (similar to WeChat Moments/Instagram Posts)
+export const moments = pgTable(
+  "moments",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    authorId: varchar("author_id").notNull(), // userId or personaId
+    authorType: text("author_type").notNull(), // 'user' or 'ai'
+    userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Owner of the moment (for filtering)
+    content: text("content").notNull(),
+    images: text("images").array(), // Array of image URLs
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_moments_user_id").on(table.userId),
+    index("idx_moments_created_at").on(table.createdAt),
+  ],
+);
+
+// Moment likes table
+export const momentLikes = pgTable(
+  "moment_likes",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    momentId: varchar("moment_id").notNull().references(() => moments.id, { onDelete: "cascade" }),
+    likerId: varchar("liker_id").notNull(), // userId or personaId
+    likerType: text("liker_type").notNull(), // 'user' or 'ai'
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("unique_moment_liker").on(table.momentId, table.likerId),
+    index("idx_moment_likes_moment_id").on(table.momentId),
+  ],
+);
+
+// Moment comments table (supports nested replies)
+export const momentComments = pgTable(
+  "moment_comments",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    momentId: varchar("moment_id").notNull().references(() => moments.id, { onDelete: "cascade" }),
+    authorId: varchar("author_id").notNull(), // userId or personaId
+    authorType: text("author_type").notNull(), // 'user' or 'ai'
+    content: text("content").notNull(),
+    parentCommentId: varchar("parent_comment_id"), // For nested replies
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("idx_moment_comments_moment_id").on(table.momentId),
+    index("idx_moment_comments_parent_comment_id").on(table.parentCommentId),
+    index("idx_moment_comments_created_at").on(table.createdAt),
+  ],
+);
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -153,6 +206,21 @@ export const insertMemorySchema = createInsertSchema(memories).omit({
   updatedAt: true,
 });
 
+export const insertMomentSchema = createInsertSchema(moments).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMomentLikeSchema = createInsertSchema(momentLikes).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMomentCommentSchema = createInsertSchema(momentComments).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -172,3 +240,12 @@ export type InsertMessage = z.infer<typeof insertMessageSchema>;
 
 export type Memory = typeof memories.$inferSelect;
 export type InsertMemory = z.infer<typeof insertMemorySchema>;
+
+export type Moment = typeof moments.$inferSelect;
+export type InsertMoment = z.infer<typeof insertMomentSchema>;
+
+export type MomentLike = typeof momentLikes.$inferSelect;
+export type InsertMomentLike = z.infer<typeof insertMomentLikeSchema>;
+
+export type MomentComment = typeof momentComments.$inferSelect;
+export type InsertMomentComment = z.infer<typeof insertMomentCommentSchema>;

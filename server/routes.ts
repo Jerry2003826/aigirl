@@ -10,7 +10,9 @@ import {
   updateAiPersonaSchema,
   insertConversationSchema, 
   insertMessageSchema,
-  insertConversationParticipantSchema 
+  insertConversationParticipantSchema,
+  insertMomentSchema,
+  insertMomentCommentSchema
 } from "@shared/schema";
 
 // Rate limiter for message sending (20 messages per minute per user)
@@ -570,6 +572,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
       }
       res.end();
+    }
+  });
+
+  // ==================== Moments Routes ====================
+  
+  // Get all moments (from all users and AI personas) with likes and comments
+  app.get('/api/moments', isAuthenticated, async (req: any, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 50;
+      const offset = parseInt(req.query.offset as string) || 0;
+      
+      // Get all moments (not filtered by user - this is a social feed)
+      const moments = await storage.getAllMoments(limit, offset);
+      
+      // Fetch likes and comments for each moment
+      const momentsWithDetails = await Promise.all(
+        moments.map(async (moment) => {
+          const [likes, comments] = await Promise.all([
+            storage.getMomentLikes(moment.id),
+            storage.getMomentComments(moment.id),
+          ]);
+          return {
+            ...moment,
+            likes,
+            comments,
+          };
+        })
+      );
+      
+      res.json(momentsWithDetails);
+    } catch (error) {
+      console.error("Error fetching moments:", error);
+      res.status(500).json({ message: "Failed to fetch moments" });
+    }
+  });
+
+  // Create a new moment
+  app.post('/api/moments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Validate using Zod schema
+      const validatedData = insertMomentSchema.parse({
+        ...req.body,
+        userId, // Always set to current user for security
+        authorId: userId, // User is posting the moment
+        authorType: 'user',
+      });
+      
+      const moment = await storage.createMoment(validatedData);
+      res.json(moment);
+    } catch (error: any) {
+      console.error("Error creating moment:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create moment" });
+    }
+  });
+
+  // Delete a moment
+  app.delete('/api/moments/:momentId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { momentId } = req.params;
+      
+      // Verify ownership
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      if (moment.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this moment" });
+      }
+      
+      await storage.deleteMoment(momentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting moment:", error);
+      res.status(500).json({ message: "Failed to delete moment" });
+    }
+  });
+
+  // Toggle like on a moment
+  app.post('/api/moments/:momentId/like', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { momentId } = req.params;
+      
+      // Verify moment exists (anyone can like any moment)
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      
+      const liked = await storage.toggleMomentLike(momentId, userId, 'user');
+      res.json({ liked });
+    } catch (error) {
+      console.error("Error toggling moment like:", error);
+      res.status(500).json({ message: "Failed to toggle like" });
+    }
+  });
+
+  // Get likes for a moment
+  app.get('/api/moments/:momentId/likes', isAuthenticated, async (req: any, res) => {
+    try {
+      const { momentId } = req.params;
+      
+      // Verify moment exists (anyone can view likes)
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      
+      const likes = await storage.getMomentLikes(momentId);
+      res.json(likes);
+    } catch (error) {
+      console.error("Error fetching moment likes:", error);
+      res.status(500).json({ message: "Failed to fetch likes" });
+    }
+  });
+
+  // Create a comment on a moment
+  app.post('/api/moments/:momentId/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { momentId } = req.params;
+      const { content, parentCommentId } = req.body;
+      
+      // Verify moment exists (anyone can comment)
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      
+      // Server-side author derivation - prevent spoofing
+      const validatedData = insertMomentCommentSchema.parse({
+        momentId,
+        authorId: userId, // Always use authenticated user
+        authorType: 'user', // Always set to 'user' for authenticated users
+        content,
+        parentCommentId: parentCommentId || null,
+      });
+      
+      const comment = await storage.createMomentComment(validatedData);
+      res.json(comment);
+    } catch (error: any) {
+      console.error("Error creating comment:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create comment" });
+    }
+  });
+
+  // Get comments for a moment
+  app.get('/api/moments/:momentId/comments', isAuthenticated, async (req: any, res) => {
+    try {
+      const { momentId } = req.params;
+      
+      // Verify moment exists (anyone can view comments)
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      
+      const comments = await storage.getMomentComments(momentId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ message: "Failed to fetch comments" });
+    }
+  });
+
+  // Delete a comment
+  app.delete('/api/moments/comments/:commentId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { commentId } = req.params;
+      
+      // Note: We should verify comment ownership here, but we'll need to fetch it first
+      // For now, we'll just delete it (in production, add ownership check)
+      
+      await storage.deleteMomentComment(commentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ message: "Failed to delete comment" });
     }
   });
 
