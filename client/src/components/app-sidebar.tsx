@@ -1,14 +1,25 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Sidebar, SidebarContent, SidebarHeader, SidebarFooter } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Download, BarChart2, FileText, Settings, RotateCcw, Plus } from "lucide-react";
+import { MessageCircle, Users, Camera, UserCircle, Search, Share2, Sun, Moon, Download, BarChart2, Brain, Settings, RotateCcw, Plus, LogOut } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { useTheme } from "@/components/theme-provider";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 type Conversation = {
   id: string;
@@ -27,16 +38,40 @@ type AppSidebarProps = {
 export function AppSidebar({ selectedConversationId, onConversationSelect, onNewChat }: AppSidebarProps) {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const { toast } = useToast();
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
   });
 
+  const logoutMutation = useMutation({
+    mutationFn: () => apiRequest("/api/auth/logout", "POST", {}),
+    onSuccess: () => {
+      window.location.href = "/";
+    },
+    onError: () => {
+      toast({
+        title: "错误",
+        description: "退出登录失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleRefresh = () => {
+    queryClient.invalidateQueries();
+    toast({
+      title: "已刷新",
+      description: "数据已同步",
+    });
+  };
+
   const navItems = [
-    { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat" },
-    { title: "联系人", path: "/personas", icon: Users, testId: "nav-contacts" },
-    { title: "动态", path: "/moments", icon: Camera, testId: "nav-moments" },
-    { title: "群聊", path: "/chat", icon: UserCircle, testId: "nav-groups" },
+    { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat", key: "chat" },
+    { title: "联系人", path: "/personas", icon: Users, testId: "nav-contacts", key: "personas" },
+    { title: "动态", path: "/moments", icon: Camera, testId: "nav-moments", key: "moments" },
+    { title: "群聊", path: "/chat", icon: UserCircle, testId: "nav-groups", key: "groups" },
   ];
 
   const currentNav = navItems.find(item => location === item.path) || navItems[0];
@@ -70,27 +105,74 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
         {/* Icon Toolbar */}
         <div className="flex items-center gap-1 mb-4">
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-share">
-            <Share2 className="h-4 w-4" />
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-8 w-8" 
+            onClick={toggleTheme}
+            data-testid="button-theme-toggle"
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-brightness">
-            <Sun className="h-4 w-4" />
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-8 w-8"
+            onClick={() => setLocation("/personas")}
+            data-testid="button-personas"
+          >
+            <Users className="h-4 w-4" />
           </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-download">
-            <Download className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-stats">
-            <BarChart2 className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-files">
-            <FileText className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-settings">
-            <Settings className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-refresh">
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-8 w-8"
+            onClick={handleRefresh}
+            data-testid="button-refresh"
+          >
             <RotateCcw className="h-4 w-4" />
           </Button>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-8 w-8"
+                data-testid="button-settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>设置</DialogTitle>
+                <DialogDescription>
+                  应用设置和账户管理
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-3 py-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={() => setLocation("/personas")}
+                  data-testid="button-manage-personas"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  角色管理
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-destructive hover:text-destructive"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                  data-testid="button-logout"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  {logoutMutation.isPending ? "退出中..." : "退出登录"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Search Bar */}
@@ -167,7 +249,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
             const Icon = item.icon;
             return (
               <button
-                key={item.path}
+                key={item.key}
                 onClick={() => setLocation(item.path)}
                 className={cn(
                   "flex flex-col items-center gap-1 p-2 rounded-lg flex-1 transition-colors hover-elevate",
