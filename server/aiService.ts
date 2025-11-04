@@ -661,6 +661,13 @@ export async function generateAIMomentContent(
     throw new Error("Persona not found");
   }
 
+  // Get user's AI settings
+  const aiSettings = await storage.getAiSettings(userId);
+  
+  // Get AI provider and model
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings, persona.model);
+  
   // Build system prompt with memories
   const systemPrompt = await buildSystemPrompt(persona, userId);
   
@@ -674,20 +681,14 @@ export async function generateAIMomentContent(
 6. 内容要有趣或有意义，不要太平淡`;
 
   try {
-    const provider = await getAIProvider(persona.model || "gemini-2.5-pro");
-    const modelName = getModelName(persona.model || "gemini-2.5-pro");
-    
-    const content = await provider.generateResponse(
-      modelName,
-      [
-        { role: "system", content: systemPrompt },
+    const content = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: [
         { role: "user", content: userPrompt },
       ],
-      {
-        temperature: 0.9,
-        maxTokens: 300,
-      }
-    );
+      maxTokens: 300,
+    });
 
     return content.trim();
   } catch (error) {
@@ -849,25 +850,26 @@ async function generateCommentReply(
     throw new Error("Persona not found");
   }
 
+  // Get user's AI settings
+  const aiSettings = await storage.getAiSettings(userId);
+  
+  // Get AI provider and model
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings, persona.model);
+  
   const systemPrompt = await buildSystemPrompt(persona, userId);
   
   const userPrompt = `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
 
   try {
-    const provider = await getAIProvider(persona.model || "gemini-2.5-pro");
-    const modelName = getModelName(persona.model || "gemini-2.5-pro");
-    
-    const reply = await provider.generateResponse(
-      modelName,
-      [
-        { role: "system", content: systemPrompt },
+    const reply = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: [
         { role: "user", content: userPrompt },
       ],
-      {
-        temperature: 0.9,
-        maxTokens: 100,
-      }
-    );
+      maxTokens: 100,
+    });
 
     return reply.trim();
   } catch (error) {
