@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarTrigger } from "@/components/ui/sidebar";
 import { MessageCircle, Sparkles, LogOut, Camera } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import Home from "@/pages/home";
+import Login from "@/pages/login";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
 import Moments from "@/pages/moments";
@@ -70,8 +70,8 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
-        <Route path="/" component={Home} />
-        <Route component={Home} />
+        <Route path="/" component={Login} />
+        <Route component={Login} />
       </Switch>
     );
   }
