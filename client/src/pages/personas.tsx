@@ -129,10 +129,11 @@ export default function Personas() {
   const startChatMutation = useMutation({
     mutationFn: async (personaId: string) => {
       // Create conversation
-      const conv = await apiRequest("POST", "/api/conversations", {
+      const convResponse = await apiRequest("POST", "/api/conversations", {
         title: null,
         isGroup: false,
       });
+      const conv = await convResponse.json();
       
       // Add persona as participant
       await apiRequest("POST", `/api/conversations/${conv.id}/participants`, {

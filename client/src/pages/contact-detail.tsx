@@ -63,20 +63,10 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
 
   const { data: persona, isLoading: personaLoading } = useQuery<Persona>({
     queryKey: ["/api/personas", personaId],
-    queryFn: async () => {
-      const response = await fetch(`/api/personas/${personaId}`);
-      if (!response.ok) throw new Error("Failed to fetch persona");
-      return response.json();
-    },
   });
 
   const { data: memories = [], isLoading: memoriesLoading } = useQuery<Memory[]>({
-    queryKey: ["/api/memories/persona", personaId],
-    queryFn: async () => {
-      const response = await fetch(`/api/memories/persona/${personaId}`);
-      if (!response.ok) throw new Error("Failed to fetch memories");
-      return response.json();
-    },
+    queryKey: ["/api/memories", "persona", personaId],
   });
 
   const form = useForm<MemoryFormData>({
