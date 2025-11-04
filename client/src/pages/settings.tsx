@@ -187,18 +187,23 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="customApiKey"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Custom API Key (Optional)</FormLabel>
+                        <FormLabel className="text-base font-semibold">🔑 API密钥 (强烈推荐)</FormLabel>
                         <FormControl>
                           <Input
                             type="password"
-                            placeholder="Enter your custom API key"
+                            placeholder="输入你的 Google AI API 密钥或 OpenAI API 密钥"
                             {...field}
                             value={field.value || ""}
                             data-testid="input-api-key"
                           />
                         </FormControl>
-                        <FormDescription>
-                          For future RAG and embedding features. Leave empty to use Replit AI Integrations.
+                        <FormDescription className="space-y-1">
+                          <p className="font-medium text-foreground">强烈建议提供你自己的API密钥以获得最佳体验：</p>
+                          <ul className="list-disc list-inside space-y-0.5 text-sm">
+                            <li>Google AI: 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Google AI Studio</a> 获取免费密钥</li>
+                            <li>OpenAI: 在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取密钥</li>
+                            <li>你的密钥将被安全存储，仅用于你的AI请求</li>
+                          </ul>
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
