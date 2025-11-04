@@ -311,28 +311,28 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                         data-testid={`message-${message.id}`}
                       >
                         {!isUser && showAvatar && (
-                          <Avatar className="h-8 w-8">
+                          <Avatar className="h-10 w-10">
                             <AvatarImage src={message.personaAvatar || undefined} />
-                            <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                            <AvatarFallback className="bg-primary/10 text-sm text-primary">
                               AI
                             </AvatarFallback>
                           </Avatar>
                         )}
-                        {!isUser && !showAvatar && <div className="w-8" />}
+                        {!isUser && !showAvatar && <div className="w-10" />}
 
                         <div
                           className={cn(
-                            "max-w-md rounded-3xl px-4 py-3",
+                            "max-w-[75%] rounded-3xl px-4 py-3",
                             isUser
                               ? "bg-primary text-primary-foreground rounded-br-md"
                               : "bg-muted rounded-bl-md"
                           )}
                         >
-                          <p className="whitespace-pre-wrap break-words text-sm" data-testid={`text-message-content-${message.id}`}>
+                          <p className="whitespace-pre-wrap break-words text-base leading-relaxed" data-testid={`text-message-content-${message.id}`}>
                             {message.content}
                           </p>
                           <p className={cn(
-                            "mt-1 text-xs opacity-60",
+                            "mt-1.5 text-sm opacity-70",
                             isUser ? "text-primary-foreground" : "text-muted-foreground"
                           )}>
                             {format(new Date(message.createdAt), "HH:mm")}
@@ -345,16 +345,16 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                   {/* Typing Indicator */}
                   {isTyping && (
                     <div className="flex gap-3 justify-start" data-testid="typing-indicator">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className="bg-primary/10 text-sm text-primary">
                           AI
                         </AvatarFallback>
                       </Avatar>
-                      <div className="max-w-md rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                      <div className="max-w-[75%] rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
+                        <div className="flex gap-1.5">
+                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }}></div>
                         </div>
                       </div>
                     </div>
@@ -402,7 +402,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                 </div>
               )}
               
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-end">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -414,31 +414,31 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-11 w-11 shrink-0"
+                  className="h-12 w-12 shrink-0 touch-target-md"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="button-upload-image"
                 >
-                  <ImagePlus className="h-5 w-5" />
+                  <ImagePlus className="h-6 w-6" />
                 </Button>
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="Type a message..."
-                  className="min-h-[44px] max-h-[120px] resize-none"
+                  placeholder="输入消息..."
+                  className="min-h-[48px] max-h-[120px] resize-none text-base leading-relaxed"
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
                   size="icon"
-                  className="h-11 w-11 shrink-0"
+                  className="h-12 w-12 shrink-0 rounded-full bg-primary hover:bg-primary/90 touch-target-md"
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <Loader2 className="h-6 w-6 animate-spin" />
                   ) : (
-                    <Send className="h-5 w-5" />
+                    <Send className="h-6 w-6" />
                   )}
                 </Button>
             </div>

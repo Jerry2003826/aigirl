@@ -95,17 +95,17 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         {/* User Info Section */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10">
+            <Avatar className="h-11 w-11">
               <AvatarImage src={userProfileImage || undefined} />
-              <AvatarFallback className="bg-primary/20 text-primary">
+              <AvatarFallback className="bg-primary/20 text-primary text-base">
                 {userName?.substring(0, 2).toUpperCase() || "我"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 overflow-hidden">
-              <p className="font-medium text-sm truncate" data-testid="text-user-name">
+              <p className="font-semibold text-base truncate" data-testid="text-user-name">
                 我
               </p>
-              <p className="text-xs text-muted-foreground truncate" data-testid="text-user-id">
+              <p className="text-sm text-muted-foreground truncate" data-testid="text-user-id">
                 {userEmail || "2054634601@qq..."}
               </p>
             </div>
@@ -113,64 +113,64 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         </div>
 
         {/* Icon Toolbar */}
-        <div className="flex items-center gap-1 mb-4">
+        <div className="flex items-center gap-2 mb-4">
           <Button 
             size="icon" 
             variant="ghost" 
-            className="h-8 w-8" 
+            className="h-10 w-10 touch-target-sm" 
             onClick={toggleTheme}
             data-testid="button-theme-toggle"
           >
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
           <Button 
             size="icon" 
             variant="ghost" 
-            className="h-8 w-8"
+            className="h-10 w-10 touch-target-sm"
             onClick={toggleImmersive}
             data-testid="button-immersive-toggle"
             title={isImmersive ? "退出沉浸模式" : "进入沉浸模式"}
           >
-            {isImmersive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+            {isImmersive ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
           </Button>
           {!isImmersive && (
             <>
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-8 w-8"
+                className="h-10 w-10 touch-target-sm"
                 onClick={() => setLocation("/personas")}
                 data-testid="button-personas"
               >
-                <Users className="h-4 w-4" />
+                <Users className="h-5 w-5" />
               </Button>
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-8 w-8"
+                className="h-10 w-10 touch-target-sm"
                 onClick={handleRefresh}
                 data-testid="button-refresh"
               >
-                <RotateCcw className="h-4 w-4" />
+                <RotateCcw className="h-5 w-5" />
               </Button>
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-8 w-8"
+                className="h-10 w-10 touch-target-sm"
                 onClick={() => setLocation("/settings")}
                 data-testid="button-settings"
               >
-                <Settings className="h-4 w-4" />
+                <Settings className="h-5 w-5" />
               </Button>
               <Dialog>
                 <DialogTrigger asChild>
                   <Button 
                     size="icon" 
                     variant="ghost" 
-                    className="h-8 w-8"
+                    className="h-10 w-10 touch-target-sm"
                     data-testid="button-user-menu"
                   >
-                    <UserCircle className="h-4 w-4" />
+                    <UserCircle className="h-5 w-5" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
@@ -209,10 +209,10 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
         {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
             placeholder="搜索"
-            className="pl-9 bg-sidebar-accent border-0"
+            className="pl-10 bg-sidebar-accent border-0 h-11 text-base"
             data-testid="input-search"
           />
         </div>
@@ -222,9 +222,9 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         <ScrollArea className="flex-1">
           {conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center">
-              <MessageCircle className="mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="mb-2 text-sm font-medium" data-testid="text-no-conversations">暂无消息</p>
-              <p className="text-xs text-muted-foreground">
+              <MessageCircle className="mb-4 h-16 w-16 text-muted-foreground" />
+              <p className="mb-2 text-base font-semibold" data-testid="text-no-conversations">暂无消息</p>
+              <p className="text-sm text-muted-foreground">
                 点击下方按钮创建AI女友
               </p>
             </div>
@@ -245,15 +245,15 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      <Avatar className="h-12 w-12">
+                      <Avatar className="h-14 w-14">
                         <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
-                        <AvatarFallback className="bg-primary/10 text-primary">
+                        <AvatarFallback className="bg-primary/10 text-primary text-base">
                           {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
                         </AvatarFallback>
                       </Avatar>
                       {conversation.unreadCount && conversation.unreadCount > 0 && (
                         <Badge 
-                          className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center bg-primary text-primary-foreground text-xs"
+                          className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
                           data-testid={`badge-unread-${conversation.id}`}
                         >
                           {conversation.unreadCount > 99 ? '99+' : conversation.unreadCount}
@@ -263,20 +263,20 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                     <div className="flex-1 overflow-hidden">
                       <div className="flex items-center justify-between mb-1">
                         <p className={cn(
-                          "truncate text-sm",
+                          "truncate text-base",
                           conversation.unreadCount && conversation.unreadCount > 0 ? "font-semibold" : "font-medium"
                         )} data-testid={`text-conversation-title-${conversation.id}`}>
                           {conversation.title || conversation.personas?.[0]?.name || "新聊天"}
                         </p>
                         {conversation.lastMessageAt && (
-                          <span className="text-xs text-muted-foreground ml-2 shrink-0">
+                          <span className="text-sm text-muted-foreground ml-2 shrink-0">
                             {format(new Date(conversation.lastMessageAt), "HH:mm")}
                           </span>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
                         <p className={cn(
-                          "truncate text-xs",
+                          "truncate text-sm",
                           conversation.unreadCount && conversation.unreadCount > 0 
                             ? "text-foreground font-medium" 
                             : "text-muted-foreground"
@@ -297,7 +297,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
       <SidebarFooter className="p-0 border-t border-sidebar-border">
         {/* Bottom Navigation */}
-        <div className="flex items-center justify-around p-2 border-b border-sidebar-border">
+        <div className="flex items-center justify-around p-3 border-b border-sidebar-border">
           {navItems.map((item) => {
             const isActive = location === item.path;
             const Icon = item.icon;
@@ -306,13 +306,13 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                 key={item.key}
                 onClick={() => setLocation(item.path)}
                 className={cn(
-                  "flex flex-col items-center gap-1 p-2 rounded-lg flex-1 transition-colors hover-elevate",
+                  "flex flex-col items-center gap-1 py-2 px-3 rounded-lg flex-1 transition-colors hover-elevate touch-target-sm",
                   isActive && "text-primary"
                 )}
                 data-testid={item.testId}
               >
-                <Icon className={cn("h-5 w-5", isActive && "text-primary")} />
-                <span className="text-xs">{item.title}</span>
+                <Icon className={cn("h-6 w-6", isActive && "text-primary")} />
+                <span className="text-xs font-medium">{item.title}</span>
               </button>
             );
           })}
@@ -320,13 +320,13 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
         {/* CTA Button */}
         {!isImmersive && (
-          <div className="p-3">
+          <div className="p-4">
             <Button
               onClick={onNewChat}
-              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base touch-target-md"
               data-testid="button-create-ai-girlfriend"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-5 w-5 mr-2" />
               创建新AI女友
             </Button>
           </div>

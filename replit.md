@@ -10,7 +10,15 @@ I want the agent to use a creative and engaging communication style. I prefer de
 The application uses a React, TypeScript, Vite, and TailwindCSS frontend, an Express and TypeScript backend, and PostgreSQL with Drizzle ORM for data persistence. Real-time communication is handled via WebSockets. Authentication leverages Replit OIDC.
 
 **UI/UX Decisions:**
-The design is heavily inspired by WeChat, featuring a green color palette (`#07C160` primary, user messages `#95EC69` light / `#056F3A` dark) and a purple accent for the Moments feature. It includes dark mode support, typing indicators, loading states, toast notifications, and responsive design for a modern user experience. Recent additions include a custom, localized login page with a purple/pink gradient, a redesigned Moments UI with purple theme, and an immersive mode that hides all management/configuration interfaces for a pure chat experience.
+The design is heavily inspired by WeChat, featuring a green color palette (`#07C160` primary, user messages `#95EC69` light / `#056F3A` dark) and a purple accent for the Moments feature. It includes dark mode support, typing indicators, loading states, toast notifications, and responsive design optimized for mobile-first usage (iPhone SE baseline: 375x667px). Recent additions include a custom, localized login page with a purple/pink gradient, a redesigned Moments UI with purple theme, and an immersive mode that hides all management/configuration interfaces for a pure chat experience.
+
+**Mobile Optimizations (iPhone SE baseline):**
+- Enhanced typography: 16px base font, larger UI text (14-18px range), improved readability with relaxed line-height
+- Touch-friendly targets: Minimum 44x44px touch areas on all interactive elements, 48-52px for primary actions
+- Optimized chat bubbles: 16px message text, larger avatars (10-14px), 75% max-width for better readability
+- Larger input fields: 48px minimum height for textarea, 12px icon buttons for easier tapping
+- Increased spacing: Better visual hierarchy with larger gaps and padding throughout the UI
+- Bottom navigation: Larger icons (24px) with clearer labels for one-handed use
 
 **Technical Implementations:**
 - **Authentication:** Replit OIDC, `express-session` with PostgreSQL store, `isAuthenticated` middleware for token refresh and authorization, WebSocket authentication via session cookies.
