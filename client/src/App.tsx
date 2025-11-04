@@ -94,6 +94,8 @@ function Router() {
     setSelectedConversationId(null);
     // Always show sidebar when going back (both mobile and desktop)
     setShowMobileSidebar(true);
+    // Navigate back to chat route to update URL and sidebar highlight
+    setLocation("/chat");
   };
 
   return (
