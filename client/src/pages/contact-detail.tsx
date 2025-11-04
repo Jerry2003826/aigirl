@@ -229,11 +229,12 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
       }
 
       // Create new conversation
-      return apiRequest("POST", "/api/conversations", {
+      const res = await apiRequest("POST", "/api/conversations", {
         title: null,
         isGroup: false,
         personaIds: [personaId],
       });
+      return await res.json();
     },
     onSuccess: (conversation) => {
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });

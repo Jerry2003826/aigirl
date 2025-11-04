@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,8 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { pinyin } from "pinyin-pro";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 type Persona = {
   id: string;
@@ -47,9 +49,47 @@ function getFirstLetter(name: string): string {
 export default function Contacts() {
   const [_, setLocation] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const { toast } = useToast();
 
   const { data: personas = [], isLoading } = useQuery<Persona[]>({
     queryKey: ["/api/personas"],
+  });
+
+  const startChatMutation = useMutation({
+    mutationFn: async (personaId: string) => {
+      // Check if conversation already exists
+      const conversations: any[] = await queryClient.fetchQuery({
+        queryKey: ["/api/conversations"],
+      });
+      
+      const existingConversation = conversations.find(
+        (conv) => !conv.isGroup && conv.personas?.[0]?.id === personaId
+      );
+
+      if (existingConversation) {
+        return existingConversation;
+      }
+
+      // Create new conversation
+      const res = await apiRequest("POST", "/api/conversations", {
+        title: null,
+        isGroup: false,
+        personaIds: [personaId],
+      });
+      return await res.json();
+    },
+    onSuccess: (conversation) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      // Navigate to chat with conversation ID
+      setLocation(`/chat?conversationId=${conversation.id}`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "无法创建对话",
+        variant: "destructive",
+      });
+    },
   });
 
   // Filter personas by search query
@@ -93,8 +133,8 @@ export default function Contacts() {
   }, [filteredPersonas]);
 
   const handlePersonaClick = (personaId: string) => {
-    // Navigate to persona detail or start chat
-    setLocation(`/contacts/${personaId}`);
+    // Start chat with this persona (find existing or create new conversation)
+    startChatMutation.mutate(personaId);
   };
 
   if (isLoading) {
