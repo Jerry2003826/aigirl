@@ -881,7 +881,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { provider, model, customApiKey, ragEnabled, searchEnabled, language } = req.body;
       
-      const settings = await storage.updateAiSettings(userId, {
+      // Try to update existing settings
+      let settings = await storage.updateAiSettings(userId, {
         provider,
         model,
         customApiKey,
@@ -889,6 +890,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         searchEnabled,
         language,
       });
+      
+      // If no settings exist, create new ones
+      if (!settings) {
+        settings = await storage.createAiSettings({
+          userId,
+          provider: provider || "google",
+          model: model || "gemini-2.5-pro",
+          customApiKey: customApiKey || null,
+          ragEnabled: ragEnabled || false,
+          searchEnabled: searchEnabled || false,
+          language: language || "zh-CN",
+        });
+      }
       
       res.json(settings);
     } catch (error) {

@@ -53,7 +53,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   });
 
   const logoutMutation = useMutation({
-    mutationFn: () => apiRequest("/api/auth/logout", "POST", {}),
+    mutationFn: () => apiRequest("POST", "/api/auth/logout", {}),
     onSuccess: () => {
       window.location.href = "/";
     },

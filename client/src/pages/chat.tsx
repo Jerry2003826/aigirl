@@ -73,7 +73,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
 
   const markAsReadMutation = useMutation({
     mutationFn: (conversationId: string) =>
-      apiRequest(`/api/conversations/${conversationId}/read`, "POST", {}),
+      apiRequest("POST", `/api/conversations/${conversationId}/read`, {}),
   });
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,7 +124,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
       imageData?: string | null;
     }) => {
       // Send user message (with optional image)
-      return apiRequest("/api/messages", "POST", {
+      return apiRequest("POST", "/api/messages", {
         conversationId,
         content: content || (imageData ? "[Image]" : ""),
         senderType: "user",
@@ -148,7 +148,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
         if (conversation.isGroup) {
           // For group chats, use intelligent rotation
           setIsTyping(true);
-          const selectionResult: any = await apiRequest("/api/ai/select-persona", "POST", {
+          const selectionResult: any = await apiRequest("POST", "/api/ai/select-persona", {
             conversationId,
             userMessage: content || "[User sent an image]",
           });
@@ -171,7 +171,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
 
         // Trigger AI response
         setIsTyping(true);
-        await apiRequest("/api/ai/generate", "POST", {
+        await apiRequest("POST", "/api/ai/generate", {
           conversationId,
           personaId: respondingPersonaId,
           content: content || "[User sent an image, please analyze it]",
