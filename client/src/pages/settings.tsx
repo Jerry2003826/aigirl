@@ -237,8 +237,8 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                       control={form.control}
                       name="ragEnabled"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                          <div className="space-y-0.5">
+                        <FormItem className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-lg border p-4">
+                          <div className="space-y-0.5 flex-1">
                             <FormLabel className="text-base">记忆检索增强 (RAG)</FormLabel>
                             <FormDescription>
                               启用AI女友记忆库检索，让她能更好地记住和理解你们的对话
@@ -259,8 +259,8 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                       control={form.control}
                       name="searchEnabled"
                       render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                          <div className="space-y-0.5">
+                        <FormItem className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-lg border p-4">
+                          <div className="space-y-0.5 flex-1">
                             <FormLabel className="text-base">联网搜索</FormLabel>
                             <FormDescription>
                               允许AI联网搜索最新信息，了解实时新闻和资讯
