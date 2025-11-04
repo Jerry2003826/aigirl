@@ -78,3 +78,12 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **Confirmation Dialog:** Logout now shows a confirmation dialog ("退出登录" / "确认要退出当前账户吗？") with Cancel and Confirm buttons.
 - **Destructive Styling:** Confirm logout button uses destructive (red) variant to emphasize the irreversible action.
 - **Bug Fix:** Corrected logout flow to use `/api/logout` endpoint (Replit OIDC logout), ensuring proper session termination and redirect.
+
+### Desktop Responsive Design Optimization
+- **Centered Desktop Layout:** All main content pages now use `max-w-3xl` (768px) containers with `mx-auto` for centered display on large screens, preventing content from spanning the entire viewport width.
+- **Optimized Message Bubbles:** Chat message bubbles use responsive max-width: mobile `max-w-[75%]`, desktop `md:max-w-md` (28rem/448px), large desktop `lg:max-w-lg` (32rem/512px) for improved readability.
+- **Responsive Padding:** Consistent padding across pages: mobile `p-4` (1rem), desktop `md:p-6` (1.5rem) for better visual hierarchy.
+- **Affected Pages:** Moments (moments.tsx), Chat (chat.tsx), Contacts (contacts.tsx), Groups (groups.tsx), Settings (settings.tsx - adjusted from max-w-4xl to max-w-3xl).
+- **Desktop Experience:** Content width ~960px on 1280px viewport, providing comfortable reading experience with balanced whitespace.
+- **Mobile Preservation:** Full-width layout maintained on mobile devices (<768px), ensuring optimal use of smaller screens.
+- **E2E Validation:** Comprehensive testing verified correct layout behavior at mobile, tablet, and desktop breakpoints across all optimized pages.
