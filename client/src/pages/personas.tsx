@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAiPersonaSchema } from "@shared/schema";
+import { insertAiPersonaSchema, type AiPersona } from "@shared/schema";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon, Loader2 } from "lucide-react";
@@ -17,18 +17,6 @@ import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { MobileHeader } from "@/components/mobile-header";
-
-type Persona = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  personality: string;
-  systemPrompt: string;
-  backstory: string | null;
-  greeting: string | null;
-  model: string;
-  responseDelay: number;
-};
 
 const personaFormSchema = insertAiPersonaSchema.extend({
   name: z.string().min(1, "Name is required").max(100),
@@ -48,7 +36,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
-  const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [editingPersona, setEditingPersona] = useState<AiPersona | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -58,7 +46,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
   const [generateAvatar, setGenerateAvatar] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const { data: personas = [], isLoading } = useQuery<Persona[]>({
+  const { data: personas = [], isLoading } = useQuery<AiPersona[]>({
     queryKey: ["/api/personas"],
   });
 
@@ -221,7 +209,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
     }
   };
 
-  const openEditDialog = (persona: Persona) => {
+  const openEditDialog = (persona: AiPersona) => {
     setEditingPersona(persona);
     setAvatarPreview(persona.avatarUrl ?? "");
     form.reset({

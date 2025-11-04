@@ -10,18 +10,7 @@ import { pinyin } from "pinyin-pro";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { MobileHeader } from "@/components/mobile-header";
-
-type Persona = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  personality: string;
-  systemPrompt: string;
-  backstory: string | null;
-  greeting: string | null;
-  model: string;
-  responseDelay: number;
-};
+import { type AiPersona } from "@shared/schema";
 
 // Get first letter of name using pinyin for Chinese characters
 function getFirstLetter(name: string): string {
@@ -57,7 +46,7 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
-  const { data: personas = [], isLoading } = useQuery<Persona[]>({
+  const { data: personas = [], isLoading } = useQuery<AiPersona[]>({
     queryKey: ["/api/personas"],
   });
 
@@ -110,7 +99,7 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
 
   // Group personas by first letter
   const groupedPersonas = useMemo(() => {
-    const groups: Record<string, Persona[]> = {};
+    const groups: Record<string, AiPersona[]> = {};
     
     filteredPersonas.forEach(persona => {
       const letter = getFirstLetter(persona.name);

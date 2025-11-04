@@ -564,7 +564,7 @@ export async function generateMomentComment(
   // Get user's AI settings to use their custom API key
   const aiSettings = await storage.getAiSettings(userId);
   const provider = getAIProvider(aiSettings);
-  const model = getModelName(aiSettings, persona.model);
+  const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
 
   // Build system prompt with memories
@@ -722,7 +722,7 @@ export async function generateAIMomentContent(
   
   // Get AI provider and model
   const provider = getAIProvider(aiSettings);
-  const model = getModelName(aiSettings, persona.model);
+  const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
   
   // Build system prompt with memories
@@ -930,7 +930,7 @@ async function generateCommentReply(
   
   // Get AI provider and model
   const provider = getAIProvider(aiSettings);
-  const model = getModelName(aiSettings, persona.model);
+  const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
   
   const systemPrompt = await buildSystemPrompt(persona, userId, false, language);

@@ -11,6 +11,7 @@ import { Plus, Users, MessageCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { MobileHeader } from "@/components/mobile-header";
+import { type AiPersona } from "@shared/schema";
 
 type Conversation = {
   id: string;
@@ -18,13 +19,6 @@ type Conversation = {
   isGroup: boolean;
   lastMessageAt: Date | null;
   personas?: { id: string; name: string; avatarUrl: string | null }[];
-};
-
-type Persona = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  personality: string;
 };
 
 type GroupsPageProps = {
@@ -48,7 +42,7 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
   const groupConversations = allConversations.filter(conv => conv.isGroup);
 
   // Fetch personas
-  const { data: personas = [] } = useQuery<Persona[]>({
+  const { data: personas = [] } = useQuery<AiPersona[]>({
     queryKey: ["/api/personas"],
   });
 

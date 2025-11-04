@@ -48,12 +48,6 @@ type Message = {
   personaAvatar?: string | null;
 };
 
-type Persona = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-};
-
 interface ChatProps {
   selectedConversationId: string | null;
   onConversationDeleted?: () => void;

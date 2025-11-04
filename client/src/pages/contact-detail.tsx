@@ -17,20 +17,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { insertAiPersonaSchema } from "@shared/schema";
+import { insertAiPersonaSchema, type AiPersona } from "@shared/schema";
 import { MobileHeader } from "@/components/mobile-header";
-
-type Persona = {
-  id: string;
-  name: string;
-  avatarUrl: string | null;
-  personality: string;
-  systemPrompt: string;
-  backstory: string | null;
-  greeting: string | null;
-  model: string;
-  responseDelay: number;
-};
 
 type Memory = {
   id: string;
@@ -76,7 +64,7 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const { data: persona, isLoading: personaLoading } = useQuery<Persona>({
+  const { data: persona, isLoading: personaLoading } = useQuery<AiPersona>({
     queryKey: ["/api/personas", personaId],
   });
 
