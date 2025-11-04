@@ -538,31 +538,102 @@ export async function generateMomentComment(
   const systemPrompt = await buildSystemPrompt(persona, userId);
   
   // Build prompt for moment comment
-  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"`;
-  
-  if (momentImages && momentImages.length > 0) {
-    userPrompt += `\n\n还分享了${momentImages.length}张图片。`;
-  }
-  
-  userPrompt += `\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
+  let userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: persona.model || "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.9, // More creative for comments
-      max_tokens: 150,
-    });
+    // Check if model supports vision and images are provided
+    const modelName = persona.model || "gpt-4o"; // Default model
+    const isGeminiModel = modelName.includes('gemini');
+    const isOpenAIVisionModel = modelName.startsWith('gpt-4');
+    const isVisionModel = isOpenAIVisionModel || isGeminiModel;
+    
+    if (momentImages && momentImages.length > 0 && isVisionModel) {
+      // Use vision capability for models that support it
+      if (isGeminiModel) {
+        // Use Gemini vision
+        const parts: any[] = [
+          { text: `${systemPrompt}\n\n${userPrompt}` }
+        ];
+        
+        // Add images
+        for (const imageUrl of momentImages) {
+          if (imageUrl.startsWith('data:image')) {
+            // Base64 image
+            const match = imageUrl.match(/^data:image\/([^;]+);base64,(.+)$/);
+            if (match) {
+              parts.push({
+                inlineData: {
+                  mimeType: `image/${match[1]}`,
+                  data: match[2]
+                }
+              });
+            }
+          }
+        }
+        
+        const result = await gemini.generateContent({
+          contents: [{ role: "user", parts }],
+          generationConfig: {
+            temperature: 0.9,
+            maxOutputTokens: 150,
+          },
+        });
+        
+        const comment = result.response.text()?.trim() || "好棒！";
+        return comment;
+      } else {
+        // Use OpenAI vision (gpt-4o, gpt-4-turbo, gpt-4o-mini, etc.)
+        const content: any[] = [{ type: "text", text: userPrompt }];
+        
+        for (const imageUrl of momentImages) {
+          // OpenAI only accepts absolute URLs or base64 data URLs
+          if (imageUrl.startsWith('data:image') || imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            content.push({
+              type: "image_url",
+              image_url: { url: imageUrl }
+            });
+          } else {
+            console.warn(`Skipping relative image URL for OpenAI vision: ${imageUrl}`);
+          }
+        }
+        
+        // Only send images if we have valid ones
+        const completion = await openai.chat.completions.create({
+          model: modelName,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: content.length > 1 ? content : userPrompt }
+          ],
+          temperature: 0.9,
+          max_tokens: 150,
+        });
+        
+        const comment = completion.choices[0]?.message?.content?.trim() || "好棒！";
+        return comment;
+      }
+    } else {
+      // No images or non-vision model, use text-only
+      if (momentImages && momentImages.length > 0) {
+        userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n还分享了${momentImages.length}张图片。\n\n请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
+      }
+      
+      const completion = await openai.chat.completions.create({
+        model: modelName,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.9,
+        max_tokens: 150,
+      });
 
-    const comment = completion.choices[0]?.message?.content?.trim() || "👍";
-    return comment;
+      const comment = completion.choices[0]?.message?.content?.trim() || "好棒！";
+      return comment;
+    }
   } catch (error) {
     console.error("Error generating moment comment:", error);
-    // Fallback to simple reactions
-    const reactions = ["👍", "❤️", "😊", "好棒！", "赞！"];
+    // Fallback to simple reactions (no emoji)
+    const reactions = ["好棒！", "赞！", "真不错！", "支持你！"];
     return reactions[Math.floor(Math.random() * reactions.length)];
   }
 }
