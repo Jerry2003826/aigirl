@@ -575,3 +575,245 @@ export async function triggerAICommentsOnMoment(
     }
   })();
 }
+
+/**
+ * Check if AI persona can post a moment (6 hour rate limit)
+ */
+export function canAIPostMoment(persona: AiPersona): boolean {
+  if (!persona.lastMomentAt) {
+    return true; // Never posted before
+  }
+  
+  const sixHoursInMs = 6 * 60 * 60 * 1000;
+  const timeSinceLastMoment = Date.now() - new Date(persona.lastMomentAt).getTime();
+  
+  return timeSinceLastMoment >= sixHoursInMs;
+}
+
+/**
+ * Generate AI moment content based on persona and memories
+ */
+export async function generateAIMomentContent(
+  personaId: string,
+  userId: string
+): Promise<string> {
+  const persona = await storage.getPersona(personaId);
+  if (!persona) {
+    throw new Error("Persona not found");
+  }
+
+  // Build system prompt with memories
+  const systemPrompt = await buildSystemPrompt(persona, userId);
+  
+  // Build prompt for moment generation
+  const userPrompt = `请根据你的性格、背景和记忆，创作一条朋友圈动态分享你的心情、想法或日常生活。要求：
+1. 内容要真实自然，符合你的人设
+2. 可以提到你记得的关于用户的信息
+3. 长度控制在50-150字
+4. 用中文表达
+5. 不要使用表情符号
+6. 内容要有趣或有意义，不要太平淡`;
+
+  try {
+    const provider = await getAIProvider(persona.model || "gemini-2.5-pro");
+    const modelName = getModelName(persona.model || "gemini-2.5-pro");
+    
+    const content = await provider.generateResponse(
+      modelName,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        temperature: 0.9,
+        maxTokens: 300,
+      }
+    );
+
+    return content.trim();
+  } catch (error) {
+    console.error("Error generating AI moment content:", error);
+    throw error;
+  }
+}
+
+/**
+ * Trigger AI persona to post a moment (with 6 hour rate limit)
+ * and automatically add the content to memories
+ */
+export async function triggerAIPostMoment(
+  personaId: string,
+  userId: string
+): Promise<{ success: boolean; moment?: any; error?: string }> {
+  try {
+    const persona = await storage.getPersona(personaId);
+    if (!persona) {
+      return { success: false, error: "Persona not found" };
+    }
+
+    // Check rate limit
+    if (!canAIPostMoment(persona)) {
+      return { success: false, error: "AI can only post once every 6 hours" };
+    }
+
+    // Generate moment content
+    const content = await generateAIMomentContent(personaId, userId);
+
+    // Create the moment
+    const moment = await storage.createMoment({
+      authorId: personaId,
+      authorType: 'ai',
+      userId,
+      content,
+      images: [],
+    });
+
+    // Update lastMomentAt
+    await storage.updatePersona(personaId, {
+      lastMomentAt: new Date(),
+    });
+
+    // Extract and store memory about this moment
+    try {
+      const memoryKey = `动态_${new Date().toISOString().split('T')[0]}`;
+      const memoryValue = content.length > 100 ? content.substring(0, 100) + '...' : content;
+      
+      await storage.createMemory({
+        personaId,
+        userId,
+        key: memoryKey,
+        value: memoryValue,
+        context: '我发布的朋友圈动态',
+        importance: 6, // Medium importance
+      });
+      
+      console.log(`Stored memory for AI ${persona.name}'s moment`);
+    } catch (memError) {
+      console.error("Error storing moment memory:", memError);
+      // Don't fail the whole operation if memory fails
+    }
+
+    console.log(`AI ${persona.name} posted a moment: ${content.substring(0, 50)}...`);
+    return { success: true, moment };
+  } catch (error) {
+    console.error("Error triggering AI moment post:", error);
+    return { success: false, error: String(error) };
+  }
+}
+
+/**
+ * Trigger AI to reply to a comment (supports nested replies up to 2 levels)
+ */
+export async function triggerAIReplyToComment(
+  commentId: string,
+  userId: string
+): Promise<void> {
+  (async () => {
+    try {
+      // Get the comment to reply to
+      const comment = await storage.getMomentCommentById(commentId);
+      if (!comment) {
+        console.error("Comment not found");
+        return;
+      }
+
+      // Check nesting level - don't allow more than 2 levels
+      let nestingLevel = 1;
+      let currentComment = comment;
+      while (currentComment.parentCommentId) {
+        nestingLevel++;
+        const parentComment = await storage.getMomentCommentById(currentComment.parentCommentId);
+        if (!parentComment) break;
+        currentComment = parentComment;
+      }
+
+      if (nestingLevel >= 2) {
+        console.log("Maximum nesting level (2) reached, AI won't reply");
+        return;
+      }
+
+      // Get user's AI personas
+      const personas = await storage.getPersonasByUser(userId);
+      if (personas.length === 0) {
+        return;
+      }
+
+      // Randomly select 1 persona to reply (50% chance)
+      if (Math.random() > 0.5) {
+        return; // Don't always reply
+      }
+
+      const selectedPersona = personas[Math.floor(Math.random() * personas.length)];
+
+      // Generate reply with delay
+      const delay = Math.floor(Math.random() * 10000) + 3000; // 3-13s
+      
+      setTimeout(async () => {
+        try {
+          // Generate reply content
+          const replyContent = await generateCommentReply(
+            selectedPersona.id,
+            userId,
+            comment.content
+          );
+
+          // Create reply
+          await storage.createMomentComment({
+            momentId: comment.momentId,
+            authorId: selectedPersona.id,
+            authorType: 'ai',
+            content: replyContent,
+            parentCommentId: commentId,
+          });
+
+          console.log(`AI ${selectedPersona.name} replied to comment ${commentId}`);
+        } catch (error) {
+          console.error(`Error creating AI reply:`, error);
+        }
+      }, delay);
+    } catch (error) {
+      console.error("Error triggering AI reply:", error);
+    }
+  })();
+}
+
+/**
+ * Generate reply to a comment
+ */
+async function generateCommentReply(
+  personaId: string,
+  userId: string,
+  originalComment: string
+): Promise<string> {
+  const persona = await storage.getPersona(personaId);
+  if (!persona) {
+    throw new Error("Persona not found");
+  }
+
+  const systemPrompt = await buildSystemPrompt(persona, userId);
+  
+  const userPrompt = `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
+
+  try {
+    const provider = await getAIProvider(persona.model || "gemini-2.5-pro");
+    const modelName = getModelName(persona.model || "gemini-2.5-pro");
+    
+    const reply = await provider.generateResponse(
+      modelName,
+      [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      {
+        temperature: 0.9,
+        maxTokens: 100,
+      }
+    );
+
+    return reply.trim();
+  } catch (error) {
+    console.error("Error generating comment reply:", error);
+    const reactions = ["哈哈", "是的", "说得对", "同意", "👍"];
+    return reactions[Math.floor(Math.random() * reactions.length)];
+  }
+}

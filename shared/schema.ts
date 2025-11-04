@@ -38,6 +38,7 @@ export const aiPersonas = pgTable("ai_personas", {
   greeting: text("greeting"), // Initial greeting message
   model: text("model").default("gemini-2.5-pro").notNull(), // AI model to use (default: Google Gemini 2.5 Pro)
   responseDelay: integer("response_delay").default(0).notNull(), // Delay in ms before responding
+  lastMomentAt: timestamp("last_moment_at"), // Track last time AI posted a moment (for rate limiting)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -81,6 +81,7 @@ export interface IStorage {
   // Moment comment operations
   createMomentComment(comment: InsertMomentComment): Promise<MomentComment>;
   getMomentComments(momentId: string): Promise<MomentComment[]>;
+  getMomentCommentById(id: string): Promise<MomentComment | undefined>;
   deleteMomentComment(id: string): Promise<boolean>;
   
   // AI Settings operations
@@ -195,6 +196,9 @@ export class MemStorage implements IStorage {
       systemPrompt: insertPersona.systemPrompt,
       backstory: insertPersona.backstory ?? null,
       greeting: insertPersona.greeting ?? null,
+      model: insertPersona.model || "gemini-2.5-pro",
+      responseDelay: insertPersona.responseDelay || 0,
+      lastMomentAt: null,
       createdAt: new Date(),
     };
     this.aiPersonas.set(id, persona);
@@ -707,6 +711,15 @@ export class DatabaseStorage implements IStorage {
       .from(momentComments)
       .where(eq(momentComments.momentId, momentId))
       .orderBy(asc(momentComments.createdAt));
+  }
+
+  async getMomentCommentById(id: string): Promise<MomentComment | undefined> {
+    const result = await db
+      .select()
+      .from(momentComments)
+      .where(eq(momentComments.id, id))
+      .limit(1);
+    return result[0];
   }
 
   async deleteMomentComment(id: string): Promise<boolean> {

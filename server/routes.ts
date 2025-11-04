@@ -5,7 +5,7 @@ import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment } from "./aiService";
+import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
 import { setupWebSocket, broadcastNewMessage } from "./websocket";
 import { 
   insertAiPersonaSchema, 
@@ -826,6 +826,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Moment not found" });
       }
       
+      // Check nesting level limit (max 2 levels)
+      if (parentCommentId) {
+        let nestingLevel = 1;
+        let currentComment = await storage.getMomentCommentById(parentCommentId);
+        
+        while (currentComment && currentComment.parentCommentId) {
+          nestingLevel++;
+          currentComment = await storage.getMomentCommentById(currentComment.parentCommentId);
+        }
+        
+        if (nestingLevel >= 2) {
+          return res.status(400).json({ message: "评论嵌套层级不能超过2层" });
+        }
+      }
+      
       // Server-side author derivation - prevent spoofing
       const validatedData = insertMomentCommentSchema.parse({
         momentId,
@@ -836,6 +851,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const comment = await storage.createMomentComment(validatedData);
+      
+      // Trigger AI reply if this is a reply to an AI comment
+      if (parentCommentId) {
+        const parentComment = await storage.getMomentCommentById(parentCommentId);
+        if (parentComment && parentComment.authorType === 'ai') {
+          triggerAIReplyToComment(comment.id, userId).catch(err => {
+            console.error("Error triggering AI reply:", err);
+          });
+        }
+      }
+      
       res.json(comment);
     } catch (error: any) {
       console.error("Error creating comment:", error);
@@ -879,6 +905,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting comment:", error);
       res.status(500).json({ message: "Failed to delete comment" });
+    }
+  });
+
+  // Trigger AI to post a moment
+  app.post('/api/ai/trigger-moment/:personaId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { personaId } = req.params;
+      
+      // Verify persona belongs to user
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "AI女友不存在" });
+      }
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "无权访问此AI女友" });
+      }
+      
+      // Trigger AI to post moment
+      const result = await triggerAIPostMoment(personaId, userId);
+      
+      if (result.success) {
+        res.json(result.moment);
+      } else {
+        res.status(400).json({ message: result.error || "发送动态失败" });
+      }
+    } catch (error) {
+      console.error("Error triggering AI moment:", error);
+      res.status(500).json({ message: "发送动态失败" });
     }
   });
 
