@@ -61,7 +61,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [messageInput, setMessageInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [messageLimit, setMessageLimit] = useState(50);
-  const [failedMessages, setFailedMessages] = useState<Map<string, { content: string; imageData?: string | null }>>(new Map());
+  const [failedMessages, setFailedMessages] = useState<Map<string, { conversationId: string; content: string; imageData?: string | null }>>(new Map());
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -349,11 +349,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         });
       }
     },
-    onError: (error: any, { tempId, content, imageData }) => {
-      // Store the failed message
+    onError: (error: any, { tempId, content, imageData, conversationId }) => {
+      // Store the failed message with conversationId
       setFailedMessages(prev => {
         const newMap = new Map(prev);
-        newMap.set(tempId, { content, imageData });
+        newMap.set(tempId, { conversationId, content, imageData });
         return newMap;
       });
       
@@ -368,6 +368,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const retryFailedMessage = (tempId: string) => {
     const failedMsg = failedMessages.get(tempId);
     if (!failedMsg || !selectedConversationId) return;
+    
+    // Verify the failed message belongs to the current conversation
+    if (failedMsg.conversationId !== selectedConversationId) {
+      console.warn("Attempted to retry a message from a different conversation");
+      return;
+    }
     
     sendMessageMutation.mutate({
       conversationId: selectedConversationId,
@@ -623,35 +629,47 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     );
                   })}
                   
-                  {/* Failed Messages */}
-                  {Array.from(failedMessages.entries()).map(([tempId, failedMsg]) => (
-                    <div
-                      key={tempId}
-                      className="flex gap-3 justify-end"
-                      data-testid={`failed-message-${tempId}`}
-                    >
-                      <div className="flex flex-col items-end gap-2 max-w-[75%] md:max-w-md lg:max-w-lg">
-                        <div className="rounded-3xl px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-br-md">
-                          <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-destructive">
-                            {failedMsg.content || "[图片]"}
-                          </p>
-                          <p className="mt-1.5 text-sm opacity-70 text-destructive-foreground">
-                            发送失败
-                          </p>
+                  {/* Failed Messages - only show for current conversation */}
+                  {Array.from(failedMessages.entries())
+                    .filter(([_, failedMsg]) => failedMsg.conversationId === selectedConversationId)
+                    .map(([tempId, failedMsg]) => (
+                      <div
+                        key={tempId}
+                        className="flex gap-3 justify-end"
+                        data-testid={`failed-message-${tempId}`}
+                      >
+                        <div className="flex flex-col items-end gap-2 max-w-[75%] md:max-w-md lg:max-w-lg">
+                          <div className="rounded-3xl px-4 py-3 bg-destructive/10 border border-destructive/20 rounded-br-md">
+                            {failedMsg.imageData ? (
+                              <div className="mb-2">
+                                <img 
+                                  src={failedMsg.imageData} 
+                                  alt="Failed to send" 
+                                  className="max-w-full rounded-lg opacity-70"
+                                />
+                              </div>
+                            ) : null}
+                            <p className="whitespace-pre-wrap break-words text-base leading-relaxed text-destructive">
+                              {failedMsg.content || "[图片]"}
+                            </p>
+                            <p className="mt-1.5 text-sm opacity-70 text-destructive-foreground">
+                              发送失败
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => retryFailedMessage(tempId)}
+                            className="text-xs h-7"
+                            data-testid={`button-retry-${tempId}`}
+                          >
+                            <Send className="h-3 w-3 mr-1" />
+                            重试
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => retryFailedMessage(tempId)}
-                          className="text-xs h-7"
-                          data-testid={`button-retry-${tempId}`}
-                        >
-                          <Send className="h-3 w-3 mr-1" />
-                          重试
-                        </Button>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                   
                   {/* Typing Indicator */}
                   {isTyping && (
