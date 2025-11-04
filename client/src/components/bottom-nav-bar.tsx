@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils";
 
 type BottomNavBarProps = {
   onChatClick?: () => void;
+  hide?: boolean;
 };
 
-export function BottomNavBar({ onChatClick }: BottomNavBarProps) {
+export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
   const [location, setLocation] = useLocation();
 
   const navItems = [
@@ -24,6 +25,8 @@ export function BottomNavBar({ onChatClick }: BottomNavBarProps) {
       setLocation(item.path);
     }
   };
+
+  if (hide) return null;
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border pb-[env(safe-area-inset-bottom)]">

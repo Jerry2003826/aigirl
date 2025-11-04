@@ -174,8 +174,11 @@ function Router() {
           </main>
         </div>
         
-        {/* Bottom Navigation Bar - Always visible, outside main content toggle */}
-        <BottomNavBar onChatClick={handleChatNavClick} />
+        {/* Bottom Navigation Bar - Hide when in chat conversation on mobile */}
+        <BottomNavBar 
+          onChatClick={handleChatNavClick}
+          hide={!!selectedConversationId && !showMobileSidebar}
+        />
       </div>
     </SidebarProvider>
   );
