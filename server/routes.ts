@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { generateAIResponse, generateAIResponseStream } from "./aiService";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -317,6 +318,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid input", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create message" });
+    }
+  });
+
+  // AI generation routes
+  app.post('/api/ai/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId, personaId, content } = req.body;
+      
+      // Verify conversation ownership
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this conversation" });
+      }
+      
+      // Verify persona ownership
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "Persona not found" });
+      }
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+      }
+      
+      // Validate and save user message first (must persist before AI generation)
+      const validatedUserMessage = insertMessageSchema.parse({
+        conversationId,
+        senderId: null,
+        senderType: "user",
+        content,
+        isRead: false,
+        status: "sent",
+      });
+      
+      const userMessage = await storage.createMessage(validatedUserMessage);
+      if (!userMessage) {
+        throw new Error("Failed to save user message");
+      }
+      
+      // Generate AI response (conversation history now includes user message)
+      const aiResponse = await generateAIResponse({
+        conversationId,
+        personaId,
+        userMessage: content,
+      });
+      
+      // Save AI message to database
+      const aiMessage = await storage.createMessage({
+        conversationId,
+        senderId: personaId,
+        senderType: "ai",
+        content: aiResponse,
+        isRead: false,
+        status: "sent",
+      });
+      
+      // Update conversation's last message timestamp
+      await storage.updateConversationLastMessage(conversationId);
+      
+      res.json({ userMessage, aiMessage, response: aiResponse });
+    } catch (error: any) {
+      console.error("Error generating AI response:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to generate AI response", error: error.message });
+    }
+  });
+
+  app.post('/api/ai/generate-stream', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId, personaId, content } = req.body;
+      
+      // Verify conversation ownership
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this conversation" });
+      }
+      
+      // Verify persona ownership
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "Persona not found" });
+      }
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+      }
+      
+      // Validate and save user message first (must persist before AI generation)
+      const validatedUserMessage = insertMessageSchema.parse({
+        conversationId,
+        senderId: null,
+        senderType: "user",
+        content,
+        isRead: false,
+        status: "sent",
+      });
+      
+      const userMessage = await storage.createMessage(validatedUserMessage);
+      if (!userMessage) {
+        return res.status(500).json({ message: "Failed to save user message" });
+      }
+      
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      
+      // Send user message confirmation
+      res.write(`data: ${JSON.stringify({ userMessage })}\n\n`);
+      
+      // Generate AI response stream (conversation history now includes user message)
+      const stream = await generateAIResponseStream({
+        conversationId,
+        personaId,
+        userMessage: content,
+      });
+      
+      let fullResponse = '';
+      
+      // Stream the response
+      for await (const chunk of stream) {
+        const chunkContent = chunk.choices[0]?.delta?.content || '';
+        fullResponse += chunkContent;
+        
+        if (chunkContent) {
+          res.write(`data: ${JSON.stringify({ content: chunkContent })}\n\n`);
+        }
+      }
+      
+      // Save complete AI message to database
+      const aiMessage = await storage.createMessage({
+        conversationId,
+        senderId: personaId,
+        senderType: "ai",
+        content: fullResponse,
+        isRead: false,
+        status: "sent",
+      });
+      
+      // Update conversation's last message timestamp
+      await storage.updateConversationLastMessage(conversationId);
+      
+      // Send final message with saved message data
+      res.write(`data: ${JSON.stringify({ done: true, aiMessage })}\n\n`);
+      res.end();
+    } catch (error: any) {
+      console.error("Error generating AI response stream:", error);
+      if (error.name === 'ZodError') {
+        res.write(`data: ${JSON.stringify({ error: "Invalid input", details: error.errors })}\n\n`);
+      } else {
+        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      }
+      res.end();
     }
   });
 
