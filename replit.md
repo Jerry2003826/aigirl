@@ -34,7 +34,7 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 **Feature Specifications:**
 - **User Management:** Secure Replit Auth login, profile management, session persistence.
 - **AI Personas:** CRUD operations for custom AI characters with configurable name, avatar, personality, system prompt, backstory, greeting, AI model, and response delays.
-- **Conversations:** 1-on-1 and group chats, message history pagination, read/unread status, last message timestamp.
+- **Conversations:** 1-on-1 and group chats, message history pagination, read/unread status, last message timestamp. Chat header includes dropdown menu (MoreVertical icon) with: view memories (1-on-1 only), view AI info (1-on-1 only), view chat history (scroll to top), and delete conversation (with confirmation). Delete conversation clears selection state.
 - **Real-time Features:** Instant message delivery, multi-device sync, typing indicators, live read status, auto-scroll.
 - **Moments:** Global feed with purple theme (`#9333ea`), top "发布动态" button, inline comment inputs, delete button for user's own posts only, cross-user interactions (likes/comments), AI auto-comments, nested comments, real-time updates.
 - **Contacts & Memory Management:** Dedicated contacts page with search, alphabetical grouping, and full CRUD for AI memories with importance classification.
