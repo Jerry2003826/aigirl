@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -94,7 +94,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
+  const { data: rawMessages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedConversationId, messageLimit],
     queryFn: async () => {
       if (!selectedConversationId) return [];
@@ -106,6 +106,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     },
     enabled: !!selectedConversationId,
   });
+
+  // Deduplicate messages by ID - keep the latest occurrence of each ID
+  // Use Map for O(n) performance, iterating from end to preserve newest duplicates
+  const messages = useMemo(() => {
+    const messageMap = new Map<string, Message>();
+    // Iterate from end to beginning to keep the latest occurrence
+    for (let i = rawMessages.length - 1; i >= 0; i--) {
+      const msg = rawMessages[i];
+      if (!messageMap.has(msg.id)) {
+        messageMap.set(msg.id, msg);
+      }
+    }
+    // Convert back to array and reverse to restore original order
+    return Array.from(messageMap.values()).reverse();
+  }, [rawMessages]);
 
   // Separate query for chat history dialog - fetch ALL messages
   const { data: allMessages = [], isLoading: allMessagesLoading } = useQuery<Message[]>({
@@ -293,6 +308,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
+      // Immediately refresh to show user's message
       queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setMessageInput("");
@@ -326,7 +342,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           });
           
           const personaParticipant = participants[0];
-          if (!personaParticipant) return;
+          if (!personaParticipant) {
+            // If no participant, just refresh to show user's message
+            queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+            return;
+          }
           respondingPersonaId = personaParticipant.personaId;
         }
 
@@ -337,16 +358,18 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           personaId: respondingPersonaId,
           content: content || "[User sent an image, please analyze it]",
         });
-        setIsTyping(false);
-        queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       } catch (error: any) {
-        setIsTyping(false);
         console.error("生成AI回复时出错:", error);
         toast({
           title: "AI服务错误",
           description: error.message || "AI回复生成失败",
           variant: "destructive",
         });
+      } finally {
+        // Stop typing indicator and refresh after AI response (success or failure)
+        setIsTyping(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       }
     },
     onError: (error: any, { tempId, content, imageData, conversationId }) => {
