@@ -72,6 +72,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -447,6 +448,59 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       }
     }
   }, [selectedConversationId, messages]);
+
+  // WebSocket connection for real-time messages
+  useEffect(() => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      console.log('WebSocket connected');
+      if (selectedConversationId) {
+        ws.send(JSON.stringify({
+          type: 'join_conversation',
+          payload: { conversationId: selectedConversationId }
+        }));
+      }
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data.type);
+        if (data.type === 'new_message' && data.payload) {
+          // Refresh messages when receiving new message
+          queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversationId] });
+          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        }
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected');
+    };
+
+    return () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        if (selectedConversationId) {
+          ws.send(JSON.stringify({
+            type: 'leave_conversation',
+            payload: { conversationId: selectedConversationId }
+          }));
+        }
+        ws.close();
+      }
+    };
+  }, [selectedConversationId]);
 
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
