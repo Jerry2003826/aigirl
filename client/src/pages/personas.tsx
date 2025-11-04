@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +25,8 @@ type Persona = {
   systemPrompt: string;
   backstory: string | null;
   greeting: string | null;
+  model: string;
+  responseDelay: number;
 };
 
 const personaFormSchema = insertAiPersonaSchema.extend({
@@ -53,6 +56,8 @@ export default function Personas() {
       systemPrompt: "",
       backstory: "",
       greeting: "",
+      model: "gpt-4o",
+      responseDelay: 0,
       userId: "",
     },
   });
@@ -136,6 +141,8 @@ export default function Personas() {
       systemPrompt: persona.systemPrompt,
       backstory: persona.backstory ?? "",
       greeting: persona.greeting ?? "",
+      model: persona.model || "gpt-4o",
+      responseDelay: persona.responseDelay || 0,
       userId: "",
     });
     setDialogOpen(true);
@@ -312,6 +319,57 @@ export default function Personas() {
                         </FormControl>
                         <FormDescription>
                           Initial message shown when starting a new conversation
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="model"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>AI Model</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-persona-model">
+                              <SelectValue placeholder="Select AI model" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="gpt-4o">GPT-4o (Recommended)</SelectItem>
+                            <SelectItem value="gpt-4o-mini">GPT-4o Mini (Faster, cheaper)</SelectItem>
+                            <SelectItem value="gpt-5">GPT-5 (Most advanced)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Choose the AI model for this persona
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="responseDelay"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Response Delay (ms)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number"
+                            min="0"
+                            max="10000"
+                            placeholder="0"
+                            {...field}
+                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            data-testid="input-persona-delay"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Add a delay before AI responds (0-10000ms) to simulate human-like response times
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

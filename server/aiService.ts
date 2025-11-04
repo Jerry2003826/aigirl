@@ -118,10 +118,14 @@ export async function generateAIResponse(
     ...conversationHistory,
   ];
   
+  // Apply response delay if specified
+  if (persona.responseDelay > 0) {
+    await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
+  }
+  
   try {
-    // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
     const response = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: persona.model || "gpt-4o",
       messages,
       max_completion_tokens: 8192,
     });
@@ -172,10 +176,14 @@ export async function generateAIResponseStream(
     ...conversationHistory,
   ];
   
+  // Apply response delay if specified
+  if (persona.responseDelay > 0) {
+    await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
+  }
+  
   try {
-    // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
     const stream = await openai.chat.completions.create({
-      model: "gpt-5",
+      model: persona.model || "gpt-4o",
       messages,
       max_completion_tokens: 8192,
       stream: true,

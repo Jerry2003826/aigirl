@@ -36,6 +36,8 @@ export const aiPersonas = pgTable("ai_personas", {
   systemPrompt: text("system_prompt").notNull(), // Full prompt for AI
   backstory: text("backstory"), // Character background
   greeting: text("greeting"), // Initial greeting message
+  model: text("model").default("gpt-4o").notNull(), // AI model to use
+  responseDelay: integer("response_delay").default(0).notNull(), // Delay in ms before responding
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
