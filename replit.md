@@ -27,6 +27,7 @@ The design draws inspiration from WeChat, employing a green primary color palett
 - **User Profile Editing:** Click-to-edit profile functionality with avatar upload, nickname editing, and API for partial updates.
 - **Immersive Mode:** A toggle to hide management interfaces for a pure chat experience, with state persistence.
 - **Groups Management:** Dedicated page for managing groups, including creation and AI member selection.
+- **Failed Message Handling:** Messages that fail to send are displayed with error indicators and retry buttons. Failed messages are conversation-scoped (isolated by conversationId) to prevent cross-conversation leakage. Supports text and image message retry with preview.
 
 ## External Dependencies
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, shadcn/ui, Wouter, TanStack Query v5
