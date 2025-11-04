@@ -758,10 +758,20 @@ export async function generateAIMomentContent(
       messages: [
         { role: "user", content: userPrompt },
       ],
-      maxTokens: 300,
+      maxTokens: 800, // 增加token限制以确保内容完整
     });
 
-    return content.trim();
+    const trimmedContent = content.trim();
+    
+    // 验证生成的内容不为空且不太短
+    if (!trimmedContent || trimmedContent.length < 10) {
+      console.error("Generated moment content is too short or empty:", trimmedContent);
+      throw new Error("生成的动态内容不完整");
+    }
+    
+    console.log(`[AI Moment] Generated content (${trimmedContent.length} chars): ${trimmedContent.substring(0, 100)}...`);
+    
+    return trimmedContent;
   } catch (error) {
     console.error("Error generating AI moment content:", error);
     throw error;
