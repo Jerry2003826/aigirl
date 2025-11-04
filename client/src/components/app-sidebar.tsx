@@ -280,7 +280,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                             {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
                           </AvatarFallback>
                         </Avatar>
-                        {conversation.unreadCount && conversation.unreadCount > 0 && (
+                        {(conversation.unreadCount ?? 0) > 0 && (
                           <Badge 
                             className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
                             data-testid={`badge-unread-${conversation.id}`}
