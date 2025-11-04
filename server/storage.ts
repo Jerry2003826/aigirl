@@ -581,14 +581,28 @@ export class DatabaseStorage implements IStorage {
     conversationId: string,
     limit: number = 50,
     offset: number = 0
-  ): Promise<Message[]> {
-    return await db
-      .select()
+  ): Promise<any[]> {
+    const results = await db
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        senderId: messages.senderId,
+        senderType: messages.senderType,
+        content: messages.content,
+        isRead: messages.isRead,
+        status: messages.status,
+        createdAt: messages.createdAt,
+        personaName: aiPersonas.name,
+        personaAvatar: aiPersonas.avatarUrl,
+      })
       .from(messages)
+      .leftJoin(aiPersonas, eq(messages.senderId, aiPersonas.id))
       .where(eq(messages.conversationId, conversationId))
       .orderBy(asc(messages.createdAt))
       .limit(limit)
       .offset(offset);
+    
+    return results;
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {

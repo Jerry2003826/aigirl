@@ -572,7 +572,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                           <Avatar className="h-10 w-10">
                             <AvatarImage src={message.personaAvatar || undefined} />
                             <AvatarFallback className="bg-primary/10 text-sm text-primary">
-                              AI
+                              {message.personaName?.substring(0, 2) || "AI"}
                             </AvatarFallback>
                           </Avatar>
                         )}
@@ -793,7 +793,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                               <Avatar className="h-8 w-8 shrink-0">
                                 <AvatarImage src={message.personaAvatar || undefined} />
                                 <AvatarFallback className="bg-primary/10 text-xs text-primary">
-                                  AI
+                                  {message.personaName?.substring(0, 2) || "AI"}
                                 </AvatarFallback>
                               </Avatar>
                             )}
