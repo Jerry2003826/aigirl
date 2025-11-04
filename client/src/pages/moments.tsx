@@ -1,14 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { Heart, MessageCircle, Send, Image as ImageIcon, X } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Heart, MessageCircle, Send, Plus, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 import type { Moment, MomentLike, MomentComment, AiPersona, User } from "@shared/schema";
 
 interface MomentWithDetails extends Moment {
@@ -19,11 +21,8 @@ interface MomentWithDetails extends Moment {
 export default function MomentsPage() {
   const { toast } = useToast();
   const [content, setContent] = useState("");
-  const [showComposer, setShowComposer] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
-  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
-  const [showComments, setShowComments] = useState<Record<string, boolean>>({});
-  const [replyingTo, setReplyingTo] = useState<string | null>(null);
 
   // Fetch current user
   const { data: currentUser } = useQuery<User>({
@@ -35,7 +34,7 @@ export default function MomentsPage() {
     queryKey: ['/api/personas'],
   });
 
-  // Fetch moments with their likes and comments (backend returns complete data)
+  // Fetch moments with their likes and comments
   const { data: momentsWithDetails = [], isLoading } = useQuery<MomentWithDetails[]>({
     queryKey: ['/api/moments'],
   });
@@ -48,11 +47,25 @@ export default function MomentsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
       setContent("");
-      setShowComposer(false);
-      toast({ title: "动态已发布" });
+      setDialogOpen(false);
+      toast({ title: "✅ 动态已发布" });
     },
     onError: () => {
-      toast({ title: "发布失败", variant: "destructive" });
+      toast({ title: "❌ 发布失败", variant: "destructive" });
+    },
+  });
+
+  // Delete moment mutation
+  const deleteMomentMutation = useMutation({
+    mutationFn: async (momentId: string) => {
+      return apiRequest('DELETE', `/api/moments/${momentId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
+      toast({ title: "✅ 动态已删除" });
+    },
+    onError: () => {
+      toast({ title: "❌ 删除失败", variant: "destructive" });
     },
   });
 
@@ -62,18 +75,16 @@ export default function MomentsPage() {
       return apiRequest('POST', `/api/moments/${momentId}/like`);
     },
     onSuccess: () => {
-      // Invalidate moments query to refetch with updated likes
       queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
     },
   });
 
   // Create comment mutation
   const createCommentMutation = useMutation({
-    mutationFn: async ({ momentId, content, parentCommentId }: { momentId: string; content: string; parentCommentId?: string }) => {
-      return apiRequest('POST', `/api/moments/${momentId}/comments`, { content, parentCommentId });
+    mutationFn: async ({ momentId, content }: { momentId: string; content: string }) => {
+      return apiRequest('POST', `/api/moments/${momentId}/comments`, { content });
     },
     onSuccess: () => {
-      // Invalidate moments query to refetch with updated comments
       queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
     },
   });
@@ -101,61 +112,40 @@ export default function MomentsPage() {
     );
   };
 
-  const handleReply = (momentId: string, parentCommentId: string) => {
-    const replyKey = `${momentId}_${parentCommentId}`;
-    const replyContent = replyInputs[replyKey]?.trim();
-    if (!replyContent) return;
-
-    createCommentMutation.mutate(
-      { momentId, content: replyContent, parentCommentId },
-      {
-        onSuccess: () => {
-          setReplyInputs(prev => ({ ...prev, [replyKey]: "" }));
-          setReplyingTo(null);
-        },
-      }
-    );
+  const handleDelete = (momentId: string) => {
+    if (confirm("确定要删除这条动态吗？")) {
+      deleteMomentMutation.mutate(momentId);
+    }
   };
 
   const getAuthor = (authorId: string, authorType: string) => {
     if (authorType === 'user') {
-      // Check if it's the current user
       if (authorId === currentUser?.id) {
         return {
           name: currentUser?.username || currentUser?.firstName || '我',
           avatarUrl: currentUser?.profileImageUrl,
+          isCurrentUser: true,
         };
       } else {
-        // For other users, show a generic name (in production, fetch from backend)
         return {
           name: '用户',
           avatarUrl: undefined,
+          isCurrentUser: false,
         };
       }
     } else {
-      // For AI personas
       const persona = personas.find(p => p.id === authorId);
       return {
         name: persona?.name || 'AI',
         avatarUrl: persona?.avatarUrl,
+        isCurrentUser: false,
       };
     }
   };
 
-  // Group comments by parent
-  const getCommentsTree = (comments: MomentComment[]) => {
-    const topLevel = comments.filter(c => !c.parentCommentId);
-    const replies = comments.filter(c => c.parentCommentId);
-    
-    return topLevel.map(comment => ({
-      ...comment,
-      replies: replies.filter(r => r.parentCommentId === comment.id),
-    }));
-  };
-
   if (!currentUser) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center h-screen bg-background">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">请先登录</h2>
           <p className="text-muted-foreground">您需要登录才能查看朋友圈</p>
@@ -166,59 +156,57 @@ export default function MomentsPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b bg-card p-4">
-        <div className="flex items-center justify-between max-w-2xl mx-auto">
-          <h1 className="text-2xl font-semibold" data-testid="text-moments-title">朋友圈</h1>
-          <Button 
-            onClick={() => setShowComposer(!showComposer)}
-            size="sm"
-            data-testid="button-toggle-composer"
-          >
-            {showComposer ? <X className="h-4 w-4 mr-2" /> : <ImageIcon className="h-4 w-4 mr-2" />}
-            {showComposer ? '取消' : '发布'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Composer */}
-      {showComposer && (
-        <Card className="max-w-2xl mx-auto mt-4 w-full" data-testid="card-composer">
-          <CardContent className="pt-6">
-            <div className="flex gap-3">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={currentUser.profileImageUrl || undefined} />
-                <AvatarFallback>{currentUser.username?.[0] || currentUser.firstName?.[0] || 'U'}</AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <Textarea
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="分享新鲜事..."
-                  className="min-h-[100px] resize-none"
-                  data-testid="input-moment-content"
-                />
-                <div className="flex justify-end mt-3">
-                  <Button
-                    onClick={handlePublish}
-                    disabled={!content.trim() || createMomentMutation.isPending}
-                    className="bg-primary hover:bg-primary/90"
-                    data-testid="button-publish-moment"
-                  >
-                    发布
-                  </Button>
-                </div>
+      {/* Publish Button */}
+      <div className="p-4">
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-6 rounded-xl shadow-lg"
+              data-testid="button-create-moment"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              发布动态
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>发布新动态</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="分享新鲜事..."
+                className="min-h-[120px] resize-none"
+                data-testid="input-moment-content"
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  data-testid="button-cancel-moment"
+                >
+                  取消
+                </Button>
+                <Button
+                  onClick={handlePublish}
+                  disabled={!content.trim() || createMomentMutation.isPending}
+                  className="bg-purple-600 hover:bg-purple-700"
+                  data-testid="button-publish-moment"
+                >
+                  {createMomentMutation.isPending ? "发布中..." : "发布"}
+                </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
+          </DialogContent>
+        </Dialog>
+      </div>
 
       {/* Moments List */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl mx-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 pb-4">
+        <div className="space-y-3">
           {isLoading ? (
-            <div className="text-center py-12">加载中...</div>
+            <div className="text-center py-12 text-muted-foreground">加载中...</div>
           ) : momentsWithDetails.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground" data-testid="text-no-moments">
               还没有动态，发布第一条吧！
@@ -227,188 +215,132 @@ export default function MomentsPage() {
             momentsWithDetails.map((moment) => {
               const author = getAuthor(moment.authorId, moment.authorType);
               const isLiked = moment.likes.some(like => like.likerId === currentUser.id);
-              const commentsTree = getCommentsTree(moment.comments);
+              const canDelete = author.isCurrentUser;
 
               return (
-                <Card key={moment.id} data-testid={`card-moment-${moment.id}`}>
-                  <CardHeader>
+                <Card key={moment.id} className="bg-card border-border" data-testid={`card-moment-${moment.id}`}>
+                  <CardHeader className="pb-3">
                     <div className="flex items-start gap-3">
-                      <Avatar className="h-12 w-12">
+                      <Avatar className="h-11 w-11">
                         <AvatarImage src={author.avatarUrl || undefined} />
-                        <AvatarFallback>{author.name[0]}</AvatarFallback>
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                          {author.name[0]}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold" data-testid={`text-author-${moment.id}`}>{author.name}</span>
+                          <span className="font-semibold text-foreground" data-testid={`text-author-${moment.id}`}>
+                            {author.name}
+                          </span>
                           {moment.authorType === 'ai' && (
-                            <span className="text-xs text-muted-foreground">AI</span>
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">AI</Badge>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground mt-0.5">
                           {formatDistanceToNow(new Date(moment.createdAt), { addSuffix: true, locale: zhCN })}
                         </div>
                       </div>
+                      {canDelete && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDelete(moment.id)}
+                          data-testid={`button-delete-moment-${moment.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="pt-0 space-y-3">
                     {/* Content */}
-                    <div className="mb-3 whitespace-pre-wrap" data-testid={`text-content-${moment.id}`}>{moment.content}</div>
+                    <div className="text-foreground whitespace-pre-wrap leading-relaxed" data-testid={`text-content-${moment.id}`}>
+                      {moment.content}
+                    </div>
 
                     {/* Actions */}
-                    <div className="flex items-center gap-6 py-2 border-t">
+                    <div className="flex items-center gap-6 pt-2">
                       <button
                         onClick={() => handleLike(moment.id)}
-                        className={`flex items-center gap-2 ${
+                        className={`flex items-center gap-1.5 transition-colors ${
                           isLiked ? 'text-red-500' : 'text-muted-foreground hover:text-red-500'
                         }`}
                         data-testid={`button-like-${moment.id}`}
                       >
                         <Heart className={`h-5 w-5 ${isLiked ? 'fill-current' : ''}`} />
                         <span className="text-sm">
-                          {moment.likes.length > 0 ? moment.likes.length : '点赞'}
+                          {moment.likes.length > 0 ? `点赞 ${moment.likes.length}` : '点赞'}
                         </span>
                       </button>
-                      <button
-                        onClick={() => setShowComments(prev => ({ ...prev, [moment.id]: !prev[moment.id] }))}
-                        className="flex items-center gap-2 text-muted-foreground hover:text-primary"
-                        data-testid={`button-comment-${moment.id}`}
-                      >
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
                         <MessageCircle className="h-5 w-5" />
                         <span className="text-sm">
-                          {moment.comments.length > 0 ? moment.comments.length : '评论'}
+                          {moment.comments.length > 0 ? `评论 ${moment.comments.length}` : '评论'}
                         </span>
-                      </button>
+                      </div>
                     </div>
 
-                    {/* Comments Section */}
-                    {showComments[moment.id] && (
-                      <div className="mt-3 space-y-3 border-t pt-3">
-                        {/* Comments List */}
-                        {commentsTree.map((comment) => {
+                    {/* Comments List */}
+                    {moment.comments.length > 0 && (
+                      <div className="space-y-2 pt-2 border-t border-border">
+                        {moment.comments.map((comment) => {
                           const commentAuthor = getAuthor(comment.authorId, comment.authorType);
-                          const replyKey = `${moment.id}_${comment.id}`;
-
                           return (
-                            <div key={comment.id} className="space-y-2">
-                              <div className="flex gap-2">
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage src={commentAuthor.avatarUrl || undefined} />
-                                  <AvatarFallback>{commentAuthor.name[0]}</AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1">
-                                  <div className="bg-muted rounded-lg p-2">
-                                    <div className="text-sm font-medium mb-1">{commentAuthor.name}</div>
-                                    <div className="text-sm" data-testid={`text-comment-${comment.id}`}>{comment.content}</div>
-                                  </div>
-                                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                                    <span>{formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true, locale: zhCN })}</span>
-                                    <button
-                                      onClick={() => setReplyingTo(replyingTo === replyKey ? null : replyKey)}
-                                      className="hover:text-primary"
-                                      data-testid={`button-reply-${comment.id}`}
-                                    >
-                                      回复
-                                    </button>
-                                  </div>
+                            <div key={comment.id} className="flex gap-2 text-sm">
+                              <Avatar className="h-6 w-6 flex-shrink-0">
+                                <AvatarImage src={commentAuthor.avatarUrl || undefined} />
+                                <AvatarFallback className="text-xs bg-primary/10">
+                                  {commentAuthor.name[0]}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="bg-muted/50 rounded-lg px-3 py-1.5">
+                                  <span className="font-medium text-foreground">{commentAuthor.name}: </span>
+                                  <span className="text-foreground/90" data-testid={`text-comment-${comment.id}`}>
+                                    {comment.content}
+                                  </span>
                                 </div>
                               </div>
-
-                              {/* Replies */}
-                              {comment.replies && comment.replies.length > 0 && (
-                                <div className="ml-10 space-y-2">
-                                  {comment.replies.map((reply) => {
-                                    const replyAuthor = getAuthor(reply.authorId, reply.authorType);
-                                    return (
-                                      <div key={reply.id} className="flex gap-2">
-                                        <Avatar className="h-6 w-6">
-                                          <AvatarImage src={replyAuthor.avatarUrl || undefined} />
-                                          <AvatarFallback>{replyAuthor.name[0]}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1">
-                                          <div className="bg-muted/50 rounded-lg p-2">
-                                            <div className="text-xs font-medium mb-1">{replyAuthor.name}</div>
-                                            <div className="text-xs" data-testid={`text-reply-${reply.id}`}>{reply.content}</div>
-                                          </div>
-                                          <div className="text-xs text-muted-foreground mt-1">
-                                            {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true, locale: zhCN })}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-
-                              {/* Reply Input */}
-                              {replyingTo === replyKey && (
-                                <div className="ml-10 flex gap-2">
-                                  <Avatar className="h-6 w-6">
-                                    <AvatarImage src={currentUser.profileImageUrl || undefined} />
-                                    <AvatarFallback>{currentUser.username?.[0] || 'U'}</AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1 flex gap-2">
-                                    <input
-                                      type="text"
-                                      value={replyInputs[replyKey] || ''}
-                                      onChange={(e) => setReplyInputs(prev => ({ ...prev, [replyKey]: e.target.value }))}
-                                      onKeyPress={(e) => {
-                                        if (e.key === 'Enter') {
-                                          handleReply(moment.id, comment.id);
-                                        }
-                                      }}
-                                      placeholder={`回复 ${commentAuthor.name}...`}
-                                      className="flex-1 px-3 py-1 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-primary"
-                                      data-testid={`input-reply-${comment.id}`}
-                                      autoFocus
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleReply(moment.id, comment.id)}
-                                      disabled={!replyInputs[replyKey]?.trim()}
-                                      className="h-7"
-                                      data-testid={`button-send-reply-${comment.id}`}
-                                    >
-                                      <Send className="h-3 w-3" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           );
                         })}
-
-                        {/* Comment Input */}
-                        <div className="flex gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={currentUser.profileImageUrl || undefined} />
-                            <AvatarFallback>{currentUser.username?.[0] || 'U'}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 flex gap-2">
-                            <input
-                              type="text"
-                              value={commentInputs[moment.id] || ''}
-                              onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
-                              onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleComment(moment.id);
-                                }
-                              }}
-                              placeholder="说点什么..."
-                              className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              data-testid={`input-comment-${moment.id}`}
-                            />
-                            <Button
-                              size="sm"
-                              onClick={() => handleComment(moment.id)}
-                              disabled={!commentInputs[moment.id]?.trim()}
-                              data-testid={`button-send-comment-${moment.id}`}
-                            >
-                              <Send className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
                       </div>
                     )}
+
+                    {/* Comment Input */}
+                    <div className="flex gap-2 pt-2">
+                      <Avatar className="h-8 w-8 flex-shrink-0">
+                        <AvatarImage src={currentUser.profileImageUrl || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                          {currentUser.username?.[0] || currentUser.firstName?.[0] || '我'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 flex gap-2">
+                        <input
+                          type="text"
+                          value={commentInputs[moment.id] || ''}
+                          onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && commentInputs[moment.id]?.trim()) {
+                              handleComment(moment.id);
+                            }
+                          }}
+                          placeholder="说点什么..."
+                          className="flex-1 px-3 py-2 bg-muted/30 border-0 rounded-full text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                          data-testid={`input-comment-${moment.id}`}
+                        />
+                        <Button
+                          size="icon"
+                          onClick={() => handleComment(moment.id)}
+                          disabled={!commentInputs[moment.id]?.trim() || createCommentMutation.isPending}
+                          className="h-9 w-9 rounded-full bg-purple-600 hover:bg-purple-700 flex-shrink-0"
+                          data-testid={`button-send-comment-${moment.id}`}
+                        >
+                          <Send className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               );
