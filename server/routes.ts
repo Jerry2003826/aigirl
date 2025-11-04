@@ -882,6 +882,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Check AI service availability
+  app.get('/api/ai/status', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check global environment variables
+      const hasOpenAI = !!process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+      const hasGoogle = !!process.env.GOOGLE_AI_API_KEY;
+      
+      // Check user-specific AI settings
+      const userSettings = await storage.getAiSettings(userId);
+      const hasCustomKey = !!(userSettings?.customApiKey);
+      
+      // User is online if they have:
+      // 1. Custom API key configured, OR
+      // 2. Global API keys available (OpenAI or Google)
+      const isOnline = hasCustomKey || hasOpenAI || hasGoogle;
+      
+      res.json({
+        isOnline,
+        providers: {
+          openai: hasOpenAI,
+          google: hasGoogle,
+          custom: hasCustomKey,
+        }
+      });
+    } catch (error) {
+      console.error("Error checking AI status:", error);
+      res.status(500).json({ message: "Failed to check AI status" });
+    }
+  });
+
   // AI Settings routes (protected)
   app.get('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {

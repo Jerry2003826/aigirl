@@ -68,6 +68,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
     queryKey: ["/api/conversations"],
   });
 
+  const { data: aiStatus } = useQuery<{ isOnline: boolean; providers: { openai: boolean; google: boolean } }>({
+    queryKey: ["/api/ai/status"],
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ["/api/messages", selectedConversationId, messageLimit],
     queryFn: async () => {
@@ -341,11 +346,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
                 <h3 className="font-semibold truncate" data-testid="text-chat-header-title">
                   {selectedConversation.title || selectedConversation.personas?.[0]?.name || "Chat"}
                 </h3>
-                {isTyping && (
-                  <p className="text-sm text-muted-foreground" data-testid="text-typing-indicator">
-                    正在输入...
+                <div className="flex items-center gap-1.5">
+                  <div className={cn(
+                    "h-2 w-2 rounded-full",
+                    isTyping 
+                      ? "bg-blue-500" 
+                      : aiStatus?.isOnline 
+                        ? "bg-green-500" 
+                        : "bg-gray-400"
+                  )} data-testid="status-indicator"></div>
+                  <p className="text-sm text-muted-foreground" data-testid="text-status">
+                    {isTyping ? "正在输入中..." : aiStatus?.isOnline ? "在线" : "离线"}
                   </p>
-                )}
+                </div>
               </div>
             </div>
 
