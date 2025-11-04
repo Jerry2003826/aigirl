@@ -223,17 +223,30 @@ export class OpenAIProvider implements AIProvider {
   private client: OpenAI | null = null;
   private isConfigured: boolean = false;
 
-  constructor() {
-    const baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
-    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  constructor(customApiKey?: string | null) {
+    // Priority: customApiKey > Replit AI Integrations
+    let apiKey: string | undefined;
+    let baseURL: string | undefined;
 
-    if (!baseURL || !apiKey) {
-      console.warn("OpenAI AI Integrations not configured. Missing AI_INTEGRATIONS_OPENAI_BASE_URL or AI_INTEGRATIONS_OPENAI_API_KEY");
-      this.isConfigured = false;
-      return;
+    if (customApiKey) {
+      // User provided custom API key - use official OpenAI API
+      apiKey = customApiKey;
+      baseURL = "https://api.openai.com/v1";
+      console.log("Using custom OpenAI API key");
+    } else {
+      // Fallback to Replit AI Integrations
+      baseURL = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
+      apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+
+      if (!baseURL || !apiKey) {
+        console.error("❌ CRITICAL: No API key available. User MUST provide custom API key in settings.");
+        this.isConfigured = false;
+        return;
+      }
+      console.log("Using Replit AI Integrations (OpenAI)");
     }
 
-    // This uses Replit AI Integrations for OpenAI
+    // Initialize client
     try {
       this.client = new OpenAI({
         baseURL,
