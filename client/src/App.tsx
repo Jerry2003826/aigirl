@@ -27,17 +27,26 @@ function Router() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(true);
 
-  // Read conversationId from URL and auto-select
+  // Read conversationId from URL and auto-select (only for chat routes)
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const conversationId = params.get("conversationId");
-    if (conversationId) {
-      setSelectedConversationId(conversationId);
-      // On mobile, when loading with a conversationId from URL,
-      // hide sidebar to show the chat directly
-      if (window.innerWidth < 768) {
-        setShowMobileSidebar(false);
+    // Only read conversationId from URL when on chat-related routes
+    if (location === "/" || location === "/chat" || location.startsWith("/chat?")) {
+      const params = new URLSearchParams(window.location.search);
+      const conversationId = params.get("conversationId");
+      if (conversationId) {
+        setSelectedConversationId(conversationId);
+        // On mobile, when loading with a conversationId from URL,
+        // hide sidebar to show the chat directly
+        if (window.innerWidth < 768) {
+          setShowMobileSidebar(false);
+        }
+      } else {
+        // Clear selectedConversationId if no conversationId in URL on chat routes
+        setSelectedConversationId(null);
       }
+    } else {
+      // Clear selectedConversationId when navigating away from chat routes
+      setSelectedConversationId(null);
     }
   }, [location]);
 
