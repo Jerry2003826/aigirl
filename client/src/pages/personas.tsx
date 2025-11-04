@@ -71,7 +71,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
       systemPrompt: "",
       backstory: "",
       greeting: "",
-      model: "gemini-2.5-pro", // Default to Gemini 2.5 Pro
       responseDelay: 0,
       userId: "",
     },
@@ -232,7 +231,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
       systemPrompt: persona.systemPrompt,
       backstory: persona.backstory ?? "",
       greeting: persona.greeting ?? "",
-      model: persona.model || "gemini-2.5-pro",
       responseDelay: persona.responseDelay || 0,
       userId: "",
     });
@@ -603,27 +601,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                         </FormControl>
                         <FormDescription>
                           Initial message shown when starting a new conversation
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="model"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>AI Model</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="gemini-2.5-pro (default)"
-                            {...field}
-                            data-testid="input-persona-model"
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Enter custom AI model name (e.g., gemini-2.5-pro, gemini-2.5-flash, or leave blank for default)
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

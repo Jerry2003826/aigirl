@@ -103,7 +103,6 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
       systemPrompt: "",
       backstory: "",
       greeting: "",
-      model: "gemini-2.5-pro",
       responseDelay: 0,
       userId: "",
     },
@@ -287,7 +286,6 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
       systemPrompt: persona.systemPrompt,
       backstory: persona.backstory || "",
       greeting: persona.greeting || "",
-      model: persona.model,
       responseDelay: persona.responseDelay,
       userId: "",
     });
@@ -817,36 +815,6 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
                     </FormControl>
                     <FormDescription>
                       首次对话时的开场白
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={personaForm.control}
-                name="model"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>AI模型</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger data-testid="select-persona-model">
-                          <SelectValue placeholder="选择AI模型" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro（推荐）</SelectItem>
-                        <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                        <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                        <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormDescription>
-                      选择不同的AI模型获得不同的对话体验
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

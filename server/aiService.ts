@@ -177,7 +177,7 @@ export async function generateAIResponse(
   
   // Get AI provider based on settings
   const provider = getAIProvider(aiSettings);
-  const model = getModelName(aiSettings, persona.model);
+  const model = getModelName(aiSettings);
   
   // Check if RAG and Search are enabled
   const ragEnabled = aiSettings?.ragEnabled || false;
@@ -248,7 +248,7 @@ export async function generateAIResponseStream(
   
   // Get AI provider based on settings
   const provider = getAIProvider(aiSettings);
-  const model = getModelName(aiSettings, persona.model);
+  const model = getModelName(aiSettings);
   
   // Check if RAG and Search are enabled
   const ragEnabled = aiSettings?.ragEnabled || false;

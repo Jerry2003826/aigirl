@@ -387,12 +387,9 @@ export function getAIProvider(settings?: AiSettings): AIProvider {
   }
 }
 
-// Get model name from settings or persona
-export function getModelName(settings?: AiSettings, personaModel?: string): string {
-  // Priority: persona model > settings model > default
-  if (personaModel) {
-    return personaModel;
-  }
+// Get model name from user settings only (no persona-specific models)
+export function getModelName(settings?: AiSettings): string {
+  // Priority: user settings model > default
   if (settings?.model) {
     return settings.model;
   }
