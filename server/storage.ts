@@ -581,7 +581,7 @@ export class DatabaseStorage implements IStorage {
     conversationId: string,
     limit: number = 50,
     offset: number = 0
-  ): Promise<any[]> {
+  ): Promise<(Message & { personaName?: string; personaAvatar?: string | null })[]> {
     const results = await db
       .select({
         id: messages.id,
@@ -602,7 +602,7 @@ export class DatabaseStorage implements IStorage {
       .limit(limit)
       .offset(offset);
     
-    return results;
+    return results as (Message & { personaName?: string; personaAvatar?: string | null })[];
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
