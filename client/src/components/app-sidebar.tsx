@@ -41,9 +41,10 @@ type AppSidebarProps = {
   selectedConversationId: string | null;
   onConversationSelect: (id: string) => void;
   onNewChat: () => void;
+  showMobileSidebar?: boolean;
 };
 
-export function AppSidebar({ selectedConversationId, onConversationSelect, onNewChat }: AppSidebarProps) {
+export function AppSidebar({ selectedConversationId, onConversationSelect, onNewChat, showMobileSidebar = true }: AppSidebarProps) {
   const [location, setLocation] = useLocation();
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -90,7 +91,12 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   const userEmail = (user as any)?.email;
 
   return (
-    <Sidebar className="border-r-0">
+    <Sidebar className={cn(
+      "border-r-0",
+      // Mobile: only show when showMobileSidebar is true
+      "md:block",
+      !showMobileSidebar && "hidden"
+    )}>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         {/* User Info Section */}
         <div className="flex items-center justify-between mb-4">

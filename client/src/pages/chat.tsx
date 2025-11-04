@@ -48,9 +48,10 @@ interface ChatProps {
   selectedConversationId: string | null;
   onConversationDeleted?: () => void;
   onBackToList?: () => void;
+  showMobileSidebar?: boolean;
 }
 
-export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList }: ChatProps) {
+export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList, showMobileSidebar = true }: ChatProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
@@ -331,7 +332,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
 
   return (
-    <div className="flex h-full flex-col">
+    <div className={cn(
+      "flex h-full flex-col",
+      // Mobile: only show chat when sidebar is hidden
+      "md:flex",
+      showMobileSidebar && "hidden md:flex"
+    )}>
       {selectedConversation ? (
         <>
           {/* Chat Header */}

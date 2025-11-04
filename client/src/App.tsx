@@ -23,6 +23,7 @@ function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(true);
 
   // Read conversationId from URL and auto-select
   useEffect(() => {
@@ -30,6 +31,11 @@ function Router() {
     const conversationId = params.get("conversationId");
     if (conversationId) {
       setSelectedConversationId(conversationId);
+      // On mobile, when loading with a conversationId from URL,
+      // hide sidebar to show the chat directly
+      if (window.innerWidth < 768) {
+        setShowMobileSidebar(false);
+      }
     }
   }, [location]);
 
@@ -62,13 +68,29 @@ function Router() {
     setLocation("/personas");
   };
 
+  const handleConversationSelect = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    // On mobile, hide sidebar when user actively selects a conversation
+    // Check if window width is mobile size (< 768px which is md breakpoint)
+    if (window.innerWidth < 768) {
+      setShowMobileSidebar(false);
+    }
+  };
+
+  const handleBackToList = () => {
+    setSelectedConversationId(null);
+    // Always show sidebar when going back (both mobile and desktop)
+    setShowMobileSidebar(true);
+  };
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background">
         <AppSidebar
           selectedConversationId={selectedConversationId}
-          onConversationSelect={setSelectedConversationId}
+          onConversationSelect={handleConversationSelect}
           onNewChat={handleNewChat}
+          showMobileSidebar={showMobileSidebar}
         />
         <main className="flex-1 overflow-hidden">
           <Switch>
@@ -76,8 +98,9 @@ function Router() {
               {() => (
                 <Chat
                   selectedConversationId={selectedConversationId}
-                  onConversationDeleted={() => setSelectedConversationId(null)}
-                  onBackToList={() => setSelectedConversationId(null)}
+                  onConversationDeleted={handleBackToList}
+                  onBackToList={handleBackToList}
+                  showMobileSidebar={showMobileSidebar}
                 />
               )}
             </Route>
@@ -85,8 +108,9 @@ function Router() {
               {() => (
                 <Chat
                   selectedConversationId={selectedConversationId}
-                  onConversationDeleted={() => setSelectedConversationId(null)}
-                  onBackToList={() => setSelectedConversationId(null)}
+                  onConversationDeleted={handleBackToList}
+                  onBackToList={handleBackToList}
+                  showMobileSidebar={showMobileSidebar}
                 />
               )}
             </Route>
