@@ -541,7 +541,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             </div>
 
             {/* Message Input */}
-            <div className="border-t bg-background p-4">
+            <div className="border-t bg-background p-2">
               {failedMessageId === selectedConversationId && (
                 <div className="mb-2 flex items-center gap-2 text-sm text-destructive">
                   <span>Message failed to send</span>
@@ -577,7 +577,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 </div>
               )}
               
-              <div className="flex gap-3 items-end">
+              <div className="flex gap-2 items-end">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -589,31 +589,31 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="h-12 w-12 shrink-0 touch-target-md"
+                  className="h-10 w-10 shrink-0"
                   onClick={() => fileInputRef.current?.click()}
                   data-testid="button-upload-image"
                 >
-                  <ImagePlus className="h-6 w-6" />
+                  <ImagePlus className="h-5 w-5" />
                 </Button>
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   placeholder="输入消息..."
-                  className="min-h-[48px] max-h-[120px] resize-none text-base leading-relaxed"
+                  className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
                   disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
                   size="icon"
-                  className="h-12 w-12 shrink-0 rounded-full bg-primary hover:bg-primary/90 touch-target-md"
+                  className="h-10 w-10 shrink-0 rounded-full bg-primary hover:bg-primary/90"
                   data-testid="button-send-message"
                 >
                   {sendMessageMutation.isPending ? (
-                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
-                    <Send className="h-6 w-6" />
+                    <Send className="h-5 w-5" />
                   )}
                 </Button>
             </div>
