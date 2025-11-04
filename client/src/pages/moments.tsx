@@ -204,11 +204,11 @@ export default function MomentsPage() {
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button 
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-7 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
               data-testid="button-create-moment"
             >
-              <Plus className="h-6 w-6 mr-2" />
-              <span className="text-lg">发布动态</span>
+              <Plus className="h-5 w-5 mr-2" />
+              <span className="text-base">发布动态</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
