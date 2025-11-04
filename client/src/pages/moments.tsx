@@ -423,6 +423,22 @@ export default function MomentsPage() {
                     <div className="text-foreground whitespace-pre-wrap leading-relaxed" data-testid={`text-content-${moment.id}`}>
                       {moment.content}
                     </div>
+                    
+                    {/* Images */}
+                    {moment.images && moment.images.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 max-w-md">
+                        {moment.images.map((imageUrl, idx) => (
+                          <img
+                            key={idx}
+                            src={imageUrl}
+                            alt={`Moment image ${idx + 1}`}
+                            className="w-full aspect-square object-cover rounded-lg border cursor-pointer hover-elevate"
+                            onClick={() => window.open(imageUrl, '_blank')}
+                            data-testid={`image-moment-${moment.id}-${idx}`}
+                          />
+                        ))}
+                      </div>
+                    )}
 
                     {/* Actions */}
                     <div className="flex items-center gap-6 pt-2">
