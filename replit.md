@@ -50,6 +50,13 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **Authentication:** Replit OIDC Auth (Google, GitHub, email/password), `express-session`
 - **AI:** OpenAI API (via Replit AI Integrations)
 ## Recent Changes (November 4, 2025)
+### Mobile Responsive Design Implementation
+- **WeChat-style Mobile UX:** Implemented full-screen switching behavior for mobile devices (<768px), with conversation list as initial view, seamless transition to chat on selection, and back button to return to list.
+- **Sidebar Mobile Fix:** Disabled Shadcn sidebar's default Sheet behavior by setting `collapsible="none"`, allowing unified rendering logic across desktop and mobile. Mobile visibility controlled via CSS classes (`md:block`, conditional `hidden`).
+- **Smart Viewport Detection:** Added `window.innerWidth < 768` checks in conversation select and URL initialization handlers to ensure sidebar only hides on actual mobile devices, preserving desktop dual-pane layout.
+- **Navigation State Management:** `showMobileSidebar` state in App.tsx controls mobile sidebar visibility, with intelligent defaults: true on initial load, false after conversation selection on mobile, true on back navigation.
+- **E2E Testing:** Verified mobile responsive behavior including initial sidebar display, conversation selection, chat view transition, back button functionality, and deep-link URL navigation (all tests passed).
+
 ### Moments Modernization & AI Autonomous Posting
 - **Modern Composer UI:** Redesigned post creation dialog with gradient purple-to-pink CTA button, expanded modal layout (max-w-2xl), user avatar and name display, borderless immersive textarea, inline 500-character counter, large rounded image previews (rounded-xl), and smooth transition animations.
 - **AI Autonomous Posting:** Implemented `server/aiScheduler.ts` background service that runs on server startup. The scheduler checks all AI personas hourly, applies 6-hour cooldown enforcement via `canAIPostMoment()`, uses 30% stochastic window for natural posting variance, and delegates to `triggerAIPostMoment()` with detailed logging. Removed manual "让AI发布动态" trigger button to enforce autonomous-only behavior.
