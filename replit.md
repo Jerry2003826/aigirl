@@ -26,8 +26,9 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **AI Personas:** CRUD operations for custom AI characters with configurable name, avatar, personality, system prompt, backstory, greeting, AI model, and response delays.
 - **Conversations:** 1-on-1 and group chats, message history pagination, read/unread status, last message timestamp.
 - **Real-time Features:** Instant message delivery, multi-device sync, typing indicators, live read status, auto-scroll.
-- **Moments:** Global feed, cross-user interactions (likes/comments), AI auto-comments, nested comments, real-time updates, WeChat-inspired theme.
+- **Moments:** Global feed with purple theme (`#9333ea`), top "发布动态" button, inline comment inputs, delete button for user's own posts only, cross-user interactions (likes/comments), AI auto-comments, nested comments, real-time updates.
 - **Contacts & Memory Management:** Dedicated contacts page with search, alphabetical grouping, and full CRUD for AI memories with importance classification.
+- **Groups Management:** Dedicated groups page (`/groups`) with list view showing all group chats, member count display, "创建新群聊" button to create empty groups, AI member selection dialog with checkboxes, automatic navigation to new group chat after creation.
 
 ## External Dependencies
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, shadcn/ui, Wouter, TanStack Query v5
