@@ -11,6 +11,7 @@ import Login from "@/pages/login";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
 import Moments from "@/pages/moments";
+import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 import { useState } from "react";
 
@@ -66,6 +67,7 @@ function Router() {
             </Route>
             <Route path="/moments" component={Moments} />
             <Route path="/personas" component={Personas} />
+            <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>
         </main>

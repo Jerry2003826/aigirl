@@ -139,22 +139,31 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
           >
             <RotateCcw className="h-4 w-4" />
           </Button>
+          <Button 
+            size="icon" 
+            variant="ghost" 
+            className="h-8 w-8"
+            onClick={() => setLocation("/settings")}
+            data-testid="button-settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
           <Dialog>
             <DialogTrigger asChild>
               <Button 
                 size="icon" 
                 variant="ghost" 
                 className="h-8 w-8"
-                data-testid="button-settings"
+                data-testid="button-user-menu"
               >
-                <Settings className="h-4 w-4" />
+                <UserCircle className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>设置</DialogTitle>
+                <DialogTitle>账户管理</DialogTitle>
                 <DialogDescription>
-                  应用设置和账户管理
+                  账户设置和退出登录
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-3 py-4">
