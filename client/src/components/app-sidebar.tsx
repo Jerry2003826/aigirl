@@ -78,7 +78,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
     { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat", key: "chat" },
     { title: "联系人", path: "/contacts", icon: Users, testId: "nav-contacts", key: "contacts" },
     { title: "动态", path: "/moments", icon: Camera, testId: "nav-moments", key: "moments" },
-    { title: "群聊", path: "/chat", icon: UserCircle, testId: "nav-groups", key: "groups" },
+    { title: "群聊", path: "/groups", icon: UserCircle, testId: "nav-groups", key: "groups" },
   ];
 
   const currentNav = navItems.find(item => location === item.path) || navItems[0];

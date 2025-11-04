@@ -14,6 +14,7 @@ import Moments from "@/pages/moments";
 import Settings from "@/pages/settings";
 import Contacts from "@/pages/contacts";
 import ContactDetail from "@/pages/contact-detail";
+import Groups from "@/pages/groups";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
 
@@ -82,6 +83,7 @@ function Router() {
             <Route path="/contacts/:id">
               {(params) => <ContactDetail personaId={params.id} />}
             </Route>
+            <Route path="/groups" component={Groups} />
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>
