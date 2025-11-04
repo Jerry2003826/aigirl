@@ -71,3 +71,10 @@ The design is heavily inspired by WeChat, featuring a green color palette (`#07C
 - **Data Consistency:** Unified field naming to use `profileImageUrl` across the entire codebase (schema, storage, API, frontend), ensuring consistent data handling and eliminating legacy `profileImage` references.
 - **Cache Management:** TanStack Query mutation automatically invalidates `/api/user` cache after successful update, ensuring UI reflects changes immediately without manual refresh.
 - **E2E Testing:** Comprehensive test suite verified: dialog open/close, nickname editing and persistence, avatar upload and save, cancel flow without persisting changes, and proper API responses (200 status codes). All tests passed successfully.
+
+### Simplified Logout Feature
+- **Streamlined Account Menu:** Removed "角色管理" option from account menu, keeping only logout functionality with confirmation dialog.
+- **Immersive Mode Visibility:** Logout button (LogOut icon) remains visible even in immersive mode, ensuring users can always sign out.
+- **Confirmation Dialog:** Logout now shows a confirmation dialog ("退出登录" / "确认要退出当前账户吗？") with Cancel and Confirm buttons.
+- **Destructive Styling:** Confirm logout button uses destructive (red) variant to emphasize the irreversible action.
+- **Bug Fix:** Corrected logout flow to use `/api/logout` endpoint (Replit OIDC logout), ensuring proper session termination and redirect.

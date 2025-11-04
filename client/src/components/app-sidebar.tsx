@@ -65,9 +65,9 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   });
 
   const logoutMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/auth/logout", {}),
-    onSuccess: () => {
-      window.location.href = "/";
+    mutationFn: async () => {
+      // Logout via Replit OIDC - redirects to OIDC logout
+      window.location.href = "/api/logout";
     },
     onError: () => {
       toast({
@@ -273,49 +273,47 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
               >
                 <Settings className="h-5 w-5" />
               </Button>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button 
-                    size="icon" 
-                    variant="ghost" 
-                    className="h-10 w-10 touch-target-sm"
-                    data-testid="button-user-menu"
-                  >
-                    <UserCircle className="h-5 w-5" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>账户管理</DialogTitle>
-                    <DialogDescription>
-                      账户设置和退出登录
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="flex flex-col gap-3 py-4">
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start"
-                      onClick={() => setLocation("/personas")}
-                      data-testid="button-manage-personas"
-                    >
-                      <Users className="mr-2 h-4 w-4" />
-                      角色管理
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-destructive hover:text-destructive"
-                      onClick={() => logoutMutation.mutate()}
-                      disabled={logoutMutation.isPending}
-                      data-testid="button-logout"
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      {logoutMutation.isPending ? "退出中..." : "退出登录"}
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
             </>
           )}
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-10 w-10 touch-target-sm"
+                data-testid="button-user-menu"
+              >
+                <LogOut className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>退出登录</DialogTitle>
+                <DialogDescription>
+                  确认要退出当前账户吗？
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {}}
+                  data-testid="button-cancel-logout"
+                >
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                  data-testid="button-logout"
+                >
+                  {logoutMutation.isPending ? "退出中..." : "确认退出"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
 
         {/* Search Bar */}
