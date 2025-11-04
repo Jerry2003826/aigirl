@@ -172,25 +172,27 @@ export default function GroupsPage() {
                     {personas.map((persona) => (
                       <div
                         key={persona.id}
-                        className="flex items-center gap-3 p-2 rounded-lg hover-elevate cursor-pointer"
+                        className="flex items-center gap-3 p-3 rounded-lg hover-elevate cursor-pointer"
                         onClick={() => togglePersona(persona.id)}
                         data-testid={`persona-item-${persona.id}`}
                       >
-                        <Checkbox
-                          checked={selectedPersonas.includes(persona.id)}
-                          onCheckedChange={() => togglePersona(persona.id)}
-                          data-testid={`checkbox-persona-${persona.id}`}
-                          className="shrink-0 h-5 w-5"
-                        />
-                        <Avatar className="h-10 w-10 shrink-0">
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedPersonas.includes(persona.id)}
+                            onCheckedChange={() => togglePersona(persona.id)}
+                            data-testid={`checkbox-persona-${persona.id}`}
+                            className="h-5 w-5"
+                          />
+                        </div>
+                        <Avatar className="h-12 w-12 shrink-0">
                           <AvatarImage src={persona.avatarUrl || undefined} />
-                          <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                          <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
                             {persona.name.substring(0, 2)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{persona.name}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-2">
+                          <div className="font-medium text-base truncate">{persona.name}</div>
+                          <div className="text-sm text-muted-foreground line-clamp-2">
                             {persona.personality}
                           </div>
                         </div>
