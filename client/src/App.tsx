@@ -99,6 +99,13 @@ function Router() {
     setLocation("/chat");
   };
 
+  const handleChatNavClick = () => {
+    // 点击聊天导航时，清除选中的对话，显示列表
+    setSelectedConversationId(null);
+    setShowMobileSidebar(true);
+    setLocation("/chat");
+  };
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background flex-col">
@@ -168,7 +175,7 @@ function Router() {
         </div>
         
         {/* Bottom Navigation Bar - Always visible, outside main content toggle */}
-        <BottomNavBar />
+        <BottomNavBar onChatClick={handleChatNavClick} />
       </div>
     </SidebarProvider>
   );
