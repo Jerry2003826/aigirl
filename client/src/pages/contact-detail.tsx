@@ -432,15 +432,6 @@ export default function ContactDetail({ personaId }: ContactDetailProps) {
             >
               <Edit className="h-4 w-4" />
             </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handlePersonaDelete}
-              disabled={deletePersonaMutation.isPending}
-              data-testid="button-delete-persona"
-            >
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
           </div>
         </div>
       </div>

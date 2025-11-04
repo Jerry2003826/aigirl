@@ -150,10 +150,43 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
     },
   });
 
+  const deletePersonaMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiRequest("DELETE", `/api/personas/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/personas"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      toast({
+        title: "成功",
+        description: "AI女友已成功删除",
+      });
+      // Clear the selected conversation and navigate to chat
+      if (onConversationDeleted) {
+        onConversationDeleted();
+      }
+      setLocation("/chat");
+    },
+    onError: (error: any) => {
+      toast({
+        title: "错误",
+        description: error.message || "删除AI女友失败",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteConversation = () => {
     if (!selectedConversation) return;
     if (confirm("确定要删除这个对话吗？所有消息将被永久删除。")) {
       deleteConversationMutation.mutate(selectedConversation.id);
+    }
+  };
+
+  const handleDeletePersona = () => {
+    if (!selectedConversation?.personas?.[0]) return;
+    const personaName = selectedConversation.personas[0].name;
+    if (confirm(`确定要删除 ${personaName} 吗？这将删除所有相关的聊天记录和记忆。`)) {
+      deletePersonaMutation.mutate(selectedConversation.personas[0].id);
     }
   };
 
@@ -345,6 +378,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
                       <UserCircle className="mr-2 h-4 w-4" />
                       查看AI信息
                     </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                   </>
                 )}
                 <DropdownMenuItem
@@ -363,6 +397,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
                   <Trash2 className="mr-2 h-4 w-4" />
                   删除对话
                 </DropdownMenuItem>
+                {!selectedConversation.isGroup && selectedConversation.personas?.[0] && (
+                  <DropdownMenuItem
+                    onClick={handleDeletePersona}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="menu-delete-persona"
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    删除AI女友
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
