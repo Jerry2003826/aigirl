@@ -77,6 +77,7 @@ function Router() {
                 <Chat
                   selectedConversationId={selectedConversationId}
                   onConversationDeleted={() => setSelectedConversationId(null)}
+                  onBackToList={() => setSelectedConversationId(null)}
                 />
               )}
             </Route>
@@ -85,6 +86,7 @@ function Router() {
                 <Chat
                   selectedConversationId={selectedConversationId}
                   onConversationDeleted={() => setSelectedConversationId(null)}
+                  onBackToList={() => setSelectedConversationId(null)}
                 />
               )}
             </Route>

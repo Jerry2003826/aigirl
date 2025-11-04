@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2 } from "lucide-react";
+import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -47,9 +47,10 @@ type Persona = {
 interface ChatProps {
   selectedConversationId: string | null;
   onConversationDeleted?: () => void;
+  onBackToList?: () => void;
 }
 
-export default function Chat({ selectedConversationId, onConversationDeleted }: ChatProps) {
+export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList }: ChatProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
@@ -335,6 +336,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted }: 
         <>
           {/* Chat Header */}
           <div className="flex items-center gap-3 border-b p-4 bg-sidebar justify-between">
+            {/* Back Button (Mobile Only) */}
+            {onBackToList && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-9 w-9 shrink-0 md:hidden"
+                onClick={onBackToList}
+                data-testid="button-back-to-list"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            )}
+            
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <Avatar className="h-10 w-10 shrink-0">
                 <AvatarImage src={selectedConversation.personas?.[0]?.avatarUrl || undefined} />
