@@ -139,69 +139,74 @@
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 0 0% 8%;
+  /* Pure black background like reference UI */
+  --background: 0 0% 0%;
 
-  --foreground: 0 0% 92%;
+  --foreground: 0 0% 85%;
 
-  --border: 0 0% 18%;
+  --border: 0 0% 15%;
 
-  --card: 0 0% 10%;
+  /* Dark gray card */
+  --card: 0 0% 8%;
 
-  --card-foreground: 0 0% 92%;
+  --card-foreground: 0 0% 85%;
 
-  --card-border: 0 0% 16%;
+  --card-border: 0 0% 12%;
 
-  --sidebar: 0 0% 12%;
+  /* Dark gray sidebar like reference UI */
+  --sidebar: 0 0% 11%;
 
-  --sidebar-foreground: 0 0% 92%;
+  --sidebar-foreground: 0 0% 85%;
 
-  --sidebar-border: 0 0% 20%;
+  --sidebar-border: 0 0% 15%;
 
-  --sidebar-primary: 150 94% 38%;
+  /* Bright green accent like reference UI */
+  --sidebar-primary: 150 100% 45%;
 
   --sidebar-primary-foreground: 0 0% 0%;
 
-  --sidebar-accent: 150 12% 18%;
+  --sidebar-accent: 0 0% 16%;
 
-  --sidebar-accent-foreground: 0 0% 92%;
+  --sidebar-accent-foreground: 0 0% 85%;
 
-  --sidebar-ring: 150 94% 38%;
+  --sidebar-ring: 150 100% 45%;
 
-  --popover: 0 0% 14%;
+  --popover: 0 0% 10%;
 
-  --popover-foreground: 0 0% 92%;
+  --popover-foreground: 0 0% 85%;
 
-  --popover-border: 0 0% 22%;
+  --popover-border: 0 0% 18%;
 
-  --primary: 150 94% 38%;
+  /* Bright green primary like reference UI */
+  --primary: 150 100% 45%;
 
-  --primary-foreground: 0 0% 98%;
+  --primary-foreground: 0 0% 0%;
   
-  /* Chat-specific colors - WeChat dark mode */
-  --message-user: 150 88% 24%; /* #056F3A dark green for user messages */
+  /* Chat-specific colors - darker theme */
+  --message-user: 150 88% 24%; /* Dark green for user messages */
   --message-user-foreground: 0 0% 100%;
-  --message-ai: 0 0% 17%; /* #2C2C2C dark gray for AI messages */
-  --message-ai-foreground: 0 0% 92%;
-  --chat-bg: 0 0% 6%;
+  --message-ai: 0 0% 14%; /* Dark gray for AI messages */
+  --message-ai-foreground: 0 0% 85%;
+  --chat-bg: 0 0% 0%; /* Pure black chat background */
 
-  --secondary: 0 0% 20%;
+  --secondary: 0 0% 18%;
 
-  --secondary-foreground: 0 0% 92%;
+  --secondary-foreground: 0 0% 85%;
 
-  --muted: 215 8% 16%;
+  --muted: 0 0% 14%;
 
-  --muted-foreground: 0 0% 70%;
+  --muted-foreground: 0 0% 60%;
 
-  --accent: 215 10% 18%;
+  --accent: 0 0% 16%;
 
-  --accent-foreground: 0 0% 92%;
+  --accent-foreground: 0 0% 85%;
 
   --destructive: 0 68% 45%;
 
   --destructive-foreground: 0 0% 98%;
 
-  --input: 0 0% 30%;
-  --ring: 215 80% 48%;
+  --input: 0 0% 20%;
+  --ring: 150 100% 45%;
   --chart-1: 215 85% 65%;
   --chart-2: 280 75% 68%;
   --chart-3: 160 70% 65%;
