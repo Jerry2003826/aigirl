@@ -592,8 +592,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   {isTyping && (
                     <div className="flex gap-3 justify-start" data-testid="typing-indicator">
                       <Avatar className="h-10 w-10">
+                        <AvatarImage src={selectedConversation?.personas?.[0]?.avatarUrl || undefined} />
                         <AvatarFallback className="bg-primary/10 text-sm text-primary">
-                          AI
+                          {selectedConversation?.personas?.[0]?.name?.substring(0, 2) || "AI"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="max-w-[75%] md:max-w-md lg:max-w-lg rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
