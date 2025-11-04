@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, MessageCircle, Loader2 } from "lucide-react";
+import { Send, MessageCircle, Loader2, ImagePlus, X } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -48,8 +48,11 @@ export default function Chat({ selectedConversationId }: ChatProps) {
   const [messageLimit, setMessageLimit] = useState(50);
   const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [imageData, setImageData] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -73,19 +76,66 @@ export default function Chat({ selectedConversationId }: ChatProps) {
       apiRequest(`/api/conversations/${conversationId}/read`, "POST", {}),
   });
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image must be smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setImageData(base64);
+      setImagePreview(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveImage = () => {
+    setImageData(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content }: { conversationId: string; content: string }) => {
-      // Send user message
+    mutationFn: async ({ conversationId, content, imageData }: { 
+      conversationId: string; 
+      content: string;
+      imageData?: string | null;
+    }) => {
+      // Send user message (with optional image)
       return apiRequest("/api/messages", "POST", {
         conversationId,
-        content,
+        content: content || (imageData ? "[Image]" : ""),
         senderType: "user",
+        imageData: imageData || undefined,
       });
     },
     onSuccess: async (_, { conversationId, content }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       setMessageInput("");
+      handleRemoveImage();
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
@@ -100,7 +150,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
           setIsTyping(true);
           const selectionResult: any = await apiRequest("/api/ai/select-persona", "POST", {
             conversationId,
-            userMessage: content,
+            userMessage: content || "[User sent an image]",
           });
           respondingPersonaId = selectionResult.personaId;
         } else {
@@ -124,7 +174,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
         await apiRequest("/api/ai/generate", "POST", {
           conversationId,
           personaId: respondingPersonaId,
-          content,
+          content: content || "[User sent an image, please analyze it]",
         });
         setIsTyping(false);
         queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
@@ -151,10 +201,13 @@ export default function Chat({ selectedConversationId }: ChatProps) {
   };
 
   const handleSendMessage = () => {
-    if (!messageInput.trim() || !selectedConversationId) return;
+    if (!selectedConversationId) return;
+    if (!messageInput.trim() && !imageData) return;
+    
     sendMessageMutation.mutate({
       conversationId: selectedConversationId,
       content: messageInput.trim(),
+      imageData,
     });
   };
 
@@ -327,7 +380,46 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                   </Button>
                 </div>
               )}
+              
+              {/* Image Preview */}
+              {imagePreview && (
+                <div className="mb-3 relative inline-block">
+                  <img 
+                    src={imagePreview} 
+                    alt="Preview" 
+                    className="max-w-xs max-h-40 rounded-lg border"
+                    data-testid="image-preview"
+                  />
+                  <Button
+                    size="icon"
+                    variant="destructive"
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                    onClick={handleRemoveImage}
+                    data-testid="button-remove-image"
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              
               <div className="flex gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                  data-testid="input-file-hidden"
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-11 w-11 shrink-0"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="button-upload-image"
+                >
+                  <ImagePlus className="h-5 w-5" />
+                </Button>
                 <Textarea
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
@@ -338,7 +430,7 @@ export default function Chat({ selectedConversationId }: ChatProps) {
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={!messageInput.trim() || sendMessageMutation.isPending}
+                  disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
                   size="icon"
                   className="h-11 w-11 shrink-0"
                   data-testid="button-send-message"

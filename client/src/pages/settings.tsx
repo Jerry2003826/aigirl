@@ -65,7 +65,7 @@ export default function Settings() {
 
   const updateSettingsMutation = useMutation({
     mutationFn: (data: SettingsFormData) =>
-      apiRequest("PUT", "/api/settings/ai", data),
+      apiRequest("/api/settings/ai", "PUT", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/ai"] });
       toast({
@@ -88,7 +88,7 @@ export default function Settings() {
 
   const handleSeedDefaultPersona = async () => {
     try {
-      await apiRequest("POST", "/api/seed/default-persona");
+      await apiRequest("/api/seed/default-persona", "POST", {});
       toast({
         title: "Success",
         description: "Default test persona created successfully",
