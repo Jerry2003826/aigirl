@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { startAIScheduler } from "./aiScheduler";
 
 const app = express();
 
@@ -81,5 +82,8 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Start AI autonomous moment posting scheduler
+    startAIScheduler();
   });
 })();

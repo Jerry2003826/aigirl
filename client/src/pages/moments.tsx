@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Heart, MessageCircle, Send, Plus, Trash2, Sparkles, ImagePlus, X } from "lucide-react";
+import { Heart, MessageCircle, Send, Plus, Trash2, ImagePlus, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { zhCN } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +22,6 @@ export default function MomentsPage() {
   const { toast } = useToast();
   const [content, setContent] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [aiMomentDialogOpen, setAiMomentDialogOpen] = useState(false);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -92,25 +91,6 @@ export default function MomentsPage() {
     },
   });
 
-  // Trigger AI to post moment mutation
-  const triggerAIMomentMutation = useMutation({
-    mutationFn: async (personaId: string) => {
-      const res = await apiRequest('POST', `/api/ai/trigger-moment/${personaId}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
-      toast({ title: "✅ AI动态已发布" });
-      setAiMomentDialogOpen(false);
-    },
-    onError: (error: any) => {
-      toast({ 
-        title: "❌ 发布失败", 
-        description: error.message || "AI发布动态失败",
-        variant: "destructive" 
-      });
-    },
-  });
 
   const handlePublish = () => {
     if (!content.trim()) return;
@@ -219,152 +199,122 @@ export default function MomentsPage() {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Publish Buttons */}
-      <div className="p-4 space-y-2">
+      {/* Publish Button */}
+      <div className="p-4">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button 
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white font-medium py-6 rounded-xl shadow-lg"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-7 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300"
               data-testid="button-create-moment"
             >
-              <Plus className="h-5 w-5 mr-2" />
-              发布动态
+              <Plus className="h-6 w-6 mr-2" />
+              <span className="text-lg">发布动态</span>
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>发布新动态</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
+          <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-5">
+              <DialogHeader>
+                <DialogTitle className="text-white text-xl font-semibold">分享新鲜事</DialogTitle>
+              </DialogHeader>
+            </div>
+            
+            {/* Content Area */}
+            <div className="p-6 space-y-5">
+              {/* User Info */}
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12 ring-2 ring-purple-100">
+                  <AvatarImage src={currentUser.avatarUrl || undefined} />
+                  <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-semibold text-lg">
+                    {currentUser.username?.[0] || currentUser.email?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="font-semibold text-base">{currentUser.username || currentUser.email}</div>
+                  <div className="text-sm text-muted-foreground">公开</div>
+                </div>
+              </div>
+              
+              {/* Text Input */}
               <Textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="分享新鲜事..."
-                className="min-h-[120px] resize-none"
+                placeholder="分享你的想法、心情或精彩瞬间..."
+                className="min-h-[160px] resize-none border-0 focus-visible:ring-0 text-base px-0 placeholder:text-muted-foreground/60"
                 data-testid="input-moment-content"
               />
               
+              {/* Character Count */}
+              <div className="flex justify-end">
+                <span className={`text-sm ${content.length > 500 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                  {content.length} / 500
+                </span>
+              </div>
+              
               {/* Image Preview */}
               {imagePreview && (
-                <div className="relative inline-block">
+                <div className="relative rounded-2xl overflow-hidden bg-muted/30 p-4">
                   <img 
                     src={imagePreview} 
                     alt="Preview" 
-                    className="max-h-48 rounded-lg border"
+                    className="w-full max-h-80 object-contain rounded-xl"
                   />
                   <Button
                     type="button"
                     size="icon"
                     variant="destructive"
-                    className="absolute -right-2 -top-2 h-6 w-6 rounded-full"
+                    className="absolute top-6 right-6 h-8 w-8 rounded-full shadow-lg hover:scale-110 transition-transform"
                     onClick={clearImage}
                     data-testid="button-clear-image"
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
               )}
+            </div>
+            
+            {/* Footer Actions */}
+            <div className="border-t bg-muted/20 px-6 py-4 flex items-center justify-between">
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageSelect}
+                  data-testid="input-image"
+                />
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <ImagePlus className="h-5 w-5 text-purple-600" />
+                  <span className="text-sm font-medium text-purple-600">添加图片</span>
+                </div>
+              </label>
               
-              <div className="flex justify-between items-center">
-                <label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageSelect}
-                    data-testid="input-image"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    asChild
-                  >
-                    <span>
-                      <ImagePlus className="mr-2 h-4 w-4" />
-                      添加图片
-                    </span>
-                  </Button>
-                </label>
-                
-                <div className="flex gap-2">
+              <div className="flex gap-3">
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   onClick={() => setDialogOpen(false)}
+                  className="px-6"
                   data-testid="button-cancel-moment"
                 >
                   取消
                 </Button>
                 <Button
                   onClick={handlePublish}
-                  disabled={!content.trim() || createMomentMutation.isPending}
-                  className="bg-purple-600 hover:bg-purple-700"
+                  disabled={!content.trim() || content.length > 500 || createMomentMutation.isPending}
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 shadow-md hover:shadow-lg transition-all duration-300"
                   data-testid="button-publish-moment"
                 >
-                  {createMomentMutation.isPending ? "发布中..." : "发布"}
+                  {createMomentMutation.isPending ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      发布中...
+                    </span>
+                  ) : "发布"}
                 </Button>
-                </div>
               </div>
             </div>
           </DialogContent>
         </Dialog>
-
-        {/* AI Moment Trigger Button */}
-        {personas.length > 0 && (
-          <Dialog open={aiMomentDialogOpen} onOpenChange={setAiMomentDialogOpen}>
-            <DialogTrigger asChild>
-              <Button 
-                variant="outline"
-                className="w-full border-2 border-purple-500 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950 font-medium py-6 rounded-xl"
-                data-testid="button-trigger-ai-moment"
-              >
-                <Sparkles className="h-5 w-5 mr-2" />
-                让AI发布动态
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>选择AI发布动态</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2">
-                {personas.map((persona) => (
-                  <div
-                    key={persona.id}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover-elevate"
-                    data-testid={`ai-persona-item-${persona.id}`}
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={persona.avatarUrl || undefined} alt={persona.name} />
-                      <AvatarFallback className="bg-primary/10 font-semibold text-primary">
-                        {persona.name.substring(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    
-                    <div className="flex-1 overflow-hidden">
-                      <div className="font-medium" data-testid={`ai-persona-name-${persona.id}`}>
-                        {persona.name}
-                      </div>
-                      <div className="truncate text-sm text-muted-foreground">
-                        {persona.personality}
-                      </div>
-                    </div>
-                    
-                    <Button
-                      size="sm"
-                      onClick={() => triggerAIMomentMutation.mutate(persona.id)}
-                      disabled={triggerAIMomentMutation.isPending}
-                      className="bg-purple-600 hover:bg-purple-700"
-                      data-testid={`button-trigger-moment-${persona.id}`}
-                    >
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      发布
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </DialogContent>
-          </Dialog>
-        )}
       </div>
 
       {/* Moments List */}
