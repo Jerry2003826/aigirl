@@ -639,9 +639,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast user message first
       broadcastNewMessage(conversationId, userMessage);
       
-      // Then broadcast all AI messages in order
-      for (const aiMessage of aiMessages) {
-        broadcastNewMessage(conversationId, aiMessage);
+      // Broadcast AI messages with 1 second delay between each
+      for (let i = 0; i < aiMessages.length; i++) {
+        if (i > 0) {
+          // Wait 1 second before sending next message
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        broadcastNewMessage(conversationId, aiMessages[i]);
       }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
@@ -761,9 +765,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast user message
       broadcastNewMessage(conversationId, userMessage);
       
-      // Broadcast all split AI messages
-      for (const aiMessage of aiMessages) {
-        broadcastNewMessage(conversationId, aiMessage);
+      // Broadcast AI messages with 1 second delay between each
+      for (let i = 0; i < aiMessages.length; i++) {
+        if (i > 0) {
+          // Wait 1 second before sending next message
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        broadcastNewMessage(conversationId, aiMessages[i]);
       }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
