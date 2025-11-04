@@ -160,7 +160,7 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
         showMobileSidebar={showMobileSidebar}
       />
       
-      {/* Header */}
+      {/* Desktop Header */}
       <div className="border-b p-4 md:p-6 hidden md:block">
         <div className="max-w-3xl mx-auto">
           <h1 className="mb-4 text-2xl font-bold" data-testid="text-page-title">联系人</h1>
@@ -182,6 +182,26 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
           <div className="mt-3 text-sm text-muted-foreground" data-testid="text-contact-count">
             {filteredPersonas.length} 位联系人
           </div>
+        </div>
+      </div>
+
+      {/* Mobile Search Bar */}
+      <div className="border-b p-3 md:hidden">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="text"
+            placeholder="搜索联系人"
+            className="pl-10 h-9"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="input-search-contacts-mobile"
+          />
+        </div>
+        
+        {/* Contact Count on Mobile */}
+        <div className="mt-2 text-xs text-muted-foreground" data-testid="text-contact-count-mobile">
+          {filteredPersonas.length} 位联系人
         </div>
       </div>
 
