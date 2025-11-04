@@ -12,13 +12,24 @@ import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
 import Moments from "@/pages/moments";
 import Settings from "@/pages/settings";
+import Contacts from "@/pages/contacts";
+import ContactDetail from "@/pages/contact-detail";
 import NotFound from "@/pages/not-found";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+
+  // Read conversationId from URL and auto-select
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const conversationId = params.get("conversationId");
+    if (conversationId) {
+      setSelectedConversationId(conversationId);
+    }
+  }, [location]);
 
   // Show loading state
   if (isLoading) {
@@ -67,6 +78,10 @@ function Router() {
             </Route>
             <Route path="/moments" component={Moments} />
             <Route path="/personas" component={Personas} />
+            <Route path="/contacts" component={Contacts} />
+            <Route path="/contacts/:id">
+              {(params) => <ContactDetail personaId={params.id} />}
+            </Route>
             <Route path="/settings" component={Settings} />
             <Route component={NotFound} />
           </Switch>

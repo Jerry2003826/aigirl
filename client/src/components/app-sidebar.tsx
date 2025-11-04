@@ -76,7 +76,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
   const navItems = [
     { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat", key: "chat" },
-    { title: "联系人", path: "/personas", icon: Users, testId: "nav-contacts", key: "personas" },
+    { title: "联系人", path: "/contacts", icon: Users, testId: "nav-contacts", key: "contacts" },
     { title: "动态", path: "/moments", icon: Camera, testId: "nav-moments", key: "moments" },
     { title: "群聊", path: "/chat", icon: UserCircle, testId: "nav-groups", key: "groups" },
   ];

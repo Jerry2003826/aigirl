@@ -126,6 +126,34 @@ export default function Personas() {
     },
   });
 
+  const startChatMutation = useMutation({
+    mutationFn: async (personaId: string) => {
+      // Create conversation
+      const conv = await apiRequest("POST", "/api/conversations", {
+        title: null,
+        isGroup: false,
+      });
+      
+      // Add persona as participant
+      await apiRequest("POST", `/api/conversations/${conv.id}/participants`, {
+        personaId,
+      });
+      
+      return conv;
+    },
+    onSuccess: (conversation) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setLocation(`/chat?conversationId=${conversation.id}`);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start chat",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSubmit = (data: PersonaFormData) => {
     if (editingPersona) {
       updatePersonaMutation.mutate({ id: editingPersona.id, data });
@@ -555,11 +583,21 @@ export default function Personas() {
                   <Button
                     className="flex-1"
                     variant="default"
-                    onClick={() => setLocation(`/chat?personaId=${persona.id}`)}
+                    onClick={() => startChatMutation.mutate(persona.id)}
+                    disabled={startChatMutation.isPending}
                     data-testid={`button-chat-${persona.id}`}
                   >
-                    <MessageCircle className="mr-2 h-4 w-4" />
-                    Chat
+                    {startChatMutation.isPending ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
+                        Starting...
+                      </>
+                    ) : (
+                      <>
+                        <MessageCircle className="mr-2 h-4 w-4" />
+                        Chat
+                      </>
+                    )}
                   </Button>
                 </CardFooter>
               </Card>
