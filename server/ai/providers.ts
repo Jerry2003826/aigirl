@@ -33,18 +33,30 @@ export class GeminiProvider implements AIProvider {
   private client: GoogleGenAI | null = null;
   private isConfigured: boolean = false;
 
-  constructor() {
-    // Validate required environment variables
-    const baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
-    const apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
-    
-    if (!baseUrl || !apiKey) {
-      console.warn("Gemini AI Integrations not configured. Missing AI_INTEGRATIONS_GEMINI_BASE_URL or AI_INTEGRATIONS_GEMINI_API_KEY");
-      this.isConfigured = false;
-      return;
+  constructor(customApiKey?: string | null) {
+    // Priority: customApiKey > Replit AI Integrations
+    let apiKey: string | undefined;
+    let baseUrl: string | undefined;
+
+    if (customApiKey) {
+      // User provided custom API key - use official Google AI API
+      apiKey = customApiKey;
+      baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+      console.log("Using custom Google AI API key");
+    } else {
+      // Fallback to Replit AI Integrations
+      baseUrl = process.env.AI_INTEGRATIONS_GEMINI_BASE_URL;
+      apiKey = process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
+      
+      if (!baseUrl || !apiKey) {
+        console.error("❌ CRITICAL: No API key available. User MUST provide custom API key in settings.");
+        this.isConfigured = false;
+        return;
+      }
+      console.log("Using Replit AI Integrations (Gemini)");
     }
 
-    // This uses Replit AI Integrations - no API key needed, billed to credits
+    // Initialize client
     try {
       this.client = new GoogleGenAI({
         apiKey,
