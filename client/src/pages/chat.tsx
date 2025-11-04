@@ -2,8 +2,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft } from "lucide-react";
+import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -16,6 +17,15 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type Conversation = {
   id: string;
@@ -61,6 +71,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
+  const [historyMessageType, setHistoryMessageType] = useState<"all" | "text" | "image">("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
@@ -86,6 +99,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       return response.json();
     },
     enabled: !!selectedConversationId,
+  });
+
+  // Separate query for chat history dialog - fetch ALL messages
+  const { data: allMessages = [], isLoading: allMessagesLoading } = useQuery<Message[]>({
+    queryKey: ["/api/messages/all", selectedConversationId],
+    queryFn: async () => {
+      if (!selectedConversationId) return [];
+      const response = await fetch(
+        `/api/conversations/${selectedConversationId}/messages?limit=9999&offset=0`
+      );
+      if (!response.ok) throw new Error("获取历史消息失败");
+      return response.json();
+    },
+    enabled: !!selectedConversationId && showHistoryDialog,
   });
 
   const markAsReadMutation = useMutation({
@@ -204,9 +231,38 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   };
 
   const handleViewChatHistory = () => {
-    // Scroll to top to view chat history
-    scrollViewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    // Open the history dialog
+    setShowHistoryDialog(true);
+    setHistorySearchQuery("");
+    setHistoryMessageType("all");
   };
+
+  // Helper function to check if a message contains an image
+  const isImageMessage = (message: Message) => {
+    return message.content.startsWith("data:image") || message.content === "[Image]" || message.content.includes("[Image]");
+  };
+
+  // Filter all messages based on search and type
+  const filteredHistoryMessages = allMessages.filter((message) => {
+    // Filter by search query
+    const matchesSearch = !historySearchQuery || 
+      message.content.toLowerCase().includes(historySearchQuery.toLowerCase());
+    
+    // Filter by message type
+    let matchesType = true;
+    
+    if (historyMessageType === "text") {
+      matchesType = !isImageMessage(message);
+    } else if (historyMessageType === "image") {
+      matchesType = isImageMessage(message);
+    }
+    
+    return matchesSearch && matchesType;
+  });
+
+  // Count messages by type for tabs
+  const textMessagesCount = allMessages.filter(m => !isImageMessage(m)).length;
+  const imageMessagesCount = allMessages.filter(m => isImageMessage(m)).length;
 
   const sendMessageMutation = useMutation({
     mutationFn: async ({ conversationId, content, imageData }: { 
@@ -633,6 +689,140 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           </div>
         </div>
       )}
+
+      {/* Chat History Dialog */}
+      <Dialog open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
+        <DialogContent className="max-w-3xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>聊天记录</DialogTitle>
+            <DialogDescription>
+              查看所有历史消息，支持搜索和筛选
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 flex-1 min-h-0">
+            {/* Search Bar */}
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="搜索聊天内容..."
+                  value={historySearchQuery}
+                  onChange={(e) => setHistorySearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-history-search"
+                />
+              </div>
+            </div>
+
+            {/* Filter Tabs */}
+            <Tabs value={historyMessageType} onValueChange={(v) => setHistoryMessageType(v as "all" | "text" | "image")}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="all" data-testid="tab-all-messages">
+                  全部 ({allMessages.length})
+                </TabsTrigger>
+                <TabsTrigger value="text" data-testid="tab-text-messages">
+                  <FileText className="h-4 w-4 mr-1" />
+                  文字 ({textMessagesCount})
+                </TabsTrigger>
+                <TabsTrigger value="image" data-testid="tab-image-messages">
+                  <ImageIcon className="h-4 w-4 mr-1" />
+                  图片 ({imageMessagesCount})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value={historyMessageType} className="flex-1 min-h-0 mt-4">
+                <ScrollArea className="h-[calc(80vh-280px)]">
+                  {allMessagesLoading ? (
+                    <div className="flex items-center justify-center py-20">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                    </div>
+                  ) : filteredHistoryMessages.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                      <MessageCircle className="mb-4 h-16 w-16 text-muted-foreground" />
+                      <p className="text-lg font-medium">没有找到消息</p>
+                      <p className="text-sm text-muted-foreground">
+                        {historySearchQuery ? "尝试其他搜索词" : "暂无消息记录"}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 pr-4">
+                      {filteredHistoryMessages.map((message) => {
+                        const isUser = message.senderType === "user";
+                        const isImage = isImageMessage(message);
+
+                        return (
+                          <div
+                            key={message.id}
+                            className={cn(
+                              "flex gap-3",
+                              isUser ? "justify-end" : "justify-start"
+                            )}
+                            data-testid={`history-message-${message.id}`}
+                          >
+                            {!isUser && (
+                              <Avatar className="h-8 w-8 shrink-0">
+                                <AvatarImage src={message.personaAvatar || undefined} />
+                                <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                                  AI
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
+
+                            <div className="flex flex-col gap-1 max-w-[70%]">
+                              <div
+                                className={cn(
+                                  "rounded-2xl px-3 py-2",
+                                  isUser
+                                    ? "bg-primary text-primary-foreground rounded-br-md"
+                                    : "bg-muted rounded-bl-md"
+                                )}
+                              >
+                                {isImage ? (
+                                  message.content.startsWith("data:image") ? (
+                                    <img
+                                      src={message.content}
+                                      alt="Sent image"
+                                      className="max-w-full rounded-lg"
+                                    />
+                                  ) : (
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <ImageIcon className="h-4 w-4" />
+                                      <span>图片消息</span>
+                                    </div>
+                                  )
+                                ) : (
+                                  <p className="text-sm whitespace-pre-wrap break-words">
+                                    {message.content}
+                                  </p>
+                                )}
+                              </div>
+                              <div className={cn(
+                                "text-xs text-muted-foreground px-1",
+                                isUser ? "text-right" : "text-left"
+                              )}>
+                                {format(new Date(message.createdAt), "yyyy-MM-dd HH:mm")}
+                              </div>
+                            </div>
+
+                            {isUser && (
+                              <Avatar className="h-8 w-8 shrink-0">
+                                <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                                  我
+                                </AvatarFallback>
+                              </Avatar>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
