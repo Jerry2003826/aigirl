@@ -16,6 +16,11 @@ interface GenerateResponseOptions {
   contextLimit?: number;
 }
 
+interface SelectRespondingPersonaOptions {
+  conversationId: string;
+  userMessage: string;
+}
+
 /**
  * Build conversation context from recent messages
  */
@@ -180,5 +185,129 @@ export async function generateAIResponseStream(
   } catch (error: any) {
     console.error("Error generating AI response stream:", error);
     throw new Error(`Failed to generate AI response stream: ${error.message}`);
+  }
+}
+
+/**
+ * Intelligently select which persona should respond in a group chat
+ */
+export async function selectRespondingPersona(
+  options: SelectRespondingPersonaOptions
+): Promise<string> {
+  const { conversationId, userMessage } = options;
+  
+  // Get conversation to ensure it's a group
+  const conversation = await storage.getConversation(conversationId);
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+  
+  // Get all personas in the conversation
+  const participants = await storage.getConversationParticipants(conversationId);
+  if (participants.length === 0) {
+    throw new Error("No personas in conversation");
+  }
+  
+  // If only one persona, return that one
+  if (participants.length === 1) {
+    return participants[0].personaId;
+  }
+  
+  // Get full persona details
+  const personas = await Promise.all(
+    participants.map(p => storage.getPersona(p.personaId))
+  );
+  
+  // Check if any persona is directly mentioned by name in the message
+  for (const persona of personas) {
+    if (!persona) continue;
+    const nameLower = persona.name.toLowerCase();
+    const messageLower = userMessage.toLowerCase();
+    // Check for direct mentions like "@PersonaName" or "PersonaName,"
+    if (
+      messageLower.includes(`@${nameLower}`) ||
+      messageLower.includes(`${nameLower},`) ||
+      messageLower.startsWith(`${nameLower} `) ||
+      messageLower.startsWith(`${nameLower}:`)
+    ) {
+      return persona.id;
+    }
+  }
+  
+  // Get recent message history to check who responded last
+  const recentMessages = await storage.getMessagesByConversation(conversationId, 10, 0);
+  const aiMessages = recentMessages.filter(m => m.senderType === "ai");
+  
+  // Count responses per persona to ensure fair rotation
+  const responseCounts: Record<string, number> = {};
+  personas.forEach(p => {
+    if (p) responseCounts[p.id] = 0;
+  });
+  
+  aiMessages.forEach(msg => {
+    if (msg.senderId && responseCounts[msg.senderId] !== undefined) {
+      responseCounts[msg.senderId]++;
+    }
+  });
+  
+  // Use AI to determine the most appropriate persona based on message content and personalities
+  try {
+    const personaDescriptions = personas
+      .filter(p => p !== null)
+      .map((p, i) => `${i + 1}. ${p!.name} (ID: ${p!.id}): ${p!.personality}`)
+      .join("\n");
+    
+    const selectionPrompt = `Given the following AI personas in a group chat and the user's latest message, determine which persona would be most appropriate to respond. Consider:
+1. The content and tone of the user's message
+2. Each persona's personality and expertise
+3. Natural conversation flow (avoid having the same persona respond multiple times in a row)
+4. Fair rotation (prefer personas who have responded less recently)
+
+Personas:
+${personaDescriptions}
+
+Recent response counts:
+${Object.entries(responseCounts).map(([id, count]) => {
+  const persona = personas.find(p => p?.id === id);
+  return `${persona?.name}: ${count} recent responses`;
+}).join("\n")}
+
+User's message: "${userMessage}"
+
+Respond with ONLY the persona ID (the alphanumeric string) of the most appropriate persona to respond. Do not include any explanation.`;
+    
+    const response = await openai.chat.completions.create({
+      model: "gpt-5",
+      messages: [
+        {
+          role: "system",
+          content: "You are a conversation moderator that selects the most appropriate AI persona to respond in a group chat. Always respond with ONLY the persona ID, nothing else."
+        },
+        {
+          role: "user",
+          content: selectionPrompt
+        }
+      ],
+      max_completion_tokens: 100,
+    });
+    
+    const selectedId = response.choices[0]?.message?.content?.trim();
+    
+    // Validate the selected ID is one of the personas
+    if (selectedId && personas.some(p => p?.id === selectedId)) {
+      return selectedId;
+    }
+    
+    // Fallback: Choose persona with fewest recent responses
+    const leastActivePersona = Object.entries(responseCounts)
+      .sort((a, b) => a[1] - b[1])[0];
+    return leastActivePersona[0];
+    
+  } catch (error) {
+    console.error("Error selecting persona with AI:", error);
+    // Fallback: Choose persona with fewest recent responses
+    const leastActivePersona = Object.entries(responseCounts)
+      .sort((a, b) => a[1] - b[1])[0];
+    return leastActivePersona[0];
   }
 }

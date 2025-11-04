@@ -6,8 +6,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, Plus, MessageCircle, Loader2 } from "lucide-react";
+import { Send, Plus, MessageCircle, Loader2, Users, UserPlus } from "lucide-react";
 import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -45,6 +49,9 @@ export default function Chat() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
@@ -66,8 +73,7 @@ export default function Chat() {
         title: null,
         isGroup: false,
       }).then((conv: Conversation) => {
-        return apiRequest("/api/conversations/participants", "POST", {
-          conversationId: conv.id,
+        return apiRequest(`/api/conversations/${conv.id}/participants`, "POST", {
           personaId,
         }).then(() => conv);
       }),
@@ -83,6 +89,44 @@ export default function Chat() {
       toast({
         title: "Error",
         description: error.message || "Failed to create conversation",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const createGroupMutation = useMutation({
+    mutationFn: async ({ title, personaIds }: { title: string; personaIds: string[] }) => {
+      const conversation = await apiRequest("/api/conversations", "POST", {
+        title,
+        isGroup: true,
+      });
+      
+      // Add all selected personas as participants
+      await Promise.all(
+        personaIds.map((personaId) =>
+          apiRequest(`/api/conversations/${conversation.id}/participants`, "POST", {
+            personaId,
+          })
+        )
+      );
+      
+      return conversation;
+    },
+    onSuccess: (conversation: Conversation) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setSelectedConversationId(conversation.id);
+      setGroupDialogOpen(false);
+      setGroupTitle("");
+      setSelectedPersonas([]);
+      toast({
+        title: "Success",
+        description: "Group created successfully",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create group",
         variant: "destructive",
       });
     },
@@ -107,23 +151,38 @@ export default function Chat() {
       if (!conversation) return;
 
       try {
-        const participants = await queryClient.fetchQuery({
-          queryKey: ["/api/conversations/participants", conversationId],
-          queryFn: async () => {
-            const response = await fetch(`/api/conversations/${conversationId}/participants`);
-            if (!response.ok) throw new Error("Failed to fetch participants");
-            return response.json();
-          },
-        });
+        // Determine which persona should respond
+        let respondingPersonaId: string;
+        
+        if (conversation.isGroup) {
+          // For group chats, use intelligent rotation
+          setIsTyping(true);
+          const selectionResult = await apiRequest("/api/ai/select-persona", "POST", {
+            conversationId,
+            userMessage: content,
+          });
+          respondingPersonaId = selectionResult.personaId;
+        } else {
+          // For 1-on-1 chats, use the single participant
+          const participants = await queryClient.fetchQuery({
+            queryKey: ["/api/conversations/participants", conversationId],
+            queryFn: async () => {
+              const response = await fetch(`/api/conversations/${conversationId}/participants`);
+              if (!response.ok) throw new Error("Failed to fetch participants");
+              return response.json();
+            },
+          });
+          
+          const personaParticipant = participants[0];
+          if (!personaParticipant) return;
+          respondingPersonaId = personaParticipant.personaId;
+        }
 
-        const personaParticipant = participants[0];
-        if (!personaParticipant) return;
-
-        // Trigger AI response (use captured content, not state)
+        // Trigger AI response
         setIsTyping(true);
         await apiRequest("/api/ai/generate", "POST", {
           conversationId,
-          personaId: personaParticipant.personaId,
+          personaId: respondingPersonaId,
           content,
         });
         setIsTyping(false);
@@ -179,22 +238,134 @@ export default function Chat() {
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold" data-testid="text-conversations-title">Conversations</h2>
             {personas.length > 0 && (
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => {
-                  if (personas.length > 0) {
-                    createConversationMutation.mutate(personas[0].id);
-                  }
-                }}
-                disabled={createConversationMutation.isPending}
-                data-testid="button-new-conversation"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    data-testid="button-new-conversation-menu"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (personas.length > 0) {
+                        createConversationMutation.mutate(personas[0].id);
+                      }
+                    }}
+                    data-testid="button-new-1on1"
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    New 1-on-1 Chat
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setGroupDialogOpen(true)}
+                    data-testid="button-new-group"
+                  >
+                    <Users className="mr-2 h-4 w-4" />
+                    Create Group
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
+        
+        {/* Group Creation Dialog */}
+        <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle data-testid="text-group-dialog-title">Create Group Chat</DialogTitle>
+              <DialogDescription>
+                Add multiple AI personas to create a group conversation
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="group-title">Group Name</Label>
+                <Input
+                  id="group-title"
+                  value={groupTitle}
+                  onChange={(e) => setGroupTitle(e.target.value)}
+                  placeholder="Enter group name"
+                  data-testid="input-group-title"
+                />
+              </div>
+              
+              <div>
+                <Label>Select AI Personas (minimum 2)</Label>
+                <div className="mt-2 space-y-2">
+                  {personas.map((persona) => (
+                    <div key={persona.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`persona-${persona.id}`}
+                        checked={selectedPersonas.includes(persona.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedPersonas([...selectedPersonas, persona.id]);
+                          } else {
+                            setSelectedPersonas(selectedPersonas.filter(id => id !== persona.id));
+                          }
+                        }}
+                        data-testid={`checkbox-persona-${persona.id}`}
+                      />
+                      <label
+                        htmlFor={`persona-${persona.id}`}
+                        className="flex items-center gap-2 text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={persona.avatarUrl || undefined} />
+                          <AvatarFallback className="text-xs">
+                            {persona.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        {persona.name}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setGroupDialogOpen(false);
+                    setGroupTitle("");
+                    setSelectedPersonas([]);
+                  }}
+                  data-testid="button-cancel-group"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (groupTitle.trim() && selectedPersonas.length >= 2) {
+                      createGroupMutation.mutate({
+                        title: groupTitle.trim(),
+                        personaIds: selectedPersonas,
+                      });
+                    }
+                  }}
+                  disabled={!groupTitle.trim() || selectedPersonas.length < 2 || createGroupMutation.isPending}
+                  data-testid="button-create-group"
+                >
+                  {createGroupMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Group"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <ScrollArea className="h-[calc(100%-73px)]">
           {conversations.length === 0 ? (

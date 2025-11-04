@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { generateAIResponse, generateAIResponseStream } from "./aiService";
+import { generateAIResponse, generateAIResponseStream, selectRespondingPersona } from "./aiService";
 import { setupWebSocket, broadcastNewMessage } from "./websocket";
 import { 
   insertAiPersonaSchema, 
@@ -322,6 +322,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid input", errors: error.errors });
       }
       res.status(500).json({ message: "Failed to create message" });
+    }
+  });
+
+  // AI persona selection for group chats
+  app.post('/api/ai/select-persona', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId, userMessage } = req.body;
+      
+      // Verify conversation ownership
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this conversation" });
+      }
+      
+      // Select which persona should respond
+      const personaId = await selectRespondingPersona({
+        conversationId,
+        userMessage,
+      });
+      
+      res.json({ personaId });
+    } catch (error: any) {
+      console.error("Error selecting persona:", error);
+      res.status(500).json({ message: "Failed to select responding persona" });
     }
   });
 
