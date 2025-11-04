@@ -1,252 +1,251 @@
-# Design Guidelines: AI Companion Chat Application
+# AI Companion Chat App Design Guidelines
 
-## Design Approach
+## Design Principles & References
+**Core Pattern:** Design System with Messaging References (WeChat navigation + Telegram density + Discord community + Replika intimacy)
 
-**Selected Approach:** Design System with Messaging App References
-
-This is a utility-focused communication application where efficiency, familiarity, and clarity are paramount. We'll draw inspiration from established messaging platforms (WeChat, Telegram, Discord) while incorporating warmth appropriate for AI companionship.
-
-**Core Design Principles:**
-1. **Familiarity First** - Use established messaging patterns users already understand
-2. **Conversation-Centric** - Everything serves the goal of seamless chatting
-3. **Scannable Hierarchy** - Clear visual distinction between different message types and senders
-4. **Responsive Efficiency** - Fast, lightweight interface that works across devices
+**Principles:** Intimate Familiarity • Conversation Sanctuary • Adaptive Atmosphere • Personality Through Subtlety • Effortless Efficiency
 
 ---
 
 ## Typography
 
-**Primary Font:** System font stack (-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto) for optimal readability and native feel
+**Font Stack:** System fonts (-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial)
 
-**Hierarchy:**
-- **App Title/Headers:** 24px, semibold (600)
-- **Screen Titles:** 20px, semibold (600)
-- **AI Character Names:** 16px, medium (500)
-- **Message Text:** 15px, regular (400)
-- **Timestamps/Meta:** 13px, regular (400)
-- **Small Labels:** 12px, medium (500)
+**Scale:**
+- App Branding: 28px/bold (700)
+- Screen Headers: 22px/semibold (600)
+- Character Names: 17px/semibold (600)
+- Message Content: 16px/regular (400)
+- Metadata: 13px/medium (500)
+- Timestamps/Labels: 12px/regular (400)
+- Micro-copy: 11px/medium (500)
 
-**Line Height:** 1.5 for message content, 1.3 for UI elements
-
----
-
-## Layout System
-
-**Spacing Primitives:** Use Tailwind units of **2, 3, 4, 6, 8, 12** for consistent rhythm
-- `p-2, p-3, p-4` - Small spacing (buttons, compact lists)
-- `p-6, p-8` - Medium spacing (cards, sections)  
-- `p-12` - Large spacing (page margins on desktop)
-- `gap-2, gap-3, gap-4` - Consistent gaps in flex/grid layouts
-
-**Layout Structure:**
-
-**Mobile (default):**
-- Full-width single column
-- Bottom navigation bar (h-16)
-- Top header bar (h-14)
-- Chat area fills remaining space
-
-**Desktop (lg: breakpoint):**
-- Three-column layout: Sidebar (w-72) + Chat List (w-80) + Main Chat Area (flex-1)
-- Max container width: max-w-screen-2xl
-- Persistent side panels, no overlays
-
-**Key Measurements:**
-- Avatar sizes: 10 (small), 12 (medium), 16 (large) Tailwind units
-- Message bubbles: max-w-sm to max-w-md
-- Chat input: h-12 to h-auto (grows with text)
+**Line Heights:** 1.6 (messages), 1.4 (UI), 1.3 (headers)  
+**Dark Mode:** +0.01em letter-spacing for timestamps/labels
 
 ---
 
-## Component Library
+## Layout & Spacing
 
-### Navigation & Structure
+**Tailwind Units:** 2, 3, 4, 6, 8, 12, 16
+- p-2/3: Compact (badges, small buttons)
+- p-4/6: Standard (cards, inputs)
+- p-8/12: Sections (panels, modals)
+- p-16: Heroes, onboarding
+- gap-3/4: Lists/grids breathing room
+- space-y-6/8: Major section rhythm
 
-**Primary Navigation (Mobile Bottom Bar / Desktop Sidebar):**
-- Icon + label combination
-- Active state: filled icon, accent indicator
-- Sections: Chats, Characters, Moments, Profile
-- Desktop sidebar includes user profile card at top
+**Mobile (Base):**
+- Single column + bottom nav (h-16)
+- Top bar (h-14), content fills vertical space
+- FAB: bottom-right, above nav
 
-**Chat List:**
-- Conversation item: Avatar (left) + Name/Preview (center) + Time/Badge (right)
-- Height: h-16 to h-20
-- Unread indicator: Small badge with count
-- Active conversation: subtle background highlight
-- Swipe actions on mobile (archive, delete)
+**Desktop (lg: 1024px+):**
+- Triple-pane: Nav sidebar (w-20/w-64) + List (w-80) + Content (flex-1)
+- Max container: max-w-screen-2xl mx-auto
+- 1px borders, no shadows
 
-**Top Header:**
-- Character/Group name (truncate)
-- Status indicator if applicable
-- Right actions: info, search, settings icons
-- Back button on mobile
+**Grids:**
+- Character cards: cols-1 (mobile), cols-2 (md), cols-3 (lg), cols-4 (xl)
+- Images: cols-2/3, gap-2
 
-### Chat Interface
+---
 
-**Message Bubbles:**
-- User messages: align right, rounded-2xl, distinct treatment
-- AI messages: align left, rounded-2xl, different treatment
-- Max width: max-w-md on desktop, max-w-[85%] on mobile
-- Padding: px-4 py-3
-- Consecutive messages from same sender: reduced top spacing (space-y-1)
+## Components
 
-**Message Features:**
-- Avatar only on first message in sequence (for AI)
-- Timestamp on hover/long-press, displayed with opacity-60
-- Typing indicator: animated dots, h-12
-- System messages: centered, small, muted
+### Navigation
+**Mobile:** Bottom bar, 4-5 icons, h-16  
+**Desktop:** Collapsible sidebar (icon/icon+label)  
+**Active:** rounded-full pill background  
+**Badges:** w-5 h-5, top-right corner
 
-**Message Input:**
-- Sticky bottom position
-- Rounded text input with px-4 py-3
-- Send button (icon only) on right
-- Attachment button on left
-- Auto-expanding up to 5 rows
+**Header Bar (h-14, px-4):**
+- Chat: Avatar + name (left), actions (right)
+- Lists: Title (left), filter/search/add (right)
+- Back button on mobile drill-downs
 
-**Group Chat Specifics:**
-- Small avatar + name prefix for each AI message
-- Different bubble styling per AI character (subtle variations)
-- Turn indicators to show speaking order
+### Chat List
+**Items (h-18, py-3):**
+- Avatar (w-12 h-12) + Name/Preview + Time/Badge
+- Preview: 2-line truncate, opacity-70
+- Pinned: Sticky top with separator
+- Swipe: Archive/Delete (80px each)
 
-### Character Management
+### Messages
+**Bubbles:**
+- User: Right, rounded-3xl (rounded-tl-md first in sequence)
+- AI: Left, rounded-3xl (rounded-tr-md first in sequence)
+- Max-width: max-w-md (desktop), max-w-[80%] (mobile)
+- Padding: px-4 py-3 (px-5 py-4 longer messages)
+- Spacing: space-y-1 (same sender), space-y-6 (sender change)
 
-**Character Cards:**
-- Large avatar (w-20 h-20 or larger)
-- Name, tagline/personality snippet
-- Stats: message count, created date
-- Edit/Delete actions
-- Grid layout: grid-cols-2 on mobile, grid-cols-3 on tablet, grid-cols-4 on desktop
+**Metadata:** Timestamp on hover/long-press, opacity-60, absolute below bubble  
+**Reactions:** Row below, max-h-8, gap-1  
+**Typing:** 3 pulsing dots, 1.4s duration, 0.2s stagger
 
-**Character Creation/Edit Form:**
-- Large avatar upload area (centered, w-32 h-32)
-- Form fields with clear labels
-- Text area for personality/backstory (min-h-32)
-- Save button: prominent, full-width on mobile
+**Input Composer (sticky bottom, backdrop-blur-lg, px-4 py-3):**
+- Text area: min-h-[44px], max-h-[120px], rounded-full
+- Border-2 on focus
+- Buttons (w-10 h-10): Attachment, Emoji, Send
+- Placeholder: "Message [Character Name]..."
 
-**Character Profile View:**
-- Hero section: large avatar + name + bio
-- Tabs: About, Memories, Settings
-- Conversation starter suggestions
+**Group Chat:**
+- Avatar w-8 h-8 inline with AI name
+- Turn order: vertical line connecting messages
+- Multi-select: Left-side checkboxes
 
-### Moments/Feed (if implemented)
+### Character Cards
 
-**Feed Layout:**
-- Single column, max-w-2xl centered
-- Post card: rounded-lg, p-4 to p-6
-- Avatar + name + timestamp header
-- Content area (text + images grid if applicable)
-- Interaction bar: like, comment counts + actions
+**Grid Card (rounded-2xl, p-6, aspect-[3/4]):**
+- Avatar: w-20 h-20, rounded-full, centered top
+- Name: 17px semibold, truncate
+- Tagline: 13px, opacity-70, line-clamp-2
+- Stats: Bottom, small icons + numbers
+- Actions: Floating on hover, top-right
 
-**Post Creation:**
-- Modal or full-screen overlay
-- Text area (min-h-40)
-- Image upload grid (grid-cols-3)
-- Post button: top-right on mobile, bottom-right on desktop
+**Detail View:**
+- Hero: h-64, gradient, avatar w-32 h-32 centered
+- Name + bio: max-w-md centered
+- Tabs: About/Memories/Chat Settings (sticky)
+- Conversation starters: rounded-full pills, px-6 py-3, 2-col grid
 
-### Forms & Inputs
+**Creation/Edit:**
+- Mobile: Full-screen modal, Desktop: max-w-2xl overlay
+- Avatar: w-40 h-40 circular with camera overlay
+- Sections: Name (h-12), Personality (select), Bio (min-h-32), Traits (tags)
+- Actions: Sticky bottom on mobile
 
-**Text Inputs:**
-- Border: border-2 for focus states, border for default
-- Rounded: rounded-lg
-- Height: h-12 for single-line
-- Padding: px-4 py-3
+### Moments/Feed
+
+**Layout:** Single column, max-w-2xl mx-auto, p-4
+
+**Post Card (rounded-xl, p-6, space-y-4):**
+- Header: Avatar (w-11 h-11) + name + timestamp
+- Content: 16px, preserve breaks, max 500 chars
+- Media: 1 image (aspect-video), 2-4 (cols-2), 5+ (cols-3)
+- Interactions: Like/Comment/Share, gap-6
+- Comments: First 2 + "View all X" link
+
+**Composer:**
+- Mobile: Full-screen, Desktop: max-w-lg modal
+- Text: min-h-40, auto-expand
+- Images: Grid (max 9) with remove
+- Post button: Top-right, disabled until content
+
+### Forms & Buttons
+
+**Inputs:**
+- Text: h-12, rounded-lg, px-4, border-2 on focus
+- Textarea: min-h-32, rounded-xl, p-4
+- Select: h-12, rounded-lg, chevron right
+- Toggle: w-11 h-6, rounded-full
 
 **Buttons:**
-- Primary action: rounded-lg, px-6 py-3, medium (500) font weight
-- Secondary: outlined or ghost variant
-- Icon buttons: w-10 h-10, rounded-full
+- Primary: rounded-xl, h-12, px-8, medium (500)
+- Secondary: Outlined, same dimensions
+- Text: h-10, px-4
+- Icon: w-10 h-10 (w-11 h-11 primary), rounded-full
+- FAB: w-14 h-14, fixed bottom-20/6 right-4/6
 
-**Authentication Screens:**
-- Centered form on desktop (max-w-md)
-- Full-screen on mobile with top padding
-- Logo at top (h-12 to h-16)
-- Social login buttons: full-width with icon + text
-- Divider with "or" text
+**Auth Screens:**
+- Logo: h-16, mb-12, centered
+- Form: max-w-md mx-auto (desktop), p-6 (mobile)
+- Social: h-12, rounded-xl, brand icons
+- Divider: "or continue with email"
+- Stack: space-y-4
 
-### Overlays & Modals
+### Overlays
 
-**Character Info Sheet:**
-- Slides from right on desktop, bottom sheet on mobile
-- Close button: top-right
-- Scrollable content area
+**Bottom Sheet (Mobile):**
+- rounded-t-3xl, max-h-90vh
+- Drag handle: w-12 h-1, rounded-full
 
-**Confirmation Dialogs:**
-- Centered overlay (max-w-sm)
-- Rounded-xl
-- Title, message, action buttons
-- Destructive actions in red/warning treatment
+**Modal (Desktop):**
+- backdrop-blur-md, centered
+- rounded-2xl: max-w-md/2xl/4xl
+- Close: w-8 h-8, top-right
+
+**Toast:**
+- Bottom-center (mobile), top-right (desktop)
+- rounded-xl, px-6 py-4, min-w-[280px]
+- Icon + message + dismiss, 4s auto-dismiss
 
 ---
 
 ## Images
 
-**Profile/Character Avatars:**
-- Required throughout the app
-- Circular (rounded-full)
-- Sizes: 40px (chat list), 48px (message bubbles), 128px (profiles)
-- Default placeholder: gradient or icon if no image uploaded
+**Avatar Sizes:** w-8 (inline), w-12 (lists), w-20 (cards), w-32 (profiles), w-40 (creation)  
+**Style:** rounded-full, gradient + initials placeholder
 
-**Moments/Feed Images:**
-- Support for 1-9 images per post
-- Grid layout for multiple images (grid-cols-2 or grid-cols-3)
-- Square aspect ratio (aspect-square) with object-cover
-- Lightbox/fullscreen view on click
+**Onboarding Hero:** h-screen, centered w-64 h-64 illustration, backdrop-blur-md CTA
 
-**Welcome/Empty States:**
-- Centered illustrations (w-48 h-48 or larger)
-- Used when: no chats, no characters, empty moments feed
-- Below illustration: heading + description text
+**Empty States:** w-48 h-48 illustration, 22px heading, 16px description, action button
 
-**No Large Hero Image** - This is a utility app, not a marketing site. Focus is on functional screens.
+**Feed Images:** 1-9 per post, aspect-square, object-cover, gap-2, lightbox on click
 
 ---
 
-## Interaction Patterns
+## Light/Dark Modes
 
-**Real-time Updates:**
-- New messages appear with subtle fade-in
-- Typing indicators animate smoothly
-- Unread badges update instantly
-- Online/offline status with small indicator dot
+**Elevation:**
+- Light: Subtle shadows
+- Dark: Layered surfaces, borders (no shadows)
 
-**Touch Targets:**
-- Minimum 44px (h-11) for all interactive elements
-- Adequate spacing between touch targets (gap-2 minimum)
+**Bubbles:**
+- Light: Crisp contrast
+- Dark: Softer distinction
 
-**Loading States:**
-- Message sending: optimistic UI with pending indicator
-- Failed messages: retry button inline
-- Skeleton screens for chat list and message loading
-- Spinner for full-page loads
+**Borders:**
+- Light: opacity-20
+- Dark: opacity-10
 
-**Transitions:**
-- Screen transitions: slide on mobile, instant on desktop
-- Modal appearances: fade + scale
-- Keep animations subtle and fast (150-200ms)
+**Avatars:** Border in dark mode (opacity-10)
+
+**Transition:** transition-colors duration-200, persist preference
+
+---
+
+## Animation & Interaction
+
+**Subtle Motion (Essential Only):**
+- Message send: 150ms fade-in
+- Typing: 1.4s pulsing dots
+- Nav: 200ms slide (mobile), instant (desktop)
+- Modals: 200ms fade + scale(0.95→1)
+- Toasts: 300ms slide-in
+
+**Feedback:**
+- Button: 100ms scale(0.97) active
+- List tap: 150ms background flash
+- Long-press: scale(1.02) after 600ms
+
+**Loading:**
+- Skeletons: Pulsing placeholders
+- Spinners: w-5 h-5 (buttons), w-8 h-8 (sections)
+- Optimistic UI: Show immediately, pending indicator
+
+---
+
+## Responsive Breakpoints
+
+**Base (0-767px):** Single column, bottom nav, full-screen modals  
+**md (768-1023px):** Split views, larger type  
+**lg (1024px+):** Triple-pane, hover states, keyboard shortcuts  
+**xl (1280px+):** Increased max-widths
+
+**Touch vs Pointer:**
+- Mobile: 44px targets, swipe gestures
+- Desktop: 36px minimum, hover, right-click menus
+
+**Adaptive:** Bottom bar→Sidebar, Full-screen→Centered, Overlay→Persistent, 80% width→max-w-md
 
 ---
 
 ## Accessibility
 
-- Minimum contrast ratio: 4.5:1 for text
-- Focus states: visible outline on all interactive elements (ring-2)
-- Semantic HTML: proper heading hierarchy, button vs link usage
-- ARIA labels for icon-only buttons
-- Keyboard navigation: tab order, enter/escape shortcuts
-- Screen reader announcements for new messages
-
----
-
-## Responsive Behavior
-
-**Mobile-First Breakpoints:**
-- **Base (mobile):** Single column, bottom nav, full-screen views
-- **md (768px):** Tablet - introduce split views for some screens
-- **lg (1024px):** Desktop - three-column layout, persistent panels
-- **xl (1280px+):** Wider max-width, more comfortable spacing
-
-**Key Responsive Changes:**
-- Navigation: Bottom bar → Sidebar
-- Chat list: Overlay → Persistent column
-- Message bubbles: 85% width → Fixed max-width
-- Forms: Full-width → Centered cards
+- **Contrast:** 4.5:1 text, 3:1 UI components
+- **Focus:** 2px ring all interactive elements
+- **Keyboard:** Full navigation, logical tab order
+- **Screen readers:** Semantic HTML, ARIA labels, live regions for messages
+- **Motion:** Respect prefers-reduced-motion
+- **Scaling:** Functional to 200% zoom
