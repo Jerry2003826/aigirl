@@ -50,6 +50,7 @@ export interface IStorage {
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string): Promise<void>;
   markMessageAsRead(id: string): Promise<void>;
+  markConversationMessagesAsRead(conversationId: string): Promise<void>;
   
   // Memory operations
   getMemory(id: string): Promise<Memory | undefined>;
@@ -303,6 +304,15 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async markConversationMessagesAsRead(conversationId: string): Promise<void> {
+    Array.from(this.messages.values()).forEach((message) => {
+      if (message.conversationId === conversationId && !message.isRead) {
+        message.isRead = true;
+        this.messages.set(message.id, message);
+      }
+    });
+  }
+
   // Memory operations
   async getMemory(id: string): Promise<Memory | undefined> {
     return this.memories.get(id);
@@ -509,6 +519,15 @@ export class DatabaseStorage implements IStorage {
 
   async markMessageAsRead(id: string): Promise<void> {
     await db.update(messages).set({ isRead: true }).where(eq(messages.id, id));
+  }
+
+  async markConversationMessagesAsRead(conversationId: string): Promise<void> {
+    await db.update(messages).set({ isRead: true }).where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.isRead, false)
+      )
+    );
   }
 
   // Memory operations

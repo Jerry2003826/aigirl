@@ -325,6 +325,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark all messages in a conversation as read
+  app.post('/api/conversations/:conversationId/read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId } = req.params;
+      
+      // Verify user owns this conversation
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't have access to this conversation" });
+      }
+      
+      await storage.markConversationMessagesAsRead(conversationId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking messages as read:", error);
+      res.status(500).json({ message: "Failed to mark messages as read" });
+    }
+  });
+
   // AI persona selection for group chats
   app.post('/api/ai/select-persona', isAuthenticated, async (req: any, res) => {
     try {

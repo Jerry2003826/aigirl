@@ -52,7 +52,11 @@ export default function Chat() {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [groupTitle, setGroupTitle] = useState("");
   const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
+  const [messageLimit, setMessageLimit] = useState(50);
+  const [failedMessageId, setFailedMessageId] = useState<string | null>(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef(0);
 
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -63,8 +67,21 @@ export default function Chat() {
   });
 
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
-    queryKey: ["/api/messages", selectedConversationId],
+    queryKey: ["/api/messages", selectedConversationId, messageLimit],
+    queryFn: async () => {
+      if (!selectedConversationId) return [];
+      const response = await fetch(
+        `/api/conversations/${selectedConversationId}/messages?limit=${messageLimit}&offset=0`
+      );
+      if (!response.ok) throw new Error("Failed to fetch messages");
+      return response.json();
+    },
     enabled: !!selectedConversationId,
+  });
+
+  const markAsReadMutation = useMutation({
+    mutationFn: (conversationId: string) =>
+      apiRequest(`/api/conversations/${conversationId}/read`, "POST"),
   });
 
   const createConversationMutation = useMutation({
@@ -192,7 +209,8 @@ export default function Chat() {
         console.error("Error generating AI response:", error);
       }
     },
-    onError: (error: any) => {
+    onError: (error: any, variables) => {
+      setFailedMessageId(variables.conversationId);
       toast({
         title: "Error",
         description: error.message || "Failed to send message",
@@ -200,6 +218,13 @@ export default function Chat() {
       });
     },
   });
+
+  const retryLastMessage = () => {
+    if (failedMessageId && messageInput.trim()) {
+      setFailedMessageId(null);
+      handleSendMessage();
+    }
+  };
 
   const handleSendMessage = () => {
     if (!messageInput.trim() || !selectedConversationId) return;
@@ -216,9 +241,25 @@ export default function Chat() {
     }
   };
 
+  // Auto-scroll only for new messages, not when loading more history
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Only scroll if we got new messages (not loading older ones)
+    if (!isLoadingMore && messages.length > prevMessagesLengthRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessagesLengthRef.current = messages.length;
+    setIsLoadingMore(false);
   }, [messages]);
+
+  // Mark messages as read when conversation is selected
+  useEffect(() => {
+    if (selectedConversationId && messages.length > 0) {
+      const hasUnreadMessages = messages.some(m => !m.isRead && m.senderType === "ai");
+      if (hasUnreadMessages) {
+        markAsReadMutation.mutate(selectedConversationId);
+      }
+    }
+  }, [selectedConversationId, messages]);
 
   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
 
@@ -444,6 +485,23 @@ export default function Chat() {
 
             {/* Messages */}
             <ScrollArea className="flex-1 p-4">
+              {/* Load More Button */}
+              {!messagesLoading && messages.length >= messageLimit && (
+                <div className="flex justify-center mb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setIsLoadingMore(true);
+                      setMessageLimit(prev => prev + 50);
+                    }}
+                    data-testid="button-load-more"
+                  >
+                    Load More Messages
+                  </Button>
+                </div>
+              )}
+              
               {messagesLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
@@ -502,6 +560,25 @@ export default function Chat() {
                       </div>
                     );
                   })}
+                  
+                  {/* Typing Indicator */}
+                  {isTyping && (
+                    <div className="flex gap-3 justify-start" data-testid="typing-indicator">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-xs text-primary">
+                          AI
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="max-w-md rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
                   <div ref={messagesEndRef} />
                 </div>
               )}
@@ -509,6 +586,19 @@ export default function Chat() {
 
             {/* Message Input */}
             <div className="border-t bg-background p-4">
+              {failedMessageId === selectedConversationId && (
+                <div className="mb-2 flex items-center gap-2 text-sm text-destructive">
+                  <span>Message failed to send</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={retryLastMessage}
+                    data-testid="button-retry-message"
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
               <div className="flex gap-3">
                 <Textarea
                   value={messageInput}
