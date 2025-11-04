@@ -180,7 +180,7 @@ export default function GroupsPage() {
                           checked={selectedPersonas.includes(persona.id)}
                           onCheckedChange={() => togglePersona(persona.id)}
                           data-testid={`checkbox-persona-${persona.id}`}
-                          className="shrink-0"
+                          className="shrink-0 h-5 w-5"
                         />
                         <Avatar className="h-10 w-10 shrink-0">
                           <AvatarImage src={persona.avatarUrl || undefined} />

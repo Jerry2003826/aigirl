@@ -307,7 +307,7 @@ export default function Personas() {
                                   type="button"
                                   size="icon"
                                   variant="destructive"
-                                  className="absolute -right-2 -top-2 h-6 w-6 !rounded-full p-0"
+                                  className="absolute -right-2 -top-2 h-6 w-6 min-h-6 min-w-6 !rounded-full p-0 shrink-0"
                                   onClick={clearAvatar}
                                   data-testid="button-clear-avatar"
                                 >
