@@ -213,17 +213,18 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
       />
       
       {/* Publish Button */}
-      <div className="p-4">
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button 
-              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
-              data-testid="button-create-moment"
-            >
-              <Plus className="h-5 w-5 mr-2" />
-              <span className="text-base">发布动态</span>
-            </Button>
-          </DialogTrigger>
+      <div className="p-4 md:p-6">
+        <div className="max-w-3xl mx-auto">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button 
+                className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium py-3 md:py-3.5 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300"
+                data-testid="button-create-moment"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                <span className="text-base md:text-lg">发布动态</span>
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-5">
@@ -328,11 +329,12 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Moments List */}
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-4 md:pb-6">
+        <div className="max-w-3xl mx-auto space-y-3 md:space-y-4">
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">加载中...</div>
           ) : momentsWithDetails.length === 0 ? (

@@ -130,7 +130,8 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
       />
       
       {/* Create Group Button */}
-      <div className="p-4">
+      <div className="p-4 md:p-6">
+        <div className="max-w-3xl mx-auto">
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Card className="hover-elevate cursor-pointer" data-testid="button-create-group">
@@ -247,10 +248,12 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
             </div>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Groups List */}
-      <div className="flex-1 overflow-y-auto px-4">
+      <div className="flex-1 overflow-y-auto px-4 md:px-6">
+        <div className="max-w-3xl mx-auto">
         <div className="mb-3">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Users className="h-5 w-5" />
@@ -314,6 +317,7 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

@@ -496,7 +496,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
                         <div
                           className={cn(
-                            "max-w-[75%] rounded-3xl px-4 py-3",
+                            "max-w-[75%] md:max-w-md lg:max-w-lg rounded-3xl px-4 py-3",
                             isUser
                               ? "bg-primary text-primary-foreground rounded-br-md"
                               : "bg-muted rounded-bl-md"
@@ -524,7 +524,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                           AI
                         </AvatarFallback>
                       </Avatar>
-                      <div className="max-w-[75%] rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
+                      <div className="max-w-[75%] md:max-w-md lg:max-w-lg rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
                         <div className="flex gap-1.5">
                           <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }}></div>
                           <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }}></div>

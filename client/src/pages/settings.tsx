@@ -109,7 +109,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
         showMobileSidebar={showMobileSidebar}
       />
       
-      <div className="container mx-auto max-w-4xl p-6">
+      <div className="container mx-auto max-w-3xl p-4 md:p-6">
         {/* Header */}
         <div className="mb-8 hidden md:block">
           <div className="flex items-center gap-3 mb-2">

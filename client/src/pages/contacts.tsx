@@ -161,30 +161,33 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
       />
       
       {/* Header */}
-      <div className="border-b p-4 hidden md:block">
-        <h1 className="mb-4 text-2xl font-bold" data-testid="text-page-title">联系人</h1>
-        
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="text"
-            placeholder="搜索联系人"
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search-contacts"
-          />
-        </div>
+      <div className="border-b p-4 md:p-6 hidden md:block">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="mb-4 text-2xl font-bold" data-testid="text-page-title">联系人</h1>
+          
+          {/* Search Bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="搜索联系人"
+              className="pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="input-search-contacts"
+            />
+          </div>
 
-        {/* Contact Count */}
-        <div className="mt-3 text-sm text-muted-foreground" data-testid="text-contact-count">
-          {filteredPersonas.length} 位联系人
+          {/* Contact Count */}
+          <div className="mt-3 text-sm text-muted-foreground" data-testid="text-contact-count">
+            {filteredPersonas.length} 位联系人
+          </div>
         </div>
       </div>
 
       {/* Contacts List */}
-      <div className="flex-1 overflow-y-auto pb-4">
+      <div className="flex-1 overflow-y-auto pb-4 md:pb-6">
+        <div className="max-w-3xl mx-auto">
         {groupedPersonas.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <p className="text-muted-foreground" data-testid="text-no-contacts">没有找到联系人</p>
@@ -233,6 +236,7 @@ export default function Contacts({ onBackToList = () => {}, showMobileSidebar = 
             ))}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
