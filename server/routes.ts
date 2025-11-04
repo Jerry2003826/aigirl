@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories } from "./aiService";
@@ -11,6 +12,25 @@ import {
   insertMessageSchema,
   insertConversationParticipantSchema 
 } from "@shared/schema";
+
+// Rate limiter for message sending (20 messages per minute per user)
+const messageLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20, // Limit each user to 20 requests per minute
+  message: "Too many messages sent. Please wait a moment before sending more.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Use user ID from session for rate limiting
+  keyGenerator: (req, res) => {
+    // Use authenticated user ID if available, otherwise fall back to IP
+    const userId = (req as any).user?.claims?.sub;
+    if (userId) {
+      return `user:${userId}`;
+    }
+    // Use the provided ipKeyGenerator for proper IPv6 handling
+    return rateLimit.ipKeyGenerator(req, res);
+  },
+});
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -286,7 +306,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/messages', isAuthenticated, async (req: any, res) => {
+  app.post('/api/messages', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { conversationId } = req.body;
@@ -349,7 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI persona selection for group chats
-  app.post('/api/ai/select-persona', isAuthenticated, async (req: any, res) => {
+  app.post('/api/ai/select-persona', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { conversationId, userMessage } = req.body;
@@ -377,7 +397,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI generation routes
-  app.post('/api/ai/generate', isAuthenticated, async (req: any, res) => {
+  app.post('/api/ai/generate', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { conversationId, personaId, content } = req.body;
@@ -453,7 +473,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/ai/generate-stream', isAuthenticated, async (req: any, res) => {
+  app.post('/api/ai/generate-stream', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { conversationId, personaId, content } = req.body;
