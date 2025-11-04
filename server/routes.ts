@@ -704,9 +704,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(part => part.trim())  // Trim whitespace
         .filter(part => part.length > 0);  // Remove empty parts
       
-      // If no valid parts after splitting, use original response
+      // Broadcast user message first
+      broadcastNewMessage(conversationId, userMessage);
+      
+      // Save and broadcast AI messages with 1 second delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
+        // No parts after splitting, save original response
         const aiMessage = await storage.createMessage({
           conversationId,
           senderId: personaId,
@@ -716,35 +720,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "sent",
         });
         aiMessages.push(aiMessage);
+        broadcastNewMessage(conversationId, aiMessage);
       } else {
-        // Create a separate message for each part
-        for (const part of messageParts) {
+        // Save and broadcast each part with 1 second delay
+        for (let i = 0; i < messageParts.length; i++) {
+          if (i > 0) {
+            // Wait 1 second before saving and sending next message
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
           const aiMessage = await storage.createMessage({
             conversationId,
             senderId: personaId,
             senderType: "ai",
-            content: part,
+            content: messageParts[i],
             isRead: false,
             status: "sent",
           });
           aiMessages.push(aiMessage);
+          broadcastNewMessage(conversationId, aiMessage);
         }
       }
       
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
-      
-      // Broadcast user message first
-      broadcastNewMessage(conversationId, userMessage);
-      
-      // Broadcast AI messages with 1 second delay between each
-      for (let i = 0; i < aiMessages.length; i++) {
-        if (i > 0) {
-          // Wait 1 second before sending next message
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        broadcastNewMessage(conversationId, aiMessages[i]);
-      }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
       extractAndStoreMemories(conversationId, personaId, content, aiResponse)
@@ -831,9 +830,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .map(part => part.trim())
         .filter(part => part.length > 0);
       
-      // Save split messages to database
+      // Broadcast user message first
+      broadcastNewMessage(conversationId, userMessage);
+      
+      // Save and broadcast AI messages with 1 second delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
+        // No parts after splitting, save original response
         const aiMessage = await storage.createMessage({
           conversationId,
           senderId: personaId,
@@ -843,34 +846,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           status: "sent",
         });
         aiMessages.push(aiMessage);
+        broadcastNewMessage(conversationId, aiMessage);
       } else {
-        for (const part of messageParts) {
+        // Save and broadcast each part with 1 second delay
+        for (let i = 0; i < messageParts.length; i++) {
+          if (i > 0) {
+            // Wait 1 second before saving and sending next message
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+          
           const aiMessage = await storage.createMessage({
             conversationId,
             senderId: personaId,
             senderType: "ai",
-            content: part,
+            content: messageParts[i],
             isRead: false,
             status: "sent",
           });
           aiMessages.push(aiMessage);
+          broadcastNewMessage(conversationId, aiMessage);
         }
       }
       
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
-      
-      // Broadcast user message
-      broadcastNewMessage(conversationId, userMessage);
-      
-      // Broadcast AI messages with 1 second delay between each
-      for (let i = 0; i < aiMessages.length; i++) {
-        if (i > 0) {
-          // Wait 1 second before sending next message
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-        broadcastNewMessage(conversationId, aiMessages[i]);
-      }
       
       // Extract and store memories asynchronously (don't await to avoid blocking response)
       extractAndStoreMemories(conversationId, personaId, content, fullResponse)

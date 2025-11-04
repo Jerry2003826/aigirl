@@ -641,12 +641,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                           <p className="whitespace-pre-wrap break-words text-base leading-relaxed" data-testid={`text-message-content-${message.id}`}>
                             {message.content}
                           </p>
-                          <p className={cn(
-                            "mt-1.5 text-sm opacity-70",
-                            isUser ? "text-primary-foreground" : "text-muted-foreground"
-                          )}>
-                            {format(new Date(message.createdAt), "HH:mm")}
-                          </p>
                         </div>
                       </div>
                     );
