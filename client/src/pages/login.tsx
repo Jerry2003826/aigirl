@@ -1,6 +1,6 @@
 import { Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SiGoogle, SiMicrosoft } from "react-icons/si";
+import { SiGoogle, SiGithub } from "react-icons/si";
 
 export default function Login() {
   const handleLogin = () => {
@@ -62,10 +62,10 @@ export default function Login() {
             <button
               onClick={handleLogin}
               className="w-12 h-12 rounded-full bg-gray-800 hover-elevate active-elevate-2 flex items-center justify-center border border-gray-700"
-              aria-label="Login with Microsoft"
-              data-testid="button-login-microsoft"
+              aria-label="Login with GitHub"
+              data-testid="button-login-github"
             >
-              <SiMicrosoft className="w-5 h-5 text-gray-300" />
+              <SiGithub className="w-5 h-5 text-gray-300" />
             </button>
           </div>
 
