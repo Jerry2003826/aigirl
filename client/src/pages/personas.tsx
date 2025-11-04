@@ -12,8 +12,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAiPersonaSchema } from "@shared/schema";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Plus, Edit, Trash2, MessageCircle, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon } from "lucide-react";
+import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -42,6 +42,8 @@ export default function Personas() {
   const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: personas = [], isLoading } = useQuery<Persona[]>({
     queryKey: ["/api/personas"],
@@ -56,7 +58,7 @@ export default function Personas() {
       systemPrompt: "",
       backstory: "",
       greeting: "",
-      model: "gpt-4o",
+      model: "gemini-2.5-pro", // Default to Gemini 2.5 Pro
       responseDelay: 0,
       userId: "",
     },
@@ -132,8 +134,48 @@ export default function Personas() {
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload an image file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      setAvatarPreview(base64);
+      form.setValue("avatarUrl", base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearAvatar = () => {
+    setAvatarPreview("");
+    form.setValue("avatarUrl", "");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const openEditDialog = (persona: Persona) => {
     setEditingPersona(persona);
+    setAvatarPreview(persona.avatarUrl ?? "");
     form.reset({
       name: persona.name,
       avatarUrl: persona.avatarUrl ?? "",
@@ -141,7 +183,7 @@ export default function Personas() {
       systemPrompt: persona.systemPrompt,
       backstory: persona.backstory ?? "",
       greeting: persona.greeting ?? "",
-      model: persona.model || "gpt-4o",
+      model: persona.model || "gemini-2.5-pro",
       responseDelay: persona.responseDelay || 0,
       userId: "",
     });
@@ -150,6 +192,7 @@ export default function Personas() {
 
   const openCreateDialog = () => {
     setEditingPersona(null);
+    setAvatarPreview("");
     form.reset();
     setDialogOpen(true);
   };
@@ -222,16 +265,60 @@ export default function Personas() {
                     name="avatarUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Avatar URL (optional)</FormLabel>
+                        <FormLabel>Avatar (optional)</FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="https://example.com/avatar.jpg" 
-                            {...field} 
-                            data-testid="input-persona-avatar"
-                          />
+                          <div className="space-y-4">
+                            {avatarPreview && (
+                              <div className="relative inline-block">
+                                <Avatar className="h-24 w-24 border-2 border-border">
+                                  <AvatarImage src={avatarPreview} />
+                                  <AvatarFallback>Preview</AvatarFallback>
+                                </Avatar>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="destructive"
+                                  className="absolute -right-2 -top-2 h-6 w-6 rounded-full"
+                                  onClick={clearAvatar}
+                                  data-testid="button-clear-avatar"
+                                >
+                                  <XIcon className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                                data-testid="button-upload-avatar"
+                              >
+                                <Upload className="mr-2 h-4 w-4" />
+                                Upload Image
+                              </Button>
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleFileUpload}
+                                data-testid="input-file-avatar"
+                              />
+                            </div>
+                            <Input 
+                              placeholder="Or paste image URL" 
+                              {...field}
+                              value={field.value || ""}
+                              onChange={(e) => {
+                                field.onChange(e);
+                                setAvatarPreview(e.target.value);
+                              }}
+                              data-testid="input-persona-avatar-url"
+                            />
+                          </div>
                         </FormControl>
                         <FormDescription>
-                          Provide a URL to an image for the persona's avatar
+                          Upload an image file or provide an image URL
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -292,7 +379,8 @@ export default function Personas() {
                           <Textarea 
                             placeholder="I grew up in a small town and love..."
                             className="min-h-[100px]"
-                            {...field} 
+                            {...field}
+                            value={field.value || ""}
                             data-testid="input-persona-backstory"
                           />
                         </FormControl>
@@ -313,7 +401,8 @@ export default function Personas() {
                         <FormControl>
                           <Input 
                             placeholder="Hi! I'm excited to chat with you!" 
-                            {...field} 
+                            {...field}
+                            value={field.value || ""}
                             data-testid="input-persona-greeting"
                           />
                         </FormControl>
@@ -331,20 +420,15 @@ export default function Personas() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>AI Model</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-persona-model">
-                              <SelectValue placeholder="Select AI model" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="gpt-4o">GPT-4o (Recommended)</SelectItem>
-                            <SelectItem value="gpt-4o-mini">GPT-4o Mini (Faster, cheaper)</SelectItem>
-                            <SelectItem value="gpt-5">GPT-5 (Most advanced)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <Input 
+                            placeholder="gemini-2.5-pro (default)"
+                            {...field}
+                            data-testid="input-persona-model"
+                          />
+                        </FormControl>
                         <FormDescription>
-                          Choose the AI model for this persona
+                          Enter custom AI model name (e.g., gemini-2.5-pro, gemini-2.5-flash, or leave blank for default)
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

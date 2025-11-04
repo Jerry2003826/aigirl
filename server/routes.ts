@@ -816,6 +816,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // AI Settings routes (protected)
+  app.get('/api/settings/ai', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const settings = await storage.getAiSettings(userId);
+      res.json(settings);
+    } catch (error) {
+      console.error("Error fetching AI settings:", error);
+      res.status(500).json({ message: "Failed to fetch AI settings" });
+    }
+  });
+
+  app.put('/api/settings/ai', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { provider, model, customApiKey, ragEnabled, searchEnabled, language } = req.body;
+      
+      const settings = await storage.updateAiSettings(userId, {
+        provider,
+        model,
+        customApiKey,
+        ragEnabled,
+        searchEnabled,
+        language,
+      });
+      
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating AI settings:", error);
+      res.status(500).json({ message: "Failed to update AI settings" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Setup WebSocket server for real-time messaging
