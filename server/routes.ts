@@ -305,34 +305,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { personaIds, ...conversationData } = req.body;
       
-      // Validate using Zod schema
+      // Validate personaIds format before processing
+      if (personaIds !== undefined && (!Array.isArray(personaIds) || personaIds.some(id => typeof id !== 'string'))) {
+        return res.status(400).json({ message: "Invalid personaIds: must be an array of strings" });
+      }
+      
+      // Pre-validate all personas before creating conversation
+      if (personaIds && personaIds.length > 0) {
+        for (const personaId of personaIds) {
+          const persona = await storage.getPersona(personaId);
+          if (!persona) {
+            return res.status(404).json({ message: `Persona with id ${personaId} not found` });
+          }
+          if (persona.userId !== userId) {
+            return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+          }
+        }
+      }
+      
+      // Validate conversation data using Zod schema
       const validatedData = insertConversationSchema.parse({
         ...conversationData,
         userId, // Set userId server-side for security
       });
       
+      // Create conversation
       const conversation = await storage.createConversation(validatedData);
       
-      // Add AI persona participants if provided
-      if (personaIds && Array.isArray(personaIds) && personaIds.length > 0) {
-        for (const personaId of personaIds) {
-          // Verify persona exists and belongs to user
-          const persona = await storage.getPersona(personaId);
-          if (!persona) {
-            // Rollback conversation creation if persona not found
-            await storage.deleteConversation(conversation.id);
-            return res.status(404).json({ message: `Persona with id ${personaId} not found` });
+      // Add AI persona participants with full rollback on error
+      if (personaIds && personaIds.length > 0) {
+        const addedParticipants: string[] = [];
+        try {
+          for (const personaId of personaIds) {
+            await storage.addParticipant({
+              conversationId: conversation.id,
+              personaId: personaId,
+            });
+            addedParticipants.push(personaId);
           }
-          if (persona.userId !== userId) {
-            // Rollback conversation creation if user doesn't own persona
+        } catch (participantError) {
+          // Rollback: delete the conversation if participant creation fails
+          console.error(`Failed to add participant after ${addedParticipants.length} successful inserts:`, participantError);
+          try {
             await storage.deleteConversation(conversation.id);
-            return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+            console.log(`Successfully rolled back conversation ${conversation.id}`);
+          } catch (deleteError) {
+            // Critical: rollback failed, log for manual cleanup
+            console.error(`CRITICAL: Failed to rollback conversation ${conversation.id}. Manual cleanup required.`, deleteError);
+            return res.status(500).json({ 
+              message: "Failed to create conversation participants and rollback failed. Please contact support.",
+              conversationId: conversation.id 
+            });
           }
-          
-          // Add participant
-          await storage.addParticipant({
-            conversationId: conversation.id,
-            personaId: personaId,
+          return res.status(500).json({ 
+            message: "Failed to add participants to conversation",
+            error: participantError instanceof Error ? participantError.message : "Unknown error"
           });
         }
       }

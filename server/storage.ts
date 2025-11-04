@@ -281,6 +281,22 @@ export class MemStorage implements IStorage {
   }
 
   async deleteConversation(id: string): Promise<boolean> {
+    // Cascade delete participants (mimics DB CASCADE behavior)
+    const participants = Array.from(this.conversationParticipants.values()).filter(
+      (p) => p.conversationId === id,
+    );
+    for (const participant of participants) {
+      this.conversationParticipants.delete(participant.id);
+    }
+    
+    // Cascade delete messages (mimics DB CASCADE behavior)
+    const messages = Array.from(this.messages.values()).filter(
+      (m) => m.conversationId === id,
+    );
+    for (const message of messages) {
+      this.messages.delete(message.id);
+    }
+    
     return this.conversations.delete(id);
   }
 
