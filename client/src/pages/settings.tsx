@@ -218,7 +218,7 @@ export default function Settings() {
                   />
 
                   <div className="space-y-4 border-t pt-4">
-                    <h3 className="text-sm font-medium">Advanced Features (Coming Soon)</h3>
+                    <h3 className="text-sm font-medium">高级功能</h3>
                     
                     <FormField
                       control={form.control}
@@ -226,16 +226,15 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                           <div className="space-y-0.5">
-                            <FormLabel className="text-base">RAG (Retrieval-Augmented Generation)</FormLabel>
+                            <FormLabel className="text-base">记忆检索增强 (RAG)</FormLabel>
                             <FormDescription>
-                              Enable document retrieval and knowledge base features
+                              启用AI女友记忆库检索，让她能更好地记住和理解你们的对话
                             </FormDescription>
                           </div>
                           <FormControl>
                             <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
-                              disabled
                               data-testid="switch-rag"
                             />
                           </FormControl>
@@ -249,16 +248,15 @@ export default function Settings() {
                       render={({ field }) => (
                         <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                           <div className="space-y-0.5">
-                            <FormLabel className="text-base">Web Search</FormLabel>
+                            <FormLabel className="text-base">联网搜索</FormLabel>
                             <FormDescription>
-                              Allow AI to search the web for up-to-date information
+                              允许AI联网搜索最新信息，了解实时新闻和资讯
                             </FormDescription>
                           </div>
                           <FormControl>
                             <Switch
                               checked={field.value}
                               onCheckedChange={field.onChange}
-                              disabled
                               data-testid="switch-search"
                             />
                           </FormControl>

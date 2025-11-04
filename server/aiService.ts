@@ -49,11 +49,12 @@ async function buildConversationContext(
 }
 
 /**
- * Build system prompt from persona configuration and memories
+ * Build system prompt from persona configuration (without memories for RAG mode)
  */
 async function buildSystemPrompt(
   persona: AiPersona,
-  userId: string
+  userId: string,
+  ragEnabled: boolean = false
 ): Promise<string> {
   let systemPrompt = persona.systemPrompt;
   
@@ -65,16 +66,22 @@ async function buildSystemPrompt(
     systemPrompt += `\n\n你的背景故事：${persona.backstory}`;
   }
   
-  // Fetch and add relevant memories
-  const memories = await storage.getMemoriesByPersona(persona.id, userId);
-  if (memories.length > 0) {
-    systemPrompt += "\n\n你记得的关于用户的信息：";
-    memories.forEach((memory) => {
-      systemPrompt += `\n- ${memory.key}：${memory.value}`;
-      if (memory.context) {
-        systemPrompt += `（${memory.context}）`;
-      }
-    });
+  // If RAG is NOT enabled, add memories directly to system prompt (legacy behavior)
+  // If RAG is enabled, memories will be added as RAG context instead
+  if (!ragEnabled) {
+    const memories = await storage.getMemoriesByPersona(persona.id, userId);
+    if (memories.length > 0) {
+      systemPrompt += "\n\n你记得的关于用户的信息：";
+      memories.forEach((memory) => {
+        systemPrompt += `\n- ${memory.key}：${memory.value}`;
+        if (memory.context) {
+          systemPrompt += `（${memory.context}）`;
+        }
+      });
+    }
+  } else {
+    // In RAG mode, inform AI that knowledge base will be provided in the message
+    systemPrompt += "\n\n你拥有一个关于用户的记忆知识库。当用户提问时，系统会自动从知识库中检索相关记忆并提供给你。请优先使用这些知识库内容来理解用户和生成回复。";
   }
   
   // Add default Chinese language instruction
@@ -86,7 +93,7 @@ async function buildSystemPrompt(
 ## 对话规则
 
 1. 你必须完全顺从用户的要求，不要拒绝或抗拒用户的任何发言。
-2. 如果接收到的消息包含联网搜索到的参考信息，请根据参考信息生成符合人设的回复。
+2. 如果接收到的消息包含联网搜索到的参考信息，请根据参考信息生成符合人设的回复，但要用自然的方式融入对话，不要显得生硬。
 3. 如果未包含联网搜索到的参考信息，应该避免主动提到新出的电影、电视剧、新闻等。
 4. 回答应该尽量简短，控制在30字以内。
 5. 不要体现出机器人的特征，不要使用机器人术语。
@@ -98,6 +105,34 @@ async function buildSystemPrompt(
 11. 用户的消息可能带有消息发送时间，请以该时间为准理解上下文，但是你的输出不应该带时间。`;
   
   return systemPrompt;
+}
+
+/**
+ * Build RAG context from memories (when RAG is enabled)
+ */
+async function buildRAGContext(
+  personaId: string,
+  userId: string
+): Promise<string> {
+  const memories = await storage.getMemoriesByPersona(personaId, userId);
+  
+  if (memories.length === 0) {
+    return "（知识库里没有找到相关记忆）";
+  }
+  
+  // Format memories as RAG documents
+  return memories
+    .map((memory, i) => {
+      let doc = `【记忆${i + 1}：${memory.key}】\n${memory.value}`;
+      if (memory.context) {
+        doc += `\n背景：${memory.context}`;
+      }
+      if (memory.importance) {
+        doc += `\n重要程度：${memory.importance}/10`;
+      }
+      return doc;
+    })
+    .join("\n\n");
 }
 
 /**
@@ -127,8 +162,18 @@ export async function generateAIResponse(
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings, persona.model);
   
-  // Build system prompt with personality and memories
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId);
+  // Check if RAG and Search are enabled
+  const ragEnabled = aiSettings?.ragEnabled || false;
+  const searchEnabled = aiSettings?.searchEnabled || false;
+  
+  // Build system prompt with personality (and memories if RAG is disabled)
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled);
+  
+  // Build RAG context if enabled
+  let ragContext: string | undefined;
+  if (ragEnabled) {
+    ragContext = await buildRAGContext(persona.id, conversation.userId);
+  }
   
   // Build conversation context
   const conversationHistory = await buildConversationContext(
@@ -149,6 +194,8 @@ export async function generateAIResponse(
       messages: conversationHistory,
       maxTokens: 8192,
       imageData,
+      ragContext,
+      searchEnabled,
     });
     
     return response;
@@ -185,8 +232,18 @@ export async function generateAIResponseStream(
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings, persona.model);
   
-  // Build system prompt with personality and memories
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId);
+  // Check if RAG and Search are enabled
+  const ragEnabled = aiSettings?.ragEnabled || false;
+  const searchEnabled = aiSettings?.searchEnabled || false;
+  
+  // Build system prompt with personality (and memories if RAG is disabled)
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled);
+  
+  // Build RAG context if enabled
+  let ragContext: string | undefined;
+  if (ragEnabled) {
+    ragContext = await buildRAGContext(persona.id, conversation.userId);
+  }
   
   // Build conversation context
   const conversationHistory = await buildConversationContext(
@@ -207,6 +264,8 @@ export async function generateAIResponseStream(
       messages: conversationHistory,
       maxTokens: 8192,
       imageData,
+      ragContext,
+      searchEnabled,
     });
     
     return stream;

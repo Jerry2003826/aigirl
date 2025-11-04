@@ -14,6 +14,8 @@ export interface GenerateParams {
   messages: ConversationMessage[];
   maxTokens?: number;
   imageData?: ImageData;
+  ragContext?: string; // RAG retrieved documents context
+  searchEnabled?: boolean; // Enable Google Search grounding
 }
 
 export interface ConversationMessage {
@@ -50,7 +52,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   async generateResponse(params: GenerateParams): Promise<string> {
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
+    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
 
     // Build contents array for Gemini (convert conversation history)
     const contents = [];
@@ -64,6 +66,20 @@ export class GeminiProvider implements AIProvider {
       });
     }
 
+    // Add RAG context to the last user message if provided
+    if (ragContext && contents.length > 0) {
+      const lastUserMsg = contents[contents.length - 1];
+      if (lastUserMsg.role === "user") {
+        // Prepend RAG context to user's question
+        const originalText = lastUserMsg.parts[0].text;
+        lastUserMsg.parts[0].text = `【本地知识库内容】：
+${ragContext}
+
+【用户问题】：
+${originalText}`;
+      }
+    }
+
     // Add image to last user message if provided
     if (imageData && contents.length > 0) {
       const lastUserMsg = contents[contents.length - 1];
@@ -77,14 +93,24 @@ export class GeminiProvider implements AIProvider {
       }
     }
 
+    // Build config with optional Google Search grounding
+    const config: any = {
+      systemInstruction: systemPrompt, // System instruction in config
+      maxOutputTokens: maxTokens,
+    };
+
+    // Add Google Search tool if enabled
+    if (searchEnabled) {
+      config.tools = [{
+        googleSearch: {}, // Enable Google Search grounding
+      }];
+    }
+
     try {
       const response = await this.client.models.generateContent({
         model: model || "gemini-2.5-pro", // Default to gemini-2.5-pro
         contents,
-        config: {
-          systemInstruction: systemPrompt, // System instruction in config
-          maxOutputTokens: maxTokens,
-        },
+        config,
       });
 
       return response.text || "";
@@ -95,7 +121,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
+    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
 
     // Build contents array
     const contents = [];
@@ -108,6 +134,20 @@ export class GeminiProvider implements AIProvider {
       });
     }
 
+    // Add RAG context to the last user message if provided
+    if (ragContext && contents.length > 0) {
+      const lastUserMsg = contents[contents.length - 1];
+      if (lastUserMsg.role === "user") {
+        // Prepend RAG context to user's question
+        const originalText = lastUserMsg.parts[0].text;
+        lastUserMsg.parts[0].text = `【本地知识库内容】：
+${ragContext}
+
+【用户问题】：
+${originalText}`;
+      }
+    }
+
     // Add image to last user message if provided
     if (imageData && contents.length > 0) {
       const lastUserMsg = contents[contents.length - 1];
@@ -121,14 +161,24 @@ export class GeminiProvider implements AIProvider {
       }
     }
 
+    // Build config with optional Google Search grounding
+    const config: any = {
+      systemInstruction: systemPrompt, // System instruction in config
+      maxOutputTokens: maxTokens,
+    };
+
+    // Add Google Search tool if enabled
+    if (searchEnabled) {
+      config.tools = [{
+        googleSearch: {}, // Enable Google Search grounding
+      }];
+    }
+
     try {
       const stream = await this.client.models.generateContentStream({
         model: model || "gemini-2.5-pro",
         contents,
-        config: {
-          systemInstruction: systemPrompt, // System instruction in config
-          maxOutputTokens: maxTokens,
-        },
+        config,
       });
 
       return stream;
