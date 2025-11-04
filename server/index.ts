@@ -10,11 +10,15 @@ declare module 'http' {
   }
 }
 app.use(express.json({
+  limit: '10mb', // Increase limit for file uploads
   verify: (req, _res, buf) => {
     req.rawBody = buf;
   }
 }));
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+
+// Serve uploaded files
+app.use('/uploads', express.static('public/uploads'));
 
 app.use((req, res, next) => {
   const start = Date.now();

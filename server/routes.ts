@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
+import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment } from "./aiService";
@@ -14,6 +16,32 @@ import {
   insertMomentSchema,
   insertMomentCommentSchema
 } from "@shared/schema";
+
+// Configure multer for file uploads
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/uploads');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage: uploadStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF and WebP are allowed.'));
+    }
+  }
+});
 
 // Rate limiter for message sending (20 messages per minute per user)
 const messageLimiter = rateLimit({
@@ -47,6 +75,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // File upload route
+  app.post('/api/upload', isAuthenticated, upload.single('file'), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "没有上传文件" });
+      }
+
+      // Return the URL path to the uploaded file
+      const fileUrl = `/uploads/${req.file.filename}`;
+      res.json({ url: fileUrl });
+    } catch (error: any) {
+      console.error("Error uploading file:", error);
+      res.status(500).json({ message: error.message || "上传文件失败" });
     }
   });
 
