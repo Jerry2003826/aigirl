@@ -19,9 +19,9 @@ import { useLocation } from "wouter";
 import { MobileHeader } from "@/components/mobile-header";
 
 const personaFormSchema = insertAiPersonaSchema.extend({
-  name: z.string().min(1, "Name is required").max(100),
-  personality: z.string().min(10, "Personality should be at least 10 characters"),
-  systemPrompt: z.string().min(20, "System prompt should be at least 20 characters"),
+  name: z.string().min(1, "名字不能为空").max(100),
+  personality: z.string().min(10, "性格描述至少需要10个字符"),
+  systemPrompt: z.string().min(20, "系统提示至少需要20个字符"),
 });
 
 type PersonaFormData = z.infer<typeof personaFormSchema>;
@@ -298,26 +298,26 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto pb-20 md:pb-6">
       {/* Mobile Header */}
       <MobileHeader 
-        title="AI角色" 
+        title="AI女友" 
         onBack={onBackToList} 
         showMobileSidebar={showMobileSidebar}
       />
       
       <div className="container mx-auto max-w-7xl p-6">
-        {/* Header */}
+        {/* Desktop Header */}
         <div className="mb-8 flex items-center justify-between hidden md:flex">
           <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">AI Personas</h1>
+            <h1 className="text-3xl font-bold" data-testid="text-page-title">AI女友</h1>
             <p className="text-muted-foreground" data-testid="text-page-description">
-              Create and manage your AI companions
+              创建和管理你的AI女友
             </p>
           </div>
           
           <div className="flex gap-3">
-            {/* AI Assistant Button */}
+            {/* AI Assistant Button - Desktop */}
             <Dialog open={aiAssistantOpen} onOpenChange={setAiAssistantOpen}>
               <DialogTrigger asChild>
                 <Button 
@@ -396,7 +396,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
               </DialogContent>
             </Dialog>
             
-            {/* Create Persona Button */}
+            {/* Create Persona Button - Desktop */}
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button 
@@ -406,18 +406,18 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                 data-testid="button-create-persona"
               >
                 <Plus className="mr-2 h-5 w-5" />
-                Create Persona
+                新建女友
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle data-testid="text-dialog-title">
-                  {editingPersona ? "Edit Persona" : "Create New Persona"}
+                  {editingPersona ? "编辑AI女友" : "新建AI女友"}
                 </DialogTitle>
                 <DialogDescription>
                   {editingPersona 
-                    ? "Update your AI companion's details" 
-                    : "Design your AI companion with unique personality and traits"}
+                    ? "更新AI女友的详细信息" 
+                    : "设计你的专属AI女友，赋予她独特的性格和特质"}
                 </DialogDescription>
               </DialogHeader>
               
@@ -428,10 +428,10 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Name</FormLabel>
+                        <FormLabel>名字</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Enter persona name" 
+                            placeholder="输入AI女友的名字" 
                             {...field} 
                             data-testid="input-persona-name"
                           />
@@ -446,14 +446,14 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="avatarUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Avatar (optional)</FormLabel>
+                        <FormLabel>头像（可选）</FormLabel>
                         <FormControl>
                           <div className="space-y-4">
                             {avatarPreview && (
                               <div className="relative inline-block">
                                 <Avatar className="h-24 w-24 border-2 border-border">
                                   <AvatarImage src={avatarPreview} />
-                                  <AvatarFallback>Preview</AvatarFallback>
+                                  <AvatarFallback>预览</AvatarFallback>
                                 </Avatar>
                                 <Button
                                   type="button"
@@ -475,7 +475,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                                 data-testid="button-upload-avatar"
                               >
                                 <Upload className="mr-2 h-4 w-4" />
-                                Upload Image
+                                上传图片
                               </Button>
                               <input
                                 ref={fileInputRef}
@@ -487,7 +487,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                               />
                             </div>
                             <Input 
-                              placeholder="Or paste image URL" 
+                              placeholder="或粘贴图片URL" 
                               {...field}
                               value={field.value || ""}
                               onChange={(e) => {
@@ -499,7 +499,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                           </div>
                         </FormControl>
                         <FormDescription>
-                          Upload an image file or provide an image URL
+                          上传图片文件或提供图片URL
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -511,17 +511,17 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="personality"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Personality</FormLabel>
+                        <FormLabel>性格</FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="Friendly and supportive, loves to encourage others..."
+                            placeholder="温柔体贴，善解人意，喜欢鼓励他人..."
                             className="min-h-[80px]"
                             {...field} 
                             data-testid="input-persona-personality"
                           />
                         </FormControl>
                         <FormDescription>
-                          Short description of the persona's personality traits
+                          简要描述AI女友的性格特点
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -533,17 +533,17 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="systemPrompt"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>System Prompt</FormLabel>
+                        <FormLabel>系统提示</FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="You are a helpful AI companion who..."
+                            placeholder="你是一位温柔体贴的AI女友，总是..."
                             className="min-h-[120px]"
                             {...field} 
                             data-testid="input-persona-system-prompt"
                           />
                         </FormControl>
                         <FormDescription>
-                          Detailed instructions that define how the AI should behave
+                          定义AI行为方式的详细指令
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -555,10 +555,10 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="backstory"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Backstory (optional)</FormLabel>
+                        <FormLabel>背景故事（可选）</FormLabel>
                         <FormControl>
                           <Textarea 
-                            placeholder="I grew up in a small town and love..."
+                            placeholder="我在一个小镇长大，喜欢..."
                             className="min-h-[100px]"
                             {...field}
                             value={field.value || ""}
@@ -566,7 +566,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                           />
                         </FormControl>
                         <FormDescription>
-                          Background story that adds depth to the persona
+                          为AI女友增添深度的背景故事
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -578,17 +578,17 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="greeting"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Greeting Message (optional)</FormLabel>
+                        <FormLabel>问候语（可选）</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Hi! I'm excited to chat with you!" 
+                            placeholder="嗨！很高兴见到你！" 
                             {...field}
                             value={field.value || ""}
                             data-testid="input-persona-greeting"
                           />
                         </FormControl>
                         <FormDescription>
-                          Initial message shown when starting a new conversation
+                          开始新对话时显示的初始消息
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -600,7 +600,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     name="responseDelay"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Response Delay (ms)</FormLabel>
+                        <FormLabel>响应延迟（毫秒）</FormLabel>
                         <FormControl>
                           <Input 
                             type="number"
@@ -613,7 +613,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                           />
                         </FormControl>
                         <FormDescription>
-                          Add a delay before AI responds (0-10000ms) to simulate human-like response times
+                          设置AI回复前的延迟时间（0-10000毫秒），模拟真人回复速度
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -631,7 +631,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                       }}
                       data-testid="button-cancel"
                     >
-                      Cancel
+                      取消
                     </Button>
                     <Button 
                       type="submit" 
@@ -641,9 +641,9 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                       {createPersonaMutation.isPending || updatePersonaMutation.isPending ? (
                         <>
                           <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                          Saving...
+                          保存中...
                         </>
-                      ) : editingPersona ? "Update" : "Create"}
+                      ) : editingPersona ? "更新" : "创建"}
                     </Button>
                   </div>
                 </form>
@@ -659,13 +659,13 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <Sparkles className="h-10 w-10 text-primary" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold" data-testid="text-empty-title">No personas yet</h3>
+            <h3 className="mb-2 text-xl font-semibold" data-testid="text-empty-title">还没有AI女友</h3>
             <p className="mb-6 text-center text-muted-foreground" data-testid="text-empty-description">
-              Create your first AI companion to start chatting
+              创建你的第一个AI女友开始聊天
             </p>
             <Button onClick={openCreateDialog} data-testid="button-create-first-persona">
               <Plus className="mr-2 h-5 w-5" />
-              Create Your First Persona
+              创建第一个AI女友
             </Button>
           </div>
         ) : (
@@ -693,7 +693,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                         size="icon"
                         variant="ghost"
                         onClick={() => {
-                          if (confirm("Are you sure you want to delete this persona?")) {
+                          if (confirm("确定要删除这个AI女友吗？")) {
                             deletePersonaMutation.mutate(persona.id);
                           }
                         }}
@@ -723,12 +723,12 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                     {startChatMutation.isPending ? (
                       <>
                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                        Starting...
+                        开始聊天...
                       </>
                     ) : (
                       <>
                         <MessageCircle className="mr-2 h-4 w-4" />
-                        Chat
+                        聊天
                       </>
                     )}
                   </Button>
@@ -737,6 +737,33 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
             ))}
           </div>
         )}
+      </div>
+      
+      {/* Mobile FAB - Floating Action Buttons */}
+      <div className="fixed bottom-20 right-4 flex flex-col gap-3 md:hidden z-50">
+        {/* AI Assistant FAB */}
+        <Dialog open={aiAssistantOpen} onOpenChange={setAiAssistantOpen}>
+          <DialogTrigger asChild>
+            <Button 
+              size="lg"
+              variant="outline"
+              className="h-14 w-14 rounded-full shadow-lg bg-background hover:scale-105 transition-transform"
+              data-testid="button-ai-assistant-mobile"
+            >
+              <Sparkles className="h-6 w-6" />
+            </Button>
+          </DialogTrigger>
+        </Dialog>
+        
+        {/* Create Persona FAB */}
+        <Button 
+          size="lg" 
+          className="h-14 w-14 rounded-full shadow-lg hover:scale-105 transition-transform" 
+          onClick={openCreateDialog}
+          data-testid="button-create-persona-mobile"
+        >
+          <Plus className="h-6 w-6" />
+        </Button>
       </div>
     </div>
   );
