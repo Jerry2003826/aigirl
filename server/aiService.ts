@@ -440,3 +440,118 @@ Example response:
     // Don't throw - memory extraction failure shouldn't break the conversation
   }
 }
+
+/**
+ * Generate AI comment for a moment
+ */
+export async function generateMomentComment(
+  personaId: string,
+  userId: string,
+  momentContent: string,
+  momentImages?: string[]
+): Promise<string> {
+  const persona = await storage.getPersona(personaId);
+  if (!persona) {
+    throw new Error("Persona not found");
+  }
+
+  // Build system prompt with memories
+  const systemPrompt = await buildSystemPrompt(persona, userId);
+  
+  // Build prompt for moment comment
+  let userPrompt = `The user just posted this moment:\n"${momentContent}"`;
+  
+  if (momentImages && momentImages.length > 0) {
+    userPrompt += `\n\nThey also shared ${momentImages.length} image(s).`;
+  }
+  
+  userPrompt += `\n\nWrite a friendly, natural comment (1-2 sentences) responding to their post. Be authentic to your personality. Use Chinese if appropriate.`;
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: persona.model || "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.9, // More creative for comments
+      max_tokens: 150,
+    });
+
+    const comment = completion.choices[0]?.message?.content?.trim() || "👍";
+    return comment;
+  } catch (error) {
+    console.error("Error generating moment comment:", error);
+    // Fallback to simple reactions
+    const reactions = ["👍", "❤️", "😊", "好棒！", "赞！"];
+    return reactions[Math.floor(Math.random() * reactions.length)];
+  }
+}
+
+/**
+ * Trigger AI comments on a new moment (async, non-blocking)
+ */
+export async function triggerAICommentsOnMoment(
+  momentId: string,
+  userId: string,
+  momentContent: string,
+  momentImages?: string[]
+): Promise<void> {
+  // Run async without blocking the response
+  (async () => {
+    try {
+      // Get user's AI personas
+      const personas = await storage.getPersonasByUser(userId);
+      
+      if (personas.length === 0) {
+        return; // No AI personas to comment
+      }
+
+      // Randomly select 1-3 personas to comment
+      const numCommenters = Math.min(
+        Math.floor(Math.random() * 3) + 1,
+        personas.length
+      );
+      const selectedPersonas = personas
+        .sort(() => Math.random() - 0.5)
+        .slice(0, numCommenters);
+
+      // Generate comments with random delays (5-15 seconds)
+      for (const persona of selectedPersonas) {
+        const delay = Math.floor(Math.random() * 10000) + 5000; // 5-15s
+        
+        setTimeout(async () => {
+          try {
+            // Apply persona's responseDelay if configured (already in milliseconds)
+            const additionalDelay = persona.responseDelay || 0;
+            if (additionalDelay > 0) {
+              await new Promise(resolve => setTimeout(resolve, additionalDelay));
+            }
+
+            // Generate comment
+            const commentContent = await generateMomentComment(
+              persona.id,
+              userId,
+              momentContent,
+              momentImages
+            );
+
+            // Create comment
+            await storage.createMomentComment({
+              momentId,
+              authorId: persona.id,
+              authorType: 'ai',
+              content: commentContent,
+            });
+
+            console.log(`AI ${persona.name} commented on moment ${momentId}`);
+          } catch (error) {
+            console.error(`Error creating AI comment from ${persona.name}:`, error);
+          }
+        }, delay);
+      }
+    } catch (error) {
+      console.error("Error triggering AI comments:", error);
+    }
+  })();
+}

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories } from "./aiService";
+import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment } from "./aiService";
 import { setupWebSocket, broadcastNewMessage } from "./websocket";
 import { 
   insertAiPersonaSchema, 
@@ -622,6 +622,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const moment = await storage.createMoment(validatedData);
+      
+      // Trigger AI comments (async, non-blocking)
+      triggerAICommentsOnMoment(
+        moment.id,
+        userId,
+        moment.content,
+        moment.images
+      ).catch(err => {
+        console.error("Error triggering AI comments:", err);
+        // Don't fail the response if AI comments fail
+      });
+      
       res.json(moment);
     } catch (error: any) {
       console.error("Error creating moment:", error);
