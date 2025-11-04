@@ -56,7 +56,7 @@ export interface IStorage {
   
   // Message operations
   getMessage(id: string): Promise<Message | undefined>;
-  getMessagesByConversation(conversationId: string, limit?: number, offset?: number): Promise<Message[]>;
+  getMessagesByConversation(conversationId: string, limit?: number, offset?: number): Promise<(Message & { personaName?: string; personaAvatar?: string | null })[]>;
   getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string): Promise<void>;
