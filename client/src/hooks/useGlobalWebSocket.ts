@@ -38,23 +38,20 @@ export function useGlobalWebSocket() {
             const currentConversationId = params.get('conversationId');
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
-            // Update ALL message caches for this conversation (with different limits)
-            // This ensures Chat component sees the latest messages immediately
-            queryClient.setQueriesData(
-              { 
-                predicate: (query) => {
-                  const key = query.queryKey;
-                  return key[0] === "/api/messages" && key[1] === message.conversationId;
-                }
-              },
-              (old: Message[] = []) => {
-                // Avoid duplicates
-                if (!old.find(m => m.id === message.id)) {
-                  return [...old, message];
-                }
-                return old;
+            // Invalidate ALL message caches for this conversation
+            // This ensures Chat component refetches and sees the latest messages
+            queryClient.invalidateQueries({
+              predicate: (query) => {
+                const key = query.queryKey;
+                // Match both:
+                // - ["/api/messages", conversationId, limit] (main chat query)
+                // - ["/api/messages/all", conversationId] (history dialog query)
+                return (
+                  (key[0] === "/api/messages" && key[1] === message.conversationId) ||
+                  (key[0] === "/api/messages/all" && key[1] === message.conversationId)
+                );
               }
-            );
+            });
             
             // Update conversation list cache (optimistic update)
             queryClient.setQueryData(
