@@ -22,7 +22,7 @@ import {
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc, asc, count, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, count, inArray, sql } from "drizzle-orm";
 
 // Storage interface with all CRUD methods needed for the AI chat app
 export interface IStorage {

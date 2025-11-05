@@ -28,6 +28,7 @@ The design draws inspiration from WeChat, employing a green primary color palett
 - **Immersive Mode:** A toggle to hide management interfaces for a pure chat experience, with state persistence.
 - **Groups Management:** Dedicated page for managing groups, including creation and AI member selection.
 - **Failed Message Handling:** Messages that fail to send are displayed with error indicators and retry buttons. Failed messages are conversation-scoped (isolated by conversationId) to prevent cross-conversation leakage. Supports text and image message retry with preview.
+- **"一句我一句" Chat Flow (2025-11-05):** Implemented dual-state control system with `isLoading` (waiting for AI to start) and `isStreaming` (AI outputting segments) states. Input lock mechanism ensures strict turn-taking conversation rhythm. Includes optimistic UI updates for instant user message display, WebSocket-based streaming detection with 5-second timeout, automatic scroll-to-bottom without animation, and comprehensive error-path state reset to prevent input deadlock.
 
 ## External Dependencies
 - **Frontend:** React, TypeScript, Vite, TailwindCSS, shadcn/ui, Wouter, TanStack Query v5
