@@ -175,9 +175,7 @@ function Router() {
             showMobileSidebar ? "hidden" : "flex"
           )}>
             <div className={cn(
-              "flex-1 overflow-hidden",
-              // Remove bottom padding on mobile when in chat conversation (nav bar hidden)
-              !!selectedConversationId && !showMobileSidebar ? "pb-0" : "pb-14"
+              "flex-1 overflow-hidden pb-14 md:pb-0"
             )}>
               <Switch>
                 <Route path="/">
