@@ -29,7 +29,7 @@ export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
   if (hide) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t pb-[env(safe-area-inset-bottom)]">
       <div className="flex items-center justify-around py-2 px-2 max-w-3xl mx-auto">
         {navItems.map((item) => {
           const isActive = location === item.path || (location === "/" && item.path === "/chat");
@@ -50,8 +50,6 @@ export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
           );
         })}
       </div>
-      {/* Safe area spacer - ensures background extends to bottom on devices with notches */}
-      <div className="h-[env(safe-area-inset-bottom)] bg-background" />
     </div>
   );
 }
