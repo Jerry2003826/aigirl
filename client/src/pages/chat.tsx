@@ -310,7 +310,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         imageData: imageData || undefined,
       });
     },
-    onSuccess: async (_, { conversationId, content, tempId }) => {
+    onSuccess: async (data, { conversationId, content, tempId }) => {
       // Remove from failed messages if it was a retry
       setFailedMessages(prev => {
         const newMap = new Map(prev);
@@ -318,12 +318,25 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // Clear optimistic message after server confirms
+      // Clear optimistic message - it will be replaced by server message
       setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
       
-      // Refresh to get server version of user's message
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
+      // Refresh conversations list to update lastMessageAt
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      
+      // Optimistically add the server's confirmed message to cache
+      // This prevents the "disappearing message" issue during refetch
+      const newMessage = data as unknown as Message;
+      queryClient.setQueryData(
+        ["/api/messages", conversationId, messageLimit],
+        (old: Message[] = []) => {
+          // Add the new message if it's not already in the list
+          if (!old.find(m => m.id === newMessage.id)) {
+            return [...old, newMessage];
+          }
+          return old;
+        }
+      );
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
