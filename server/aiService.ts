@@ -842,9 +842,40 @@ export async function generateMomentComment(
     });
 
     return comment.trim() || "好棒！";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error generating moment comment:", error);
-    // Fallback to simple reactions (no emoji)
+    
+    // Check if error is due to missing/invalid API key or provider misconfiguration
+    const errorMessage = (error?.message || error?.toString() || '').toLowerCase();
+    const errorCode = (error?.code || error?.status || '').toString().toLowerCase();
+    
+    // Comprehensive auth/config error detection
+    const authKeywords = [
+      'api key', 'api密钥', 'apikey',
+      '未配置', 'not configured', 'misconfigured',
+      'invalid_argument', 'permission_denied',
+      'authentication', 'authorization', 'unauthorized',
+      '401', '403', 'forbidden',
+      'invalid api', 'invalid key',
+      'missing api', 'missing key',
+      'please pass a valid'
+    ];
+    
+    const isAuthError = authKeywords.some(keyword => 
+      errorMessage.includes(keyword) || errorCode.includes(keyword)
+    );
+    
+    if (isAuthError) {
+      // Don't post generic reactions when the issue is API key/auth related
+      // Throw error to prevent posting meaningless comments
+      console.error(`[Generate Comment] ❌ API key/auth error detected - not posting generic reaction`);
+      console.error(`[Generate Comment] User ${userId} needs to configure valid API key in settings`);
+      console.error(`[Generate Comment] Error details: ${error?.message || error}`);
+      throw new Error('API密钥未配置或无效，无法生成AI评论');
+    }
+    
+    // For other transient errors (network, timeout, etc.), use fallback reactions
+    console.warn(`[Generate Comment] ⚠️ Non-auth error, using fallback reaction`);
     const reactions = ["好棒！", "赞！", "真不错！", "支持你！"];
     return reactions[Math.floor(Math.random() * reactions.length)];
   }
