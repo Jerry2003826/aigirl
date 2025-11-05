@@ -497,11 +497,15 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   };
 
   // Auto-scroll to bottom (no animation) for new messages
+  // CRITICAL: Use scrollTop instead of scrollIntoView to avoid reflow/flicker
   useEffect(() => {
     // Only scroll if we got new messages (not loading older ones)
     if (!isLoadingMore && messages.length > prevMessagesLengthRef.current) {
-      // 使用 auto 而不是 smooth，立即跳转到底部（无动画）
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      // Use scrollTop directly - much faster than scrollIntoView, no reflow
+      const viewport = scrollViewportRef.current;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
     prevMessagesLengthRef.current = messages.length;
     setIsLoadingMore(false);
@@ -510,8 +514,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // 检测对话切换，立即滚动到底部并重置状态
   useEffect(() => {
     if (selectedConversationId && messages.length > 0) {
-      // 对话切换时立即滚动到底部
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      // Use scrollTop directly for instant scroll without reflow
+      const viewport = scrollViewportRef.current;
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
     // Reset replying AI name when switching conversations
     setReplyingAIName(null);
