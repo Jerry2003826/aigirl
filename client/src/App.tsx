@@ -20,6 +20,7 @@ import Groups from "@/pages/groups";
 import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useGlobalWebSocket } from "@/hooks/useGlobalWebSocket";
 
 type Conversation = {
   id: string;
@@ -34,6 +35,9 @@ function Router() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(true);
   const [hasAutoSelected, setHasAutoSelected] = useState(false);
+  
+  // Global WebSocket connection - maintains connection across all pages
+  const wsRef = useGlobalWebSocket();
 
   // Fetch conversations list
   const { data: conversations = [] } = useQuery<Conversation[]>({
@@ -183,6 +187,7 @@ function Router() {
                       onConversationDeleted={handleBackToList}
                       onBackToList={handleBackToList}
                       showMobileSidebar={showMobileSidebar}
+                      wsRef={wsRef}
                     />
                   )}
                 </Route>
@@ -193,6 +198,7 @@ function Router() {
                       onConversationDeleted={handleBackToList}
                       onBackToList={handleBackToList}
                       showMobileSidebar={showMobileSidebar}
+                      wsRef={wsRef}
                     />
                   )}
                 </Route>

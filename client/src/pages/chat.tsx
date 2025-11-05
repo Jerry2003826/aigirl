@@ -7,6 +7,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useConversationSubscription } from "@/hooks/useGlobalWebSocket";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
@@ -53,9 +54,10 @@ interface ChatProps {
   onConversationDeleted?: () => void;
   onBackToList?: () => void;
   showMobileSidebar?: boolean;
+  wsRef: React.RefObject<WebSocket | null>;
 }
 
-export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList, showMobileSidebar = true }: ChatProps) {
+export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList, showMobileSidebar = true, wsRef }: ChatProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
@@ -75,8 +77,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Use global WebSocket for conversation subscription
+  useConversationSubscription(wsRef, selectedConversationId);
 
   const { data: user } = useQuery<{ id: string; username: string; profileImageUrl: string | null }>({
     queryKey: ["/api/auth/user"],
@@ -461,136 +465,38 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
   }, [selectedConversationId, messages]);
 
-  // WebSocket connection for real-time messages
+  // Remove optimistic messages when real messages arrive
   useEffect(() => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      if (selectedConversationId) {
-        ws.send(JSON.stringify({
-          type: 'join_conversation',
-          payload: { conversationId: selectedConversationId }
-        }));
+    if (rawMessages.length > 0 && optimisticMessages.length > 0) {
+      // Remove optimistic messages that match real user messages
+      setOptimisticMessages(prev => 
+        prev.filter(opt => 
+          !rawMessages.some(real => 
+            real.content === opt.content && real.senderType === 'user'
+          )
+        )
+      );
+    }
+  }, [rawMessages, optimisticMessages.length]);
+  
+  // Manage AI streaming state based on new AI messages
+  useEffect(() => {
+    const aiMessages = messages.filter(m => m.senderType === 'ai');
+    if (aiMessages.length > aiMessageCount) {
+      // New AI message detected
+      setAiMessageCount(aiMessages.length);
+      
+      // Clear previous timeout
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
       }
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('WebSocket message received:', data.type);
-        if (data.type === 'new_message' && data.payload) {
-          const message = data.payload;
-          
-          // CRITICAL: 如果这是用户消息，立即移除对应的乐观消息
-          if (message.senderType === 'user') {
-            setOptimisticMessages(prev => 
-              prev.filter(m => 
-                // 根据内容和时间戳移除匹配的乐观消息
-                !(m.content === message.content && m.senderType === 'user')
-              )
-            );
-          }
-          
-          // 更新消息列表缓存
-          if (message.conversationId === selectedConversationId) {
-            // 当前对话：立即添加到缓存
-            queryClient.setQueryData(
-              ["/api/messages", selectedConversationId, messageLimit],
-              (old: Message[] = []) => {
-                // 避免重复添加
-                if (!old.find(m => m.id === message.id)) {
-                  return [...old, message];
-                }
-                return old;
-              }
-            );
-          } else {
-            // 非当前对话：标记该对话的消息列表为stale，下次查看时会自动刷新
-            // 使用predicate匹配所有相关查询（包含不同的messageLimit）
-            queryClient.invalidateQueries({ 
-              predicate: (query) => {
-                const key = query.queryKey;
-                return key[0] === "/api/messages" && key[1] === message.conversationId;
-              }
-            });
-          }
-          
-          // 立即更新对话列表缓存（乐观更新）
-          const wasUpdated = queryClient.setQueryData(
-            ["/api/conversations"],
-            (old: any[] = []) => {
-              if (!old || old.length === 0) return old; // 缓存未初始化，无法更新
-              
-              return old.map(conv => {
-                if (conv.id === message.conversationId) {
-                  // 更新lastMessageAt和lastMessage
-                  const updated = {
-                    ...conv,
-                    lastMessageAt: new Date().toISOString(),
-                    lastMessage: message, // 更新最后一条消息
-                  };
-                  
-                  // 如果是AI消息且不在当前对话，+1未读数
-                  if (message.senderType === 'ai' && message.conversationId !== selectedConversationId) {
-                    updated.unreadCount = (conv.unreadCount || 0) + 1;
-                  }
-                  
-                  return updated;
-                }
-                return conv;
-              });
-            }
-          );
-          
-          // CRITICAL: 如果缓存未初始化或更新失败，立即刷新以确保数据同步
-          // 否则只标记为stale，避免不必要的网络请求
-          if (!wasUpdated) {
-            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-          }
-          
-          // 检测AI消息，管理分段状态
-          if (message.senderType === 'ai') {
-            // 清除之前的计时器
-            if (streamingTimeoutRef.current) {
-              clearTimeout(streamingTimeoutRef.current);
-            }
-            
-            // 设置新的计时器：5秒内没有新消息就认为分段完成
-            streamingTimeoutRef.current = setTimeout(() => {
-              setIsStreaming(false); // 分段完成，解锁输入框
-            }, 5000);
-          }
-        }
-      } catch (error) {
-        console.error('Error parsing WebSocket message:', error);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
-
-    return () => {
-      if (ws.readyState === WebSocket.OPEN) {
-        if (selectedConversationId) {
-          ws.send(JSON.stringify({
-            type: 'leave_conversation',
-            payload: { conversationId: selectedConversationId }
-          }));
-        }
-        ws.close();
-      }
-    };
-  }, [selectedConversationId]);
+      
+      // Set timeout: if no new message in 5s, streaming is complete
+      streamingTimeoutRef.current = setTimeout(() => {
+        setIsStreaming(false); // Unlock input
+      }, 5000);
+    }
+  }, [messages, aiMessageCount]);
 
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
