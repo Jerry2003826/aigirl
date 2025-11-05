@@ -200,6 +200,17 @@ export async function generateAIResponse(
     contextLimit
   );
   
+  // Debug log: Show what's being sent to AI
+  console.log('\n=== AI Request Debug ===');
+  console.log('Persona:', persona.name);
+  console.log('System Prompt:', systemPrompt.substring(0, 200) + '...');
+  console.log('Conversation History:');
+  conversationHistory.forEach((msg, i) => {
+    console.log(`  [${i}] ${msg.role}: ${msg.content}`);
+  });
+  console.log('RAG Context:', ragContext ? ragContext.substring(0, 100) + '...' : 'None');
+  console.log('========================\n');
+  
   // Apply response delay if specified
   if (persona.responseDelay > 0) {
     await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
@@ -215,6 +226,8 @@ export async function generateAIResponse(
       ragContext,
       searchEnabled,
     });
+    
+    console.log('AI Response:', response);
     
     return response;
   } catch (error: any) {
