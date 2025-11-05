@@ -399,12 +399,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // CRITICAL FIX: 立即清理乐观消息（根据clientMessageId）
-      // WebSocket会根据clientMessageId替换乐观消息，这里确保清理
-      setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
+      // CRITICAL FIX: 不清理乐观消息！让WebSocket的替换逻辑处理
+      // WebSocket收到带有clientMessageId的真实消息时会自动就地替换乐观消息
+      // 如果在这里清理，WebSocket收到消息时找不到要替换的，会添加新消息导致双重渲染
       
-      // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
-      // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
+      // Note: 完全依赖WebSocket广播来替换乐观消息
+      // 这样保证单一数据源，避免竞态条件
       
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
