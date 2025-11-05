@@ -46,6 +46,7 @@ export const conversations = pgTable("conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title"), // For group chats
+  avatarUrl: text("avatar_url"), // Custom avatar for group chats
   isGroup: boolean("is_group").default(false).notNull(),
   unreadCount: integer("unread_count").default(0).notNull(), // Cached unread count for performance
   lastReadAt: timestamp("last_read_at"), // Last time user viewed this conversation

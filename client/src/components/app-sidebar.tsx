@@ -372,9 +372,15 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                     <div className="flex items-center gap-3">
                       <div className="relative">
                         <Avatar className="h-14 w-14">
-                          <AvatarImage src={conversation.personas?.[0]?.avatarUrl || undefined} />
+                          <AvatarImage src={
+                            conversation.isGroup 
+                              ? (conversation.avatarUrl || undefined)
+                              : (conversation.personas?.[0]?.avatarUrl || undefined)
+                          } />
                           <AvatarFallback className="bg-primary/10 text-primary text-base">
-                            {conversation.title?.substring(0, 2).toUpperCase() || "AI"}
+                            {conversation.isGroup 
+                              ? (conversation.title?.substring(0, 2).toUpperCase() || "群")
+                              : (conversation.personas?.[0]?.name?.substring(0, 2).toUpperCase() || "AI")}
                           </AvatarFallback>
                         </Avatar>
                         {(conversation.unreadCount ?? 0) > 0 && (

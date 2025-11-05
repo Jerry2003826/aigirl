@@ -410,6 +410,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Update conversation (for avatar, title, etc.)
+  app.patch('/api/conversations/:conversationId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { conversationId } = req.params;
+      const { avatarUrl, title } = req.body;
+      
+      // Verify ownership
+      const conversation = await storage.getConversation(conversationId);
+      if (!conversation) {
+        return res.status(404).json({ message: "Conversation not found" });
+      }
+      if (conversation.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this conversation" });
+      }
+      
+      // Update conversation
+      const updated = await storage.updateConversation(conversationId, {
+        avatarUrl,
+        title,
+      });
+      
+      // Broadcast update if this is a group conversation
+      if (conversation.isGroup) {
+        broadcastGroupEvent('updated', updated);
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating conversation:", error);
+      res.status(500).json({ message: "Failed to update conversation" });
+    }
+  });
+
   // Participant management
   app.post('/api/conversations/:conversationId/participants', isAuthenticated, async (req: any, res) => {
     try {

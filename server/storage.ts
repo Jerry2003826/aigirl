@@ -48,6 +48,7 @@ export interface IStorage {
   getConversation(id: string): Promise<Conversation | undefined>;
   getConversationsByUser(userId: string): Promise<Conversation[]>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
+  updateConversation(id: string, data: Partial<Pick<Conversation, 'avatarUrl' | 'title'>>): Promise<Conversation | undefined>;
   updateConversationLastMessage(id: string): Promise<void>;
   deleteConversation(id: string): Promise<boolean>;
   
@@ -276,6 +277,7 @@ export class MemStorage implements IStorage {
       id,
       userId: insertConversation.userId,
       title: insertConversation.title ?? null,
+      avatarUrl: insertConversation.avatarUrl ?? null,
       isGroup: insertConversation.isGroup ?? false,
       unreadCount: 0,
       lastReadAt: null,
@@ -284,6 +286,20 @@ export class MemStorage implements IStorage {
     };
     this.conversations.set(id, conversation);
     return conversation;
+  }
+
+  async updateConversation(id: string, data: Partial<Pick<Conversation, 'avatarUrl' | 'title'>>): Promise<Conversation | undefined> {
+    const conversation = this.conversations.get(id);
+    if (!conversation) return undefined;
+    
+    const updated: Conversation = {
+      ...conversation,
+      ...(data.avatarUrl !== undefined && { avatarUrl: data.avatarUrl }),
+      ...(data.title !== undefined && { title: data.title }),
+    };
+    
+    this.conversations.set(id, updated);
+    return updated;
   }
 
   async updateConversationLastMessage(id: string): Promise<void> {
@@ -654,6 +670,15 @@ export class DatabaseStorage implements IStorage {
 
   async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
     const result = await db.insert(conversations).values(insertConversation).returning();
+    return result[0];
+  }
+
+  async updateConversation(id: string, data: Partial<Pick<Conversation, 'avatarUrl' | 'title'>>): Promise<Conversation | undefined> {
+    const result = await db
+      .update(conversations)
+      .set(data)
+      .where(eq(conversations.id, id))
+      .returning();
     return result[0];
   }
 

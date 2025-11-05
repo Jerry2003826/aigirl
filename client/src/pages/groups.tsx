@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Users, MessageCircle } from "lucide-react";
+import { Plus, Users, MessageCircle, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { MobileHeader } from "@/components/mobile-header";
@@ -16,6 +16,7 @@ import { type AiPersona } from "@shared/schema";
 type Conversation = {
   id: string;
   title: string | null;
+  avatarUrl?: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
   personas?: { id: string; name: string; avatarUrl: string | null }[];
@@ -33,6 +34,14 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
   const [groupTitle, setGroupTitle] = useState("");
   const [selectedPersonas, setSelectedPersonas] = useState<string[]>([]);
   const [creatingGroup, setCreatingGroup] = useState(false);
+  
+  // Edit group states
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingGroup, setEditingGroup] = useState<Conversation | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editAvatarPreview, setEditAvatarPreview] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch conversations (filter for groups)
   const { data: allConversations = [] } = useQuery<Conversation[]>({
@@ -83,6 +92,31 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
     },
   });
 
+  // Update group mutation
+  const updateGroupMutation = useMutation({
+    mutationFn: async ({ id, avatarUrl, title }: { id: string; avatarUrl?: string; title?: string }) => {
+      const response = await apiRequest("PATCH", `/api/conversations/${id}`, {
+        avatarUrl,
+        title,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      setEditDialogOpen(false);
+      setEditingGroup(null);
+      setEditAvatarPreview(null);
+      toast({ title: "✅ 群聊更新成功" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ 更新失败",
+        description: error.message || "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleCreateGroup = () => {
     if (selectedPersonas.length === 0) {
       toast({
@@ -112,6 +146,65 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
 
   const handleGroupClick = (conversationId: string) => {
     setLocation(`/chat?conversationId=${conversationId}`);
+  };
+
+  const handleEditGroup = (group: Conversation, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingGroup(group);
+    setEditTitle(group.title || "");
+    setEditAvatarPreview(group.avatarUrl || null);
+    setEditDialogOpen(true);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "❌ 文件格式不支持",
+        description: "请上传图片文件",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('上传失败');
+      }
+
+      const data = await response.json();
+      setEditAvatarPreview(data.url);
+      toast({ title: "✅ 图片上传成功" });
+    } catch (error: any) {
+      toast({
+        title: "❌ 上传失败",
+        description: error.message || "请稍后重试",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleSaveGroup = () => {
+    if (!editingGroup) return;
+
+    updateGroupMutation.mutate({
+      id: editingGroup.id,
+      avatarUrl: editAvatarPreview || undefined,
+      title: editTitle || undefined,
+    });
   };
 
   return (
@@ -274,24 +367,17 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    {/* Group Avatar (show multiple faces or group icon) */}
+                    {/* Group Avatar */}
                     <div className="relative h-12 w-12 flex-shrink-0">
-                      {group.personas && group.personas.length > 0 ? (
-                        <div className="grid grid-cols-2 gap-0.5 h-12 w-12">
-                          {group.personas.slice(0, 4).map((persona, idx) => (
-                            <Avatar key={persona.id} className="h-[22px] w-[22px]">
-                              <AvatarImage src={persona.avatarUrl || undefined} />
-                              <AvatarFallback className="text-[10px] bg-primary/10">
-                                {persona.name[0]}
-                              </AvatarFallback>
-                            </Avatar>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Users className="h-6 w-6 text-primary" />
-                        </div>
-                      )}
+                      <Avatar 
+                        className="h-12 w-12 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={(e) => handleEditGroup(group, e)}
+                      >
+                        <AvatarImage src={group.avatarUrl || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                          {group.title?.substring(0, 2).toUpperCase() || "群"}
+                        </AvatarFallback>
+                      </Avatar>
                     </div>
 
                     {/* Group Info */}
@@ -313,6 +399,81 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
         )}
         </div>
       </div>
+
+      {/* Edit Group Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>编辑群聊</DialogTitle>
+            <DialogDescription>
+              修改群聊名称和头像
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Avatar Upload */}
+            <div className="flex flex-col items-center gap-4">
+              <div className="relative">
+                <Avatar className="h-24 w-24">
+                  <AvatarImage src={editAvatarPreview || undefined} />
+                  <AvatarFallback className="bg-primary/20 text-primary text-2xl">
+                    {editTitle?.substring(0, 2).toUpperCase() || "群"}
+                  </AvatarFallback>
+                </Avatar>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover-elevate active-elevate-2"
+                  disabled={uploadingAvatar}
+                  data-testid="button-upload-group-avatar"
+                >
+                  <Upload className="h-4 w-4" />
+                </button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+              {uploadingAvatar && (
+                <p className="text-sm text-muted-foreground">上传中...</p>
+              )}
+            </div>
+
+            {/* Group Title Input */}
+            <div className="space-y-2">
+              <label htmlFor="edit-group-title" className="text-sm font-medium">群聊名称</label>
+              <Input
+                id="edit-group-title"
+                placeholder="输入群聊名称"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                data-testid="input-edit-group-title"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setEditDialogOpen(false)}
+              data-testid="button-cancel-edit-group"
+            >
+              取消
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSaveGroup}
+              disabled={updateGroupMutation.isPending}
+              data-testid="button-save-group"
+            >
+              {updateGroupMutation.isPending ? "保存中..." : "保存"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
