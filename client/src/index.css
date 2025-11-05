@@ -413,3 +413,11 @@
     inset: -1px;
   }
 }
+
+/* Set body and html background to match app background color */
+/* This ensures no white gaps appear in safe areas or viewport edges */
+html,
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
