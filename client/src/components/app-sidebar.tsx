@@ -325,58 +325,6 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
             data-testid="input-search"
           />
         </div>
-
-        {/* Page Navigation */}
-        <div className="grid grid-cols-4 gap-2 mt-4">
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex flex-col items-center gap-1 py-3 h-auto",
-              location === "/chat" && "bg-sidebar-accent"
-            )}
-            onClick={() => setLocation("/chat")}
-            data-testid="nav-chat"
-          >
-            <MessageCircle className="h-5 w-5" />
-            <span className="text-xs">聊天</span>
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex flex-col items-center gap-1 py-3 h-auto",
-              location === "/contacts" && "bg-sidebar-accent"
-            )}
-            onClick={() => setLocation("/contacts")}
-            data-testid="nav-contacts"
-          >
-            <Users className="h-5 w-5" />
-            <span className="text-xs">联系人</span>
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex flex-col items-center gap-1 py-3 h-auto",
-              location === "/moments" && "bg-sidebar-accent"
-            )}
-            onClick={() => setLocation("/moments")}
-            data-testid="nav-moments"
-          >
-            <Camera className="h-5 w-5" />
-            <span className="text-xs">动态</span>
-          </Button>
-          <Button
-            variant="ghost"
-            className={cn(
-              "flex flex-col items-center gap-1 py-3 h-auto",
-              location === "/groups" && "bg-sidebar-accent"
-            )}
-            onClick={() => setLocation("/groups")}
-            data-testid="nav-groups"
-          >
-            <UserCircle className="h-5 w-5" />
-            <span className="text-xs">群聊</span>
-          </Button>
-        </div>
       </SidebarHeader>
 
       <SidebarContent className="p-0">
@@ -459,6 +407,60 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
           )}
         </ScrollArea>
       </SidebarContent>
+
+      {/* Page Navigation - Desktop Only */}
+      <SidebarFooter className="border-t border-sidebar-border p-3 hidden md:block">
+        <div className="grid grid-cols-4 gap-2">
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex flex-col items-center gap-1 py-3 h-auto",
+              location === "/chat" && "bg-sidebar-accent"
+            )}
+            onClick={() => setLocation("/chat")}
+            data-testid="nav-chat"
+          >
+            <MessageCircle className="h-5 w-5" />
+            <span className="text-xs">聊天</span>
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex flex-col items-center gap-1 py-3 h-auto",
+              location === "/contacts" && "bg-sidebar-accent"
+            )}
+            onClick={() => setLocation("/contacts")}
+            data-testid="nav-contacts"
+          >
+            <Users className="h-5 w-5" />
+            <span className="text-xs">联系人</span>
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex flex-col items-center gap-1 py-3 h-auto",
+              location === "/moments" && "bg-sidebar-accent"
+            )}
+            onClick={() => setLocation("/moments")}
+            data-testid="nav-moments"
+          >
+            <Camera className="h-5 w-5" />
+            <span className="text-xs">动态</span>
+          </Button>
+          <Button
+            variant="ghost"
+            className={cn(
+              "flex flex-col items-center gap-1 py-3 h-auto",
+              location === "/groups" && "bg-sidebar-accent"
+            )}
+            onClick={() => setLocation("/groups")}
+            data-testid="nav-groups"
+          >
+            <UserCircle className="h-5 w-5" />
+            <span className="text-xs">群聊</span>
+          </Button>
+        </div>
+      </SidebarFooter>
 
       {/* Edit Profile Dialog */}
       <Dialog open={isEditProfileOpen} onOpenChange={setIsEditProfileOpen}>
