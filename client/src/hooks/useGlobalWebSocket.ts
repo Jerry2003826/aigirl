@@ -31,7 +31,12 @@ export function useGlobalWebSocket() {
           
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
-            console.log('[Global WS] Received new_message:', message.id, message.senderType, message.content?.substring(0, 20));
+            console.log('[Global WS] Received new_message:', {
+              id: message.id,
+              clientMessageId: message.clientMessageId, // CRITICAL DEBUG
+              senderType: message.senderType,
+              content: message.content?.substring(0, 20)
+            });
             
             // Check if user is currently viewing this conversation
             const currentPath = window.location.pathname;

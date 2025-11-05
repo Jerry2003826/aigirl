@@ -294,6 +294,7 @@ export async function broadcastNewMessage(conversationId: string, message: any) 
   // Debug: Log message with persona info
   console.log('[WS Broadcast] Message:', {
     id: message.id,
+    clientMessageId: message.clientMessageId, // CRITICAL DEBUG
     senderType: message.senderType,
     personaName: message.personaName,
     personaAvatar: message.personaAvatar,

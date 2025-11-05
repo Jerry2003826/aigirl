@@ -636,6 +636,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const message = await storage.createMessage(validatedData);
       
+      // DEBUG: Log saved message with clientMessageId
+      console.log('[POST /api/messages] Saved message:', {
+        id: message.id,
+        clientMessageId: message.clientMessageId,
+        content: message.content?.substring(0, 20)
+      });
+      
       // Broadcast new message to all connected clients in the conversation
       broadcastNewMessage(conversationId, message);
       
