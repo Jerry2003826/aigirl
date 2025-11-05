@@ -1276,6 +1276,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark moment comments as read
+  app.post('/api/moments/:momentId/comments/mark-read', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { momentId } = req.params;
+      
+      // Verify moment exists and user is the author
+      const moment = await storage.getMoment(momentId);
+      if (!moment) {
+        return res.status(404).json({ message: "Moment not found" });
+      }
+      
+      if (moment.authorId !== userId || moment.authorType !== 'user') {
+        return res.status(403).json({ message: "只有动态作者可以标记评论为已读" });
+      }
+      
+      await storage.markMomentCommentsAsRead(momentId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking comments as read:", error);
+      res.status(500).json({ message: "Failed to mark comments as read" });
+    }
+  });
+
   // Delete a comment
   app.delete('/api/moments/comments/:commentId', isAuthenticated, async (req: any, res) => {
     try {

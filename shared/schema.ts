@@ -140,6 +140,7 @@ export const moments = pgTable(
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Owner of the moment (for filtering)
     content: text("content").notNull(),
     images: text("images").array(), // Array of image URLs
+    unreadCommentsCount: integer("unread_comments_count").default(0).notNull(), // Track unread comments for the author
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

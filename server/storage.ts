@@ -88,6 +88,7 @@ export interface IStorage {
   getMomentComments(momentId: string): Promise<MomentComment[]>;
   getMomentCommentById(id: string): Promise<MomentComment | undefined>;
   deleteMomentComment(id: string): Promise<boolean>;
+  markMomentCommentsAsRead(momentId: string): Promise<void>; // Mark all comments on a moment as read
   
   // AI Settings operations
   getAiSettings(userId: string): Promise<AiSettings | undefined>;
@@ -906,7 +907,24 @@ export class DatabaseStorage implements IStorage {
   // Moment comment operations
   async createMomentComment(insertComment: InsertMomentComment): Promise<MomentComment> {
     const result = await db.insert(momentComments).values(insertComment).returning();
-    return result[0];
+    const comment = result[0];
+    
+    // Increment unread comments count for the moment author (if commenter is not the author)
+    const moment = await db
+      .select()
+      .from(moments)
+      .where(eq(moments.id, insertComment.momentId))
+      .limit(1);
+    
+    if (moment[0] && moment[0].authorId !== insertComment.authorId) {
+      // Increment unread count only if the comment is from someone other than the moment author
+      await db
+        .update(moments)
+        .set({ unreadCommentsCount: sql`${moments.unreadCommentsCount} + 1` })
+        .where(eq(moments.id, insertComment.momentId));
+    }
+    
+    return comment;
   }
 
   async getMomentComments(momentId: string): Promise<MomentComment[]> {
@@ -929,6 +947,14 @@ export class DatabaseStorage implements IStorage {
   async deleteMomentComment(id: string): Promise<boolean> {
     const result = await db.delete(momentComments).where(eq(momentComments.id, id)).returning();
     return result.length > 0;
+  }
+
+  async markMomentCommentsAsRead(momentId: string): Promise<void> {
+    // Reset unread comments count to 0
+    await db
+      .update(moments)
+      .set({ unreadCommentsCount: 0 })
+      .where(eq(moments.id, momentId));
   }
 
   // AI Settings operations

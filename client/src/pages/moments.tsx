@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,27 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
   const { data: momentsWithDetails = [], isLoading } = useQuery<MomentWithDetails[]>({
     queryKey: ['/api/moments'],
   });
+
+  // Mark all user's moments comments as read when they visit this page
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Find all user's moments with unread comments
+    const userMomentsWithUnread = momentsWithDetails.filter(
+      m => m.authorId === currentUser.id && m.authorType === 'user' && (m.unreadCommentsCount || 0) > 0
+    );
+
+    // Mark each moment's comments as read
+    userMomentsWithUnread.forEach(async (moment) => {
+      try {
+        await apiRequest('POST', `/api/moments/${moment.id}/comments/mark-read`);
+        // Invalidate queries to refresh the unread count
+        queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
+      } catch (error) {
+        console.error('Failed to mark comments as read:', error);
+      }
+    });
+  }, [currentUser, momentsWithDetails.length]); // Run when page loads or moments change
 
   // Create moment mutation
   const createMomentMutation = useMutation({
