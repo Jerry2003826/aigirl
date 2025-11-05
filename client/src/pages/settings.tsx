@@ -94,14 +94,14 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" data-testid="spinner-loading"></div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto bg-background">
       {/* Mobile Header */}
       <MobileHeader 
         title="设置" 

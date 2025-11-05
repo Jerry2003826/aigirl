@@ -291,14 +291,14 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
 
   if (isLoading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" data-testid="spinner-loading"></div>
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto pb-20 md:pb-6">
+    <div className="h-full overflow-y-auto pb-20 md:pb-6 bg-background">
       {/* Mobile Header */}
       <MobileHeader 
         title="AI女友" 

@@ -503,14 +503,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
   return (
     <div className={cn(
-      "flex h-full flex-col",
+      "flex h-full flex-col bg-background",
       // Mobile: only show chat when sidebar is hidden
       "md:flex",
       showMobileSidebar && "hidden md:flex"
     )}>
       {selectedConversationId && conversationLoading ? (
         // Loading state when conversation is being fetched
-        <div className="flex h-full items-center justify-center">
+        <div className="flex h-full items-center justify-center bg-background">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" data-testid="spinner-conversation-loading"></div>
         </div>
       ) : selectedConversation ? (
@@ -624,8 +624,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-hidden relative">
-              <div className="h-full overflow-y-auto p-4" ref={scrollViewportRef}>
+            <div className="flex-1 overflow-hidden relative bg-background">
+              <div className="h-full overflow-y-auto p-4 bg-background" ref={scrollViewportRef}>
               {/* Load More Button */}
               {!messagesLoading && messages.length >= messageLimit && (
                 <div className="flex justify-center mb-4">
