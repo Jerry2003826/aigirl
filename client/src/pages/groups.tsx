@@ -184,12 +184,12 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
                         onClick={() => togglePersona(persona.id)}
                         data-testid={`persona-item-${persona.id}`}
                       >
-                        <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+                        <div onClick={(e) => e.stopPropagation()} className="shrink-0 flex items-center justify-center w-5 h-5">
                           <Checkbox
                             checked={selectedPersonas.includes(persona.id)}
                             onCheckedChange={() => togglePersona(persona.id)}
                             data-testid={`checkbox-persona-${persona.id}`}
-                            className="h-5 w-5"
+                            className="!h-5 !w-5"
                           />
                         </div>
                         <Avatar className="h-12 w-12 shrink-0">
