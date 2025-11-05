@@ -1238,7 +1238,7 @@ export async function generateAIMomentContent(
       messages: [
         { role: "user", content: userPrompt },
       ],
-      maxTokens: 800, // 增加token限制以确保内容完整
+      maxTokens: 2000, // 与评论生成保持一致，提供充足生成空间
     });
 
     const trimmedContent = content.trim();
