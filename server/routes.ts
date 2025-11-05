@@ -54,13 +54,9 @@ const messageLimiter = rateLimit({
   legacyHeaders: false,
   // Use user ID from session for rate limiting
   keyGenerator: (req, res) => {
-    // Use authenticated user ID if available, otherwise fall back to IP
+    // Use authenticated user ID if available
     const userId = (req as any).user?.claims?.sub;
-    if (userId) {
-      return `user:${userId}`;
-    }
-    // Fallback to IP address
-    return req.ip || 'unknown';
+    return userId || 'anonymous';
   },
 });
 
