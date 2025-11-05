@@ -131,7 +131,7 @@ export function useGlobalWebSocket() {
             // Invalidate conversations list to show new group
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           }
-          else if (data.type === 'participant_added' && data.payload) {
+          else if (data.type === 'group_participant_added' && data.payload) {
             console.log('[Global WS] Participant added, refreshing conversation details...');
             const { conversationId } = data.payload;
             // Invalidate specific conversation details
@@ -142,7 +142,7 @@ export function useGlobalWebSocket() {
             // Also invalidate conversations list
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           }
-          else if (data.type === 'participant_removed' && data.payload) {
+          else if (data.type === 'group_participant_removed' && data.payload) {
             console.log('[Global WS] Participant removed, refreshing conversation details...');
             const { conversationId } = data.payload;
             // Invalidate specific conversation details
