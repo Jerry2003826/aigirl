@@ -95,6 +95,64 @@ export function useGlobalWebSocket() {
               }, 5000);
             }
           }
+          
+          // Handle Moments events
+          else if (data.type === 'moment_created' && data.payload) {
+            console.log('[Global WS] Moment created, refreshing moments...');
+            // Invalidate moments list to show new moment
+            queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+          }
+          else if (data.type === 'moment_deleted' && data.payload) {
+            console.log('[Global WS] Moment deleted, refreshing moments...');
+            // Invalidate moments list to remove deleted moment
+            queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+          }
+          else if (data.type === 'moment_liked' && data.payload) {
+            console.log('[Global WS] Moment liked/unliked, refreshing moments...');
+            // Invalidate moments list to update like count
+            queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+          }
+          else if (data.type === 'moment_commented' && data.payload) {
+            console.log('[Global WS] New moment comment, refreshing moments and comments...');
+            const { momentId } = data.payload;
+            // Invalidate moments list to update comment count
+            queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+            // Invalidate comments for this specific moment
+            if (momentId) {
+              queryClient.invalidateQueries({ queryKey: ["/api/moments", momentId, "comments"] });
+            }
+            // Also invalidate unread comment notifications
+            queryClient.invalidateQueries({ queryKey: ["/api/moments/unread-comments"] });
+          }
+          
+          // Handle Groups events
+          else if (data.type === 'group_created' && data.payload) {
+            console.log('[Global WS] Group created, refreshing conversations...');
+            // Invalidate conversations list to show new group
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          }
+          else if (data.type === 'participant_added' && data.payload) {
+            console.log('[Global WS] Participant added, refreshing conversation details...');
+            const { conversationId } = data.payload;
+            // Invalidate specific conversation details
+            if (conversationId) {
+              queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId] });
+              queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "participants"] });
+            }
+            // Also invalidate conversations list
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          }
+          else if (data.type === 'participant_removed' && data.payload) {
+            console.log('[Global WS] Participant removed, refreshing conversation details...');
+            const { conversationId } = data.payload;
+            // Invalidate specific conversation details
+            if (conversationId) {
+              queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId] });
+              queryClient.invalidateQueries({ queryKey: ["/api/conversations", conversationId, "participants"] });
+            }
+            // Also invalidate conversations list
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          }
         } catch (error) {
           console.error('[Global WS] Error parsing message:', error);
         }
