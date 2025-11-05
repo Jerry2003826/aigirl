@@ -75,6 +75,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]); // 乐观更新的用户消息
   const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪AI消息数量用于检测分段完成
   const [showMembersDialog, setShowMembersDialog] = useState(false);
+  const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
+  const [editingTitle, setEditingTitle] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
@@ -292,6 +294,40 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
   const handleViewMembers = () => {
     setShowMembersDialog(true);
+  };
+
+  const handleEditTitle = () => {
+    if (!selectedConversation?.isGroup) return;
+    setEditingTitle(selectedConversation.title || "");
+    setShowEditTitleDialog(true);
+  };
+
+  // Update conversation title mutation
+  const updateTitleMutation = useMutation({
+    mutationFn: async ({ conversationId, title }: { conversationId: string; title: string }) => {
+      return apiRequest("PATCH", `/api/conversations/${conversationId}`, { title });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations", selectedConversationId] });
+      setShowEditTitleDialog(false);
+      toast({ title: "✅ 群聊名称已更新" });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "❌ 更新失败",
+        description: error.message || "请稍后重试",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSaveTitle = () => {
+    if (!selectedConversationId || !editingTitle.trim() || updateTitleMutation.isPending) return;
+    updateTitleMutation.mutate({
+      conversationId: selectedConversationId,
+      title: editingTitle.trim(),
+    });
   };
 
   // Helper function to check if a message contains an image
@@ -551,7 +587,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <h3 className="font-semibold truncate" data-testid="text-chat-header-title">
+                <h3 
+                  className={cn(
+                    "font-semibold truncate",
+                    selectedConversation.isGroup && "cursor-pointer hover:text-primary transition-colors"
+                  )}
+                  onClick={selectedConversation.isGroup ? handleEditTitle : undefined}
+                  data-testid="text-chat-header-title"
+                >
                   {selectedConversation.title || selectedConversation.personas?.[0]?.name || "Chat"}
                 </h3>
                 <div className="flex items-center gap-1.5">
@@ -1046,6 +1089,56 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <p className="text-muted-foreground">暂无成员</p>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Title Dialog */}
+      <Dialog open={showEditTitleDialog} onOpenChange={setShowEditTitleDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改群聊名称</DialogTitle>
+            <DialogDescription>
+              为这个群聊设置一个新名称
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label htmlFor="edit-title" className="text-sm font-medium">群聊名称</label>
+              <Input
+                id="edit-title"
+                placeholder="输入群聊名称"
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && editingTitle.trim()) {
+                    handleSaveTitle();
+                  }
+                }}
+                autoFocus
+                data-testid="input-edit-title"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setShowEditTitleDialog(false)}
+              data-testid="button-cancel-edit-title"
+            >
+              取消
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSaveTitle}
+              disabled={!editingTitle.trim() || updateTitleMutation.isPending}
+              data-testid="button-save-title"
+            >
+              {updateTitleMutation.isPending ? "保存中..." : "保存"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
