@@ -22,13 +22,21 @@ export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
     queryKey: ['/api/moments'],
   });
 
+  // Fetch conversations to calculate total unread messages
+  const { data: conversations = [] } = useQuery<any[]>({
+    queryKey: ['/api/conversations'],
+  });
+
   // Calculate total unread comments for user's own moments
   const totalUnreadComments = moments
     .filter(m => m.authorId === currentUser?.id && m.authorType === 'user')
     .reduce((sum, m) => sum + (m.unreadCommentsCount || 0), 0);
 
+  // Calculate total unread messages across all conversations
+  const totalUnreadMessages = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
   const navItems = [
-    { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat", key: "chat" },
+    { title: "聊天", path: "/chat", icon: MessageCircle, testId: "nav-chat", key: "chat", badge: totalUnreadMessages },
     { title: "联系人", path: "/contacts", icon: Users, testId: "nav-contacts", key: "contacts" },
     { title: "动态", path: "/moments", icon: Camera, testId: "nav-moments", key: "moments", badge: totalUnreadComments },
     { title: "群聊", path: "/groups", icon: UserCircle, testId: "nav-groups", key: "groups" },
@@ -51,7 +59,7 @@ export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
         {navItems.map((item) => {
           const isActive = location === item.path || (location === "/" && item.path === "/chat");
           const Icon = item.icon;
-          const showBadge = item.badge && item.badge > 0;
+          const showBadge = item.badge !== undefined && item.badge > 0;
           
           return (
             <button
