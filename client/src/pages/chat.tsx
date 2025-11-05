@@ -818,7 +818,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                             </AvatarFallback>
                           </Avatar>
                         )}
-                        {!isUser && !showAvatar && <div className="w-10" />}
 
                         <div
                           className={cn(
