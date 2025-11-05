@@ -1,5 +1,5 @@
 import { storage } from './storage';
-import { generateAIResponse, ImageData } from './aiService';
+import { generateAIResponse, ImageData, extractAndStoreMemories } from './aiService';
 import { broadcastNewMessage } from './websocket';
 
 const MAX_RETRIES = 3;
@@ -101,6 +101,9 @@ async function processNextJob() {
       await storage.updateJobStatus(job.id, 'failed', 'Conversation not found');
       return;
     }
+    
+    // Record messageCount before creating AI messages (for extraction trigger)
+    const messageCountBefore = conversation.messageCount || 0;
     
     // Get user message
     const userMessage = await storage.getMessage(job.userMessageId);
@@ -233,6 +236,34 @@ async function processNextJob() {
     }
     
     console.log(`[AI Worker] Successfully generated ${aiMessages.length} AI messages`);
+    
+    // Check if we should trigger memory extraction (every 10 messages)
+    // Check if we crossed a multiple of 10 during this turn
+    const updatedConversation = await storage.getConversation(conversation.id);
+    const messageCountAfter = updatedConversation?.messageCount || 0;
+    
+    // Detect if we crossed a multiple of 10 (e.g., from 8 to 11 crosses 10)
+    const crossedMultipleOf10 = Math.floor(messageCountAfter / 10) > Math.floor(messageCountBefore / 10);
+    
+    if (crossedMultipleOf10) {
+      console.log(`[AI Worker] Crossed multiple of 10 (${messageCountBefore} -> ${messageCountAfter}), triggering memory extraction`);
+      
+      // Extract and store memories from this conversation turn
+      try {
+        await extractAndStoreMemories(
+          conversation.id,
+          respondingPersonaId,
+          userMessage.content || '[User sent an image]',
+          aiResponse
+        );
+        console.log(`[AI Worker] Memory extraction completed for conversation ${conversation.id}`);
+      } catch (error) {
+        console.error(`[AI Worker] Memory extraction failed:`, error);
+        // Don't fail the job if memory extraction fails
+      }
+    } else {
+      console.log(`[AI Worker] No extraction needed (${messageCountBefore} -> ${messageCountAfter}, next extraction at ${Math.ceil(messageCountAfter / 10) * 10})`);
+    }
     
     // Mark job as completed
     await storage.updateJobStatus(job.id, 'completed');

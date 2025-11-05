@@ -114,12 +114,25 @@ export function classifyAIError(error: any): AIError {
 }
 
 /**
- * Build conversation context from recent messages
+ * Estimate token count for text (simple approximation)
+ * - Chinese: ~1.5 tokens per character
+ * - English: ~1.3 tokens per word
+ * - Simple approximation: count characters and multiply by 1.5
+ */
+function estimateTokens(text: string): number {
+  if (!text) return 0;
+  // Simple estimation: 1.5 tokens per character
+  return Math.ceil(text.length * 1.5);
+}
+
+/**
+ * Build conversation context from recent messages with token limit
  */
 async function buildConversationContext(
   conversationId: string,
   personaId: string,
-  limit: number = 100
+  limit: number = 100,
+  maxTokens: number = 100000
 ): Promise<ConversationMessage[]> {
   const messages = await storage.getMessagesByConversation(conversationId, limit, 0);
   
@@ -127,20 +140,32 @@ async function buildConversationContext(
   // Reverse them so AI reads in chronological order (oldest first)
   const chronologicalMessages = [...messages].reverse();
   
-  // Convert messages to provider-agnostic format
-  return chronologicalMessages.map((msg: Message) => {
-    if (msg.senderType === "user") {
-      return {
-        role: "user" as const,
-        content: msg.content,
-      };
-    } else {
-      return {
-        role: "assistant" as const,
-        content: msg.content,
-      };
+  // Convert messages to provider-agnostic format with token limit
+  const contextMessages: ConversationMessage[] = [];
+  let totalTokens = 0;
+  
+  // Add messages from newest to oldest (reverse again) to prioritize recent context
+  for (let i = chronologicalMessages.length - 1; i >= 0; i--) {
+    const msg = chronologicalMessages[i];
+    const msgTokens = estimateTokens(msg.content);
+    
+    // Stop if adding this message would exceed token limit
+    if (totalTokens + msgTokens > maxTokens) {
+      console.log(`[Context Build] Token limit reached at ${totalTokens} tokens, stopping at message ${i}`);
+      break;
     }
-  });
+    
+    const conversationMsg = msg.senderType === "user" 
+      ? { role: "user" as const, content: msg.content }
+      : { role: "assistant" as const, content: msg.content };
+    
+    // Add to beginning to maintain chronological order
+    contextMessages.unshift(conversationMsg);
+    totalTokens += msgTokens;
+  }
+  
+  console.log(`[Context Build] Loaded ${contextMessages.length} messages (~${totalTokens} tokens)`);
+  return contextMessages;
 }
 
 /**
@@ -235,13 +260,16 @@ async function buildSystemPrompt(
 
 /**
  * Build RAG context from memories (when RAG is enabled)
- * - Filters memories with importance >= 6 (medium-high priority)
- * - Sorts by importance descending
- * - Limits to top 20 memories to avoid token waste
+ * - Loads ALL memories (no importance filtering)
+ * - Sorts by importance descending (most important first)
+ * - Limits by maxMemories count and maxTokens
+ * - Smart forgetting: drops least important memories first when limits are reached
  */
 async function buildRAGContext(
   personaId: string,
-  userId: string
+  userId: string,
+  maxMemories: number = 100,
+  maxTokens: number = 50000
 ): Promise<string> {
   const allMemories = await storage.getMemoriesByPersona(personaId, userId);
   
@@ -249,29 +277,50 @@ async function buildRAGContext(
     return "（知识库里没有找到相关记忆）";
   }
   
-  // Filter and sort memories
-  const relevantMemories = allMemories
-    .filter(m => (m.importance || 5) >= 6) // Only include medium-high importance (>= 6)
-    .sort((a, b) => (b.importance || 5) - (a.importance || 5)) // Sort by importance descending
-    .slice(0, 20); // Limit to top 20 memories
+  // Sort by importance descending (most important first)
+  const sortedMemories = allMemories
+    .sort((a, b) => (b.importance || 5) - (a.importance || 5));
   
-  if (relevantMemories.length === 0) {
-    return "（知识库里没有找到重要的相关记忆）";
+  // Build memory documents with token limit (smart forgetting)
+  const memoryDocs: string[] = [];
+  let totalTokens = 0;
+  let memoryCount = 0;
+  
+  for (const memory of sortedMemories) {
+    // Stop if we've reached max memory count
+    if (memoryCount >= maxMemories) {
+      console.log(`[RAG Context] Reached max memory count (${maxMemories}), stopping`);
+      break;
+    }
+    
+    // Format memory document
+    let doc = `【记忆${memoryCount + 1}：${memory.key}】\n${memory.value}`;
+    if (memory.context) {
+      doc += `\n背景：${memory.context}`;
+    }
+    if (memory.importance) {
+      doc += `\n重要程度：${memory.importance}/10`;
+    }
+    
+    const docTokens = estimateTokens(doc);
+    
+    // Stop if adding this memory would exceed token limit (smart forgetting)
+    if (totalTokens + docTokens > maxTokens) {
+      console.log(`[RAG Context] Token limit reached at ${totalTokens} tokens, stopping at memory ${memoryCount}`);
+      break;
+    }
+    
+    memoryDocs.push(doc);
+    totalTokens += docTokens;
+    memoryCount++;
   }
   
-  // Format memories as RAG documents
-  return relevantMemories
-    .map((memory, i) => {
-      let doc = `【记忆${i + 1}：${memory.key}】\n${memory.value}`;
-      if (memory.context) {
-        doc += `\n背景：${memory.context}`;
-      }
-      if (memory.importance) {
-        doc += `\n重要程度：${memory.importance}/10`;
-      }
-      return doc;
-    })
-    .join("\n\n");
+  if (memoryDocs.length === 0) {
+    return "（知识库里没有找到相关记忆）";
+  }
+  
+  console.log(`[RAG Context] Loaded ${memoryDocs.length} memories (~${totalTokens} tokens)`);
+  return memoryDocs.join("\n\n");
 }
 
 /**
@@ -306,20 +355,34 @@ export async function generateAIResponse(
   const searchEnabled = aiSettings?.searchEnabled || false;
   const language = aiSettings?.language || "zh-CN";
   
+  // Token budget management (total limit: 100,000 tokens)
+  const TOTAL_TOKEN_LIMIT = 100000;
+  const systemPromptTokenBudget = 5000;   // Reserve for system prompt
+  const messageTokenBudget = 60000;       // Priority for recent messages
+  const memoryTokenBudget = 35000;        // For RAG memories
+  
   // Build system prompt with personality (and memories if RAG is disabled)
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
+  const systemPromptTokens = estimateTokens(systemPrompt);
+  console.log(`[Token Budget] System prompt: ~${systemPromptTokens} tokens`);
   
-  // Build RAG context if enabled
+  // Build RAG context if enabled (with token limit)
   let ragContext: string | undefined;
   if (ragEnabled) {
-    ragContext = await buildRAGContext(persona.id, conversation.userId);
+    ragContext = await buildRAGContext(
+      persona.id, 
+      conversation.userId,
+      100,  // max 100 memories
+      memoryTokenBudget
+    );
   }
   
-  // Build conversation context
+  // Build conversation context (with token limit)
   const conversationHistory = await buildConversationContext(
     conversationId,
     personaId,
-    contextLimit
+    contextLimit,
+    messageTokenBudget
   );
   
   // Debug log: Show what's being sent to AI
@@ -390,20 +453,34 @@ export async function generateAIResponseStream(
   const searchEnabled = aiSettings?.searchEnabled || false;
   const language = aiSettings?.language || "zh-CN";
   
+  // Token budget management (total limit: 100,000 tokens)
+  const TOTAL_TOKEN_LIMIT = 100000;
+  const systemPromptTokenBudget = 5000;   // Reserve for system prompt
+  const messageTokenBudget = 60000;       // Priority for recent messages
+  const memoryTokenBudget = 35000;        // For RAG memories
+  
   // Build system prompt with personality (and memories if RAG is disabled)
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
+  const systemPromptTokens = estimateTokens(systemPrompt);
+  console.log(`[Token Budget] System prompt: ~${systemPromptTokens} tokens`);
   
-  // Build RAG context if enabled
+  // Build RAG context if enabled (with token limit)
   let ragContext: string | undefined;
   if (ragEnabled) {
-    ragContext = await buildRAGContext(persona.id, conversation.userId);
+    ragContext = await buildRAGContext(
+      persona.id, 
+      conversation.userId,
+      100,  // max 100 memories
+      memoryTokenBudget
+    );
   }
   
-  // Build conversation context
+  // Build conversation context (with token limit)
   const conversationHistory = await buildConversationContext(
     conversationId,
     personaId,
-    contextLimit
+    contextLimit,
+    messageTokenBudget
   );
   
   // Apply response delay if specified

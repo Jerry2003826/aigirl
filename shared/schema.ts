@@ -49,6 +49,7 @@ export const conversations = pgTable("conversations", {
   avatarUrl: text("avatar_url"), // Custom avatar for group chats
   isGroup: boolean("is_group").default(false).notNull(),
   unreadCount: integer("unread_count").default(0).notNull(), // Cached unread count for performance
+  messageCount: integer("message_count").default(0).notNull(), // Track total messages for auto-extraction trigger
   lastReadAt: timestamp("last_read_at"), // Last time user viewed this conversation
   lastMessageAt: timestamp("last_message_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

@@ -388,13 +388,17 @@ export class MemStorage implements IStorage {
     };
     this.messages.set(id, message);
     
-    // Auto-increment unreadCount for AI messages (matches PgStorage behavior)
-    if (insertMessage.senderType === 'ai') {
-      const conversation = this.conversations.get(insertMessage.conversationId);
-      if (conversation) {
+    // Auto-increment messageCount for all messages (matches PgStorage behavior)
+    const conversation = this.conversations.get(insertMessage.conversationId);
+    if (conversation) {
+      conversation.messageCount = (conversation.messageCount || 0) + 1;
+      
+      // Auto-increment unreadCount for AI messages
+      if (insertMessage.senderType === 'ai') {
         conversation.unreadCount = (conversation.unreadCount || 0) + 1;
-        this.conversations.set(insertMessage.conversationId, conversation);
       }
+      
+      this.conversations.set(insertMessage.conversationId, conversation);
     }
     
     return message;
@@ -771,6 +775,12 @@ export class DatabaseStorage implements IStorage {
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const result = await db.insert(messages).values(insertMessage).returning();
+    
+    // Auto-increment messageCount for all messages (triggers memory extraction every 10 messages)
+    await db
+      .update(conversations)
+      .set({ messageCount: sql`${conversations.messageCount} + 1` })
+      .where(eq(conversations.id, insertMessage.conversationId));
     
     // Auto-increment unreadCount for AI messages
     if (insertMessage.senderType === 'ai') {
