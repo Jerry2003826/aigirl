@@ -78,6 +78,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const wsRef = useRef<WebSocket | null>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const { data: user } = useQuery<{ id: string; nickname: string; avatarUrl: string | null }>({
+    queryKey: ["/api/auth/user"],
+  });
+
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
   });
