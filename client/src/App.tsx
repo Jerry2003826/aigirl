@@ -18,7 +18,7 @@ import Contacts from "@/pages/contacts";
 import ContactDetail from "@/pages/contact-detail";
 import Groups from "@/pages/groups";
 import NotFound from "@/pages/not-found";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { useGlobalWebSocket } from "@/hooks/useGlobalWebSocket";
 
@@ -129,16 +129,11 @@ function Router() {
   };
 
   const handleConversationSelect = (conversationId: string) => {
-    const isMobile = window.innerWidth < 768;
-    
-    // Update conversation ID first
     setSelectedConversationId(conversationId);
-    
-    // On mobile, hide sidebar after a microtask to ensure state is consistent
-    if (isMobile) {
-      queueMicrotask(() => {
-        setShowMobileSidebar(false);
-      });
+    // On mobile, hide sidebar when user actively selects a conversation
+    // Check if window width is mobile size (< 768px which is md breakpoint)
+    if (window.innerWidth < 768) {
+      setShowMobileSidebar(false);
     }
   };
 
