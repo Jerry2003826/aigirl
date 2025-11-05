@@ -25,8 +25,8 @@ async function buildConversationContext(
 ): Promise<ConversationMessage[]> {
   const messages = await storage.getMessagesByConversation(conversationId, limit, 0);
   
-  // Convert messages to provider-agnostic format (reverse to chronological order)
-  return messages.reverse().map((msg: Message) => {
+  // Convert messages to provider-agnostic format (already in chronological order from DB)
+  return messages.map((msg: Message) => {
     if (msg.senderType === "user") {
       return {
         role: "user" as const,
