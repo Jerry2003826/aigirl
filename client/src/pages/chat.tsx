@@ -129,19 +129,24 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   });
 
   // Merge server messages with optimistic messages
-  // Deduplicate by ID - keep the latest occurrence of each ID
+  // Backend returns DESC (newest first), we need ASC (oldest first) for chat display
   const messages = useMemo(() => {
-    const allMsgs = [...rawMessages, ...optimisticMessages];
+    // Step 1: Reverse rawMessages to get ASC order (oldest first)
+    const reversedRaw = [...rawMessages].reverse();
+    
+    // Step 2: Append optimistic messages (they are new, so they go at the end)
+    const allMsgs = [...reversedRaw, ...optimisticMessages];
+    
+    // Step 3: Deduplicate by ID - keep first occurrence (which is the real one)
     const messageMap = new Map<string, Message>();
-    // Iterate from end to beginning to keep the latest occurrence
-    for (let i = allMsgs.length - 1; i >= 0; i--) {
-      const msg = allMsgs[i];
+    for (const msg of allMsgs) {
       if (!messageMap.has(msg.id)) {
         messageMap.set(msg.id, msg);
       }
     }
-    // Convert back to array and reverse to restore original order
-    return Array.from(messageMap.values()).reverse();
+    
+    // Step 4: Return as array - already in ASC order (oldest first, newest last)
+    return Array.from(messageMap.values());
   }, [rawMessages, optimisticMessages]);
 
   // Separate query for chat history dialog - fetch ALL messages
