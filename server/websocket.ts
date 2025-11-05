@@ -369,3 +369,38 @@ export function broadcastConversationUpdate(conversationId: string, update: any)
     });
   }
 }
+
+/**
+ * Broadcast to all connected users (for global events like moments)
+ */
+export function broadcastToAllUsers(data: any) {
+  const message = typeof data === 'string' ? data : JSON.stringify(data);
+  
+  userConnections.forEach((userConns) => {
+    userConns.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  });
+}
+
+/**
+ * Broadcast moment events to all users
+ */
+export function broadcastMomentEvent(eventType: 'created' | 'liked' | 'commented' | 'deleted', payload: any) {
+  broadcastToAllUsers({
+    type: `moment_${eventType}`,
+    payload
+  });
+}
+
+/**
+ * Broadcast group/conversation events to all users
+ */
+export function broadcastGroupEvent(eventType: 'created' | 'updated' | 'participant_added' | 'participant_removed', payload: any) {
+  broadcastToAllUsers({
+    type: `group_${eventType}`,
+    payload
+  });
+}
