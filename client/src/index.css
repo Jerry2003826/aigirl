@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Set body and html background to match app background color */
+/* This ensures no white gaps appear in safe areas or viewport edges */
+@layer base {
+  html,
+  body {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground));
+  }
+}
+
 /* Safe area for bottom navigation */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom);
@@ -412,12 +422,4 @@
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
   }
-}
-
-/* Set body and html background to match app background color */
-/* This ensures no white gaps appear in safe areas or viewport edges */
-html,
-body {
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
 }
