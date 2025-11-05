@@ -398,8 +398,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // Note: 不立即删除乐观消息，让WebSocket接收真实消息后由useEffect自动清理
-      // 这样避免了"消息消失再出现"的闪烁问题
+      // CRITICAL FIX: 立即清理乐观消息，避免双重渲染闪烁
+      // WebSocket会添加真实消息，乐观消息必须立即移除
+      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
       
       // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
       // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
