@@ -127,10 +127,10 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                AI Configuration
+                AI配置
               </CardTitle>
               <CardDescription>
-                Manage your AI model preferences and API settings
+                管理你的AI模型偏好和API设置
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -141,20 +141,20 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="provider"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>AI Provider</FormLabel>
+                        <FormLabel>AI提供商</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl>
                             <SelectTrigger data-testid="select-provider">
-                              <SelectValue placeholder="Select AI provider" />
+                              <SelectValue placeholder="选择AI提供商" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="google">Google Gemini (Recommended)</SelectItem>
-                            <SelectItem value="openai">OpenAI (Future expansion)</SelectItem>
+                            <SelectItem value="google">Google Gemini（推荐）</SelectItem>
+                            <SelectItem value="openai">OpenAI（未来扩展）</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Choose your preferred AI provider. Google Gemini is recommended for best results.
+                          选择你偏好的AI提供商。推荐使用Google Gemini以获得最佳效果。
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -166,7 +166,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="model"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>AI Model</FormLabel>
+                        <FormLabel>AI模型</FormLabel>
                         <FormControl>
                           <Input
                             placeholder="gemini-2.5-pro"
@@ -175,7 +175,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                           />
                         </FormControl>
                         <FormDescription>
-                          Specify the AI model to use (e.g., gemini-2.5-pro, gemini-2.5-flash). Leave default for best results.
+                          指定要使用的AI模型（例如：gemini-2.5-pro, gemini-2.5-flash）。保持默认值以获得最佳效果。
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -217,11 +217,11 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="language"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Preferred Language</FormLabel>
+                        <FormLabel>偏好语言</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || "zh-CN"}>
                           <FormControl>
                             <SelectTrigger data-testid="select-language">
-                              <SelectValue placeholder="Select language" />
+                              <SelectValue placeholder="选择语言" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
@@ -230,7 +230,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          Choose your preferred language for AI responses
+                          选择AI回复的偏好语言
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -294,12 +294,12 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     {updateSettingsMutation.isPending ? (
                       <>
                         <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></div>
-                        Saving...
+                        保存中...
                       </>
                     ) : (
                       <>
                         <Save className="mr-2 h-4 w-4" />
-                        Save Settings
+                        保存设置
                       </>
                     )}
                   </Button>
