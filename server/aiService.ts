@@ -641,11 +641,12 @@ AI：${aiResponse}
         await storage.createMemory({
           personaId,
           userId: conversation.userId,
+          conversationId, // Track which conversation this memory came from
           key: memory.key,
           value: memory.value,
           context: memory.context || null,
         });
-        console.log(`Stored memory for persona ${personaId}: ${memory.key} = ${memory.value}`);
+        console.log(`Stored memory for persona ${personaId} from conversation ${conversationId}: ${memory.key} = ${memory.value}`);
       }
     }
   } catch (error) {
@@ -915,25 +916,11 @@ export async function triggerAIPostMoment(
       lastMomentAt: new Date(),
     });
 
-    // Extract and store memory about this moment
-    try {
-      const memoryKey = `动态_${new Date().toISOString().split('T')[0]}`;
-      const memoryValue = content.length > 100 ? content.substring(0, 100) + '...' : content;
-      
-      await storage.createMemory({
-        personaId,
-        userId,
-        key: memoryKey,
-        value: memoryValue,
-        context: '我发布的朋友圈动态',
-        importance: 6, // Medium importance
-      });
-      
-      console.log(`Stored memory for AI ${persona.name}'s moment`);
-    } catch (memError) {
-      console.error("Error storing moment memory:", memError);
-      // Don't fail the whole operation if memory fails
-    }
+    // Note: We no longer auto-create memories from moments as they:
+    // 1. Create low-quality memories (key="动态_日期" is not descriptive)
+    // 2. Cannot be associated with conversations (no conversationId)
+    // 3. Won't be cleaned up when conversations are deleted
+    // Users should rely on conversation-based memory extraction instead
 
     console.log(`AI ${persona.name} posted a moment: ${content.substring(0, 50)}...`);
     return { success: true, moment };

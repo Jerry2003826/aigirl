@@ -93,6 +93,7 @@ export const memories = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     personaId: varchar("persona_id").notNull().references(() => aiPersonas.id, { onDelete: "cascade" }),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    conversationId: varchar("conversation_id").references(() => conversations.id, { onDelete: "cascade" }), // Optional: tracks which conversation this memory came from
     key: text("key").notNull(), // e.g., "favorite_color", "birthday"
     value: text("value").notNull(), // e.g., "blue", "1990-05-15"
     context: text("context"), // Additional context about where this was learned
@@ -103,6 +104,7 @@ export const memories = pgTable(
   (table) => [
     index("idx_memories_persona_id").on(table.personaId),
     index("idx_memories_user_id").on(table.userId),
+    index("idx_memories_conversation_id").on(table.conversationId),
   ],
 );
 
