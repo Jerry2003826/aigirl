@@ -891,87 +891,49 @@ MUST:
   }
   
   if (attempt === 1) {
-    // First attempt: Standard prompt with examples
-    prompt += `请写一个有针对性的评论（1-2句话）。
+    // First attempt: Simplified prompt with minimal examples
+    prompt += `请针对这条动态写一个自然的评论（1-2句话）。
 
-【高质量示例】
+要求：
+- 引用动态中的具体内容
+- 体现你的性格（${personaName}：${personaPersonality}）
+- 像真实朋友那样自然回应
+- 禁止："好棒"、"赞"、"加油"等通用词
 
-动态："今天下雨了，心情有点低落😔"
-✅ 好评论："下雨天容易多愁善感呢，要不要聊聊天？我陪你~"
-❌ 差评论："加油！" （太通用，没有针对性）
-
-动态："刚做了红烧肉，第一次尝试！"
-✅ 好评论："哇看起来色泽超棒！是用冰糖上色的吗？教教我！"
-❌ 差评论："真不错！" （没有引用具体内容）
-
-动态："好困啊"
-✅ 好评论："那就早点休息呀，别熬夜啦~我会想你的"
-❌ 差评论："好棒！" （完全不相关）
-
-动态："新买的裙子，好看吗？"
-✅ 好评论："超好看！这个颜色特别衬你的肤色，在哪买的呀？"
-❌ 差评论："赞！" （没有具体反馈）
-
-动态："加班到现在才回家..."
-✅ 好评论："辛苦啦！这么晚了要注意安全，吃饭了吗？"
-❌ 差评论："支持你！" （没有关心细节）
-
-【你的任务】
-请根据用户的动态内容，写一个：
-- 引用具体细节的评论（比如提到"下雨"、"红烧肉"、"困"等他们说的内容）
-- 体现你性格的评论（你是${personaName}，性格：${personaPersonality}）
-- 自然真实的评论（像真人朋友那样回应）
-- 禁止使用"好棒"、"赞"、"真不错"、"加油"、"支持你"这类通用词`;
+示例：
+"好困啊" → "那就早点休息呀，别熬夜了~"
+"下雨了" → "下雨天容易多愁善感呢，要聊聊天吗？"`;
 
   } else if (attempt === 2) {
-    // Second attempt: More forceful
-    prompt += `⚠️ 重要提示：必须写一个有针对性的评论！
+    // Second attempt: More forceful but still concise
+    prompt += `⚠️ 上次回复太通用！必须改进：
 
 强制要求：
-1. 必须引用用户动态中的具体内容（比如他们提到的关键词）
-2. 必须体现你的性格：${personaPersonality}
-3. 必须像真实朋友那样回应，不能敷衍
-4. 绝对禁止：好棒、赞、真不错、加油、支持你、很好、不错
+1. 必须引用动态中的具体词汇
+2. 体现你的性格：${personaPersonality}
+3. 禁止通用词：好棒、赞、加油、支持你
 
-参考示例：
-- 用户说"好困" → "那就早点睡呀，别熬夜啦"（引用了"困"）
-- 用户说"下雨了" → "下雨天容易多愁善感呢"（引用了"下雨"）
-- 用户说"做了红烧肉" → "看起来色泽超棒，用的什么酱油？"（引用了"红烧肉"）
+示例：
+"好累啊" → "那就早点休息呀~"（具体关心）
+"做了饭" → "看起来好香！是什么菜？"（具体询问）
 
-现在请针对用户的动态："${momentContent}"，写一个具体的、个性化的评论。`;
+动态："${momentContent}"
+请写一个具体的、个性化的评论：`;
 
   } else {
-    // Third attempt: Most strict with negative examples
-    prompt += `🚨 最后机会！前两次回复太通用，必须改进！
+    // Third attempt: Most strict but concise
+    prompt += `🚨 最后机会！前两次都太通用了！
 
-❌ 绝对禁止的回复：
-- "好棒！"
-- "赞！"
-- "真不错！"
-- "加油！"
-- "支持你！"
-- 任何不引用动态内容的通用反应
+❌ 禁止："好棒"、"赞"、"加油"、"支持你"等通用词
+✅ 必须：引用"${momentContent}"中的具体词汇
 
-✅ 正确的回复方式：
-动态："好困啊"
-错误："加油！"（❌ 没有针对性）
-正确："那就早点休息呀，别熬夜了~"（✅ 关心对方，提出建议）
+正确示例：
+"好困" → "早点休息呀~别熬夜"（关心）
+"下雨了" → "下雨天容易多愁善感呢"（理解）
 
-动态："下雨了，心情低落"
-错误："好棒！"（❌ 完全不相关）
-正确："下雨天容易多愁善感呢，要不要聊聊？"（✅ 理解情绪，提供陪伴）
+你是${personaName}（${personaPersonality}）
 
-你的人设：${personaName}，性格是${personaPersonality}
-
-用户的动态是："${momentContent}"
-
-请写一个：
-1. 必须引用动态中的具体词汇
-2. 必须符合你的人设和性格
-3. 必须像真实朋友那样自然回应
-4. 绝不使用通用反应
-
-现在开始写评论：`;
+请写一个具体的、符合人设的评论：`;
   }
   
   return prompt;
@@ -1046,14 +1008,14 @@ export async function generateMomentComment(
       console.log(`[Generate Comment v2] 📤 Sending to AI (attempt ${attempt})`);
       console.log(`[Generate Comment v2] Prompt preview: ${userPrompt.substring(0, 150)}...`);
       
-      // Call AI with optimized parameters
+      // Call AI with optimized parameters (reduced maxTokens to avoid overwhelming API)
       const comment = await provider.generateResponse({
         model,
         systemPrompt,
         messages: [
           { role: "user", content: userPrompt }
         ],
-        maxTokens: 200,  // Increased for more expressive comments
+        maxTokens: 80,  // Reduced from 200 - comments should be short (1-2 sentences)
         imageData,
       });
 

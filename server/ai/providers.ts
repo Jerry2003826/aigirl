@@ -157,15 +157,41 @@ ${originalText}`;
     }
 
     try {
+      console.log('[Gemini API] Calling generateContent with:', {
+        model: model || "gemini-2.5-pro",
+        contentsLength: contents.length,
+        systemPromptLength: systemPrompt.length,
+        maxTokens,
+      });
+      
       const response = await this.client.models.generateContent({
         model: model || "gemini-2.5-pro", // Default to gemini-2.5-pro
         contents,
         config,
       });
 
-      return response.text || "";
+      // Log full response for debugging
+      console.log('[Gemini API] Response object keys:', Object.keys(response));
+      console.log('[Gemini API] response.text value:', JSON.stringify(response.text));
+      console.log('[Gemini API] response.text length:', response.text?.length || 0);
+      
+      // Check if response has candidates
+      if (response.candidates && response.candidates.length > 0) {
+        console.log('[Gemini API] candidates[0]:', JSON.stringify(response.candidates[0], null, 2));
+      }
+
+      const text = response.text || "";
+      console.log('[Gemini API] Final returned text:', text ? `"${text}" (${text.length} chars)` : '(empty)');
+      
+      return text;
     } catch (error: any) {
       console.error("Gemini API error:", error);
+      console.error("Error details:", {
+        message: error.message,
+        status: error.status,
+        statusText: error.statusText,
+        response: error.response,
+      });
       throw new Error(`Gemini generation failed: ${error.message}`);
     }
   }
