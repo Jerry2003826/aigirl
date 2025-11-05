@@ -879,25 +879,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     )
                   )}
                   
-                  {/* Typing Indicator - 只在等待AI回复时显示 */}
-                  {isLoading && (
-                    <div className="flex gap-3 justify-start" data-testid="typing-indicator">
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={selectedConversation?.personas?.[0]?.avatarUrl || undefined} />
-                        <AvatarFallback className="bg-primary/10 text-sm text-primary">
-                          {selectedConversation?.personas?.[0]?.name?.substring(0, 2) || "AI"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="max-w-[75%] md:max-w-md lg:max-w-lg rounded-3xl px-4 py-3 bg-muted rounded-bl-md">
-                        <div className="flex gap-1.5">
-                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                          <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  
                   <div ref={messagesEndRef} />
                 </div>
               )}
