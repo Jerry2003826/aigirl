@@ -708,8 +708,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isRead: false,
             status: "sent",
           });
+          
+          // Add persona info for broadcast
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
           aiMessages.push(aiMessage);
-          broadcastNewMessage(conversationId, aiMessage);
+          broadcastNewMessage(conversationId, messageWithPersona);
         }
       } else {
         // Save and broadcast each part with 2-3 second random delay
@@ -727,8 +735,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isRead: false,
             status: "sent",
           });
+          
+          // Add persona info for broadcast
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
           aiMessages.push(aiMessage);
-          broadcastNewMessage(conversationId, aiMessage);
+          broadcastNewMessage(conversationId, messageWithPersona);
         }
       }
       
@@ -863,8 +879,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             isRead: false,
             status: "sent",
           });
+          
+          // Add persona info for broadcast
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
           aiMessages.push(aiMessage);
-          broadcastNewMessage(conversationId, aiMessage);
+          broadcastNewMessage(conversationId, messageWithPersona);
         }
       }
       
