@@ -31,6 +31,7 @@ export function useGlobalWebSocket() {
           
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
+            console.log('[Global WS] Received new_message:', message.id, message.senderType, message.content?.substring(0, 20));
             
             // Check if user is currently viewing this conversation
             const currentPath = window.location.pathname;
@@ -38,6 +39,7 @@ export function useGlobalWebSocket() {
             const currentConversationId = params.get('conversationId');
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
+            console.log('[Global WS] Invalidating message queries for conversation:', message.conversationId);
             // Invalidate message queries to refetch
             // This triggers a new fetch which will include the latest message
             queryClient.invalidateQueries({
@@ -46,10 +48,14 @@ export function useGlobalWebSocket() {
                 // Match both:
                 // - ["/api/messages", conversationId, limit] (main chat query)
                 // - ["/api/messages/all", conversationId] (history dialog query)
-                return (
+                const matches = (
                   (key[0] === "/api/messages" && key[1] === message.conversationId) ||
                   (key[0] === "/api/messages/all" && key[1] === message.conversationId)
                 );
+                if (matches) {
+                  console.log('[Global WS] Invalidating query:', key);
+                }
+                return matches;
               }
             });
             
