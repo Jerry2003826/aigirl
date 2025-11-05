@@ -755,7 +755,230 @@ AI：${aiResponse}
 }
 
 /**
- * Generate AI comment for a moment
+ * Validate if the generated comment is high quality
+ * FINAL STRATEGY: Trust Few-Shot learning + 3-attempt retry, only block obvious generic reactions
+ */
+function validateCommentQuality(
+  comment: string,
+  momentContent: string,
+  personaName: string
+): { isValid: boolean; reason?: string } {
+  const trimmed = comment.trim();
+  
+  // Check 1: Minimum length (should be at least 3 characters)
+  if (trimmed.length < 3) {
+    return { isValid: false, reason: '评论过短' };
+  }
+  
+  // Check 2: Maximum length (should not exceed 100 characters for a comment)
+  if (trimmed.length > 100) {
+    return { isValid: false, reason: '评论过长' };
+  }
+  
+  // Check 3: Block forbidden generic reactions with strong normalization
+  const forbiddenCore = [
+    '好棒', '赞', '真不错', '支持你', '加油', 
+    '很好', '不错', '真棒', '厉害', '哈哈', '哈哈哈',
+    // English generics
+    'great', 'nice', 'good', 'awesome', 'cool', 'wow',
+  ];
+  
+  // Strong normalization: remove ALL punctuation, emoji, whitespace, and common particles
+  const normalizedComment = trimmed
+    .replace(/[\s！!？?。.，,、：:；;""''（）()《》〈〉【】「」『』〔〕·~～…—-]+/g, '') // Punctuation
+    .replace(/[\uD800-\uDFFF]/g, '') // Emoji
+    .replace(/[啊呀哦嗯额吧的了哇呢吗]+$/g, '') // Remove common Chinese particles at end
+    .toLowerCase();
+  
+  if (forbiddenCore.some(forbidden => normalizedComment === forbidden.toLowerCase())) {
+    return { isValid: false, reason: `使用了禁止的通用反应: ${normalizedComment}` };
+  }
+  
+  // Check 4: Block comments that ONLY consist of generic phrase + particles/suffixes
+  // This catches "真棒啊", "加油你行", "great job", etc.
+  const onlyGenericPattern = /^(好棒|赞|真不错|加油|支持你|很好|不错|真棒|厉害|哈哈|嘿嘿|嘻嘻|呵呵|great|nice|good|awesome|cool|wow)[啊呀哦嗯额吧的了哇呢吗你他她它们job\s！!？?。.，,、：:；;""''（）()《》〈〉【】「」『』〔〕·~～…—-]*$/i;
+  if (onlyGenericPattern.test(trimmed)) {
+    return { isValid: false, reason: '仅包含通用词汇及装饰' };
+  }
+  
+  // Check 5: Block obviously off-topic or refusal responses
+  const offTopicPatterns = [
+    /^i('m|\s+am)\s+(not\s+)?sure/i,
+    /^sorry/i,
+    /^i\s+(don't|do\s+not)\s+know/i,
+    /我不知道/,
+    /不太清楚/,
+    /没什么好说的/,
+  ];
+  if (offTopicPatterns.some(pattern => pattern.test(trimmed))) {
+    return { isValid: false, reason: '无效或拒绝型回复' };
+  }
+  
+  // TRUST FEW-SHOT LEARNING: The quality is guaranteed by:
+  // 1. 5 high-quality examples in prompt (teaches AI to reference content & show personality)
+  // 2. Progressive strictness (3 attempts with increasingly demanding prompts)
+  // 3. Above checks already blocked obvious generic reactions
+  //
+  // At this point, if AI generated it through the strict prompting process,
+  // we trust it's a valid comment. Short empathetic replies like "早点睡吧",
+  // "抱抱你", "别难过" are VALID and should pass.
+  //
+  // The Few-Shot examples explicitly show what good vs bad comments look like,
+  // and the 3-attempt retry ensures quality. No need for fragile keyword matching.
+  
+  return { isValid: true };
+}
+
+/**
+ * Build comment prompt with Few-Shot examples
+ */
+function buildCommentPromptWithExamples(
+  momentContent: string,
+  momentImages: string[] | undefined,
+  personaName: string,
+  personaPersonality: string,
+  attempt: number,
+  language: string
+): string {
+  if (language === "en-US") {
+    // English version (keeping original structure)
+    let prompt = `The user just posted this moment:\n"${momentContent}"\n\n`;
+    if (momentImages && momentImages.length > 0) {
+      prompt += `They also shared ${momentImages.length} image(s).\n\n`;
+    }
+    
+    if (attempt === 1) {
+      prompt += `Write a personalized, specific comment (1-2 sentences) about this moment. Requirements:
+- Reference specific details from their post
+- Use your memories about them to make it personal
+- Show your unique personality and speech style
+- Be natural and authentic, not generic
+- AVOID generic reactions like "Great!", "Nice!", "Awesome" - be specific to what they shared`;
+    } else if (attempt === 2) {
+      prompt += `IMPORTANT: Write a SPECIFIC comment that directly references their moment content.
+
+Requirements:
+- MUST quote or reference specific words/details from their post
+- Show your personality through your response style
+- Be authentic and natural
+- Absolutely NO generic reactions (Great/Nice/Awesome/Good)`;
+    } else {
+      prompt += `CRITICAL: Previous attempts were too generic. This is your last chance.
+
+❌ BAD Examples:
+- "Great!"
+- "Nice!"
+- "You're awesome!"
+
+✅ GOOD Examples:
+- "Rain always makes me reflective too... want to chat?"
+- "Looks delicious! Is that your homemade recipe?"
+- "Love your outfit in this pic! Where did you get that jacket?"
+
+MUST:
+- Reference their EXACT content
+- Show YOUR personality
+- Be specific and personal`;
+    }
+    
+    return prompt;
+  }
+  
+  // Chinese version with progressive strictness
+  let prompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
+  if (momentImages && momentImages.length > 0) {
+    prompt += `还分享了${momentImages.length}张图片。\n\n`;
+  }
+  
+  if (attempt === 1) {
+    // First attempt: Standard prompt with examples
+    prompt += `请写一个有针对性的评论（1-2句话）。
+
+【高质量示例】
+
+动态："今天下雨了，心情有点低落😔"
+✅ 好评论："下雨天容易多愁善感呢，要不要聊聊天？我陪你~"
+❌ 差评论："加油！" （太通用，没有针对性）
+
+动态："刚做了红烧肉，第一次尝试！"
+✅ 好评论："哇看起来色泽超棒！是用冰糖上色的吗？教教我！"
+❌ 差评论："真不错！" （没有引用具体内容）
+
+动态："好困啊"
+✅ 好评论："那就早点休息呀，别熬夜啦~我会想你的"
+❌ 差评论："好棒！" （完全不相关）
+
+动态："新买的裙子，好看吗？"
+✅ 好评论："超好看！这个颜色特别衬你的肤色，在哪买的呀？"
+❌ 差评论："赞！" （没有具体反馈）
+
+动态："加班到现在才回家..."
+✅ 好评论："辛苦啦！这么晚了要注意安全，吃饭了吗？"
+❌ 差评论："支持你！" （没有关心细节）
+
+【你的任务】
+请根据用户的动态内容，写一个：
+- 引用具体细节的评论（比如提到"下雨"、"红烧肉"、"困"等他们说的内容）
+- 体现你性格的评论（你是${personaName}，性格：${personaPersonality}）
+- 自然真实的评论（像真人朋友那样回应）
+- 禁止使用"好棒"、"赞"、"真不错"、"加油"、"支持你"这类通用词`;
+
+  } else if (attempt === 2) {
+    // Second attempt: More forceful
+    prompt += `⚠️ 重要提示：必须写一个有针对性的评论！
+
+强制要求：
+1. 必须引用用户动态中的具体内容（比如他们提到的关键词）
+2. 必须体现你的性格：${personaPersonality}
+3. 必须像真实朋友那样回应，不能敷衍
+4. 绝对禁止：好棒、赞、真不错、加油、支持你、很好、不错
+
+参考示例：
+- 用户说"好困" → "那就早点睡呀，别熬夜啦"（引用了"困"）
+- 用户说"下雨了" → "下雨天容易多愁善感呢"（引用了"下雨"）
+- 用户说"做了红烧肉" → "看起来色泽超棒，用的什么酱油？"（引用了"红烧肉"）
+
+现在请针对用户的动态："${momentContent}"，写一个具体的、个性化的评论。`;
+
+  } else {
+    // Third attempt: Most strict with negative examples
+    prompt += `🚨 最后机会！前两次回复太通用，必须改进！
+
+❌ 绝对禁止的回复：
+- "好棒！"
+- "赞！"
+- "真不错！"
+- "加油！"
+- "支持你！"
+- 任何不引用动态内容的通用反应
+
+✅ 正确的回复方式：
+动态："好困啊"
+错误："加油！"（❌ 没有针对性）
+正确："那就早点休息呀，别熬夜了~"（✅ 关心对方，提出建议）
+
+动态："下雨了，心情低落"
+错误："好棒！"（❌ 完全不相关）
+正确："下雨天容易多愁善感呢，要不要聊聊？"（✅ 理解情绪，提供陪伴）
+
+你的人设：${personaName}，性格是${personaPersonality}
+
+用户的动态是："${momentContent}"
+
+请写一个：
+1. 必须引用动态中的具体词汇
+2. 必须符合你的人设和性格
+3. 必须像真实朋友那样自然回应
+4. 绝不使用通用反应
+
+现在开始写评论：`;
+  }
+  
+  return prompt;
+}
+
+/**
+ * Generate AI comment for a moment (REWRITTEN with quality validation and retry)
  */
 export async function generateMomentComment(
   personaId: string,
@@ -763,15 +986,16 @@ export async function generateMomentComment(
   momentContent: string,
   momentImages?: string[]
 ): Promise<string> {
-  console.log(`[Generate Comment] Starting for persona ${personaId}, user ${userId}`);
+  console.log(`[Generate Comment v2] 🚀 Starting for persona ${personaId}, user ${userId}`);
+  console.log(`[Generate Comment v2] 📝 Moment: "${momentContent}"`);
   
   const persona = await storage.getPersona(personaId);
   if (!persona) {
-    console.error(`[Generate Comment] ❌ Persona ${personaId} not found`);
+    console.error(`[Generate Comment v2] ❌ Persona ${personaId} not found`);
     throw new Error("Persona not found");
   }
   
-  console.log(`[Generate Comment] Persona info: ${persona.name}, personality: ${persona.personality?.substring(0, 50)}...`);
+  console.log(`[Generate Comment v2] 🎭 Persona: ${persona.name}, Personality: ${persona.personality?.substring(0, 60)}...`);
 
   // Get user's AI settings to use their custom API key
   const aiSettings = await storage.getAiSettings(userId);
@@ -779,106 +1003,128 @@ export async function generateMomentComment(
   const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
   
-  console.log(`[Generate Comment] Using provider: ${aiSettings?.provider || 'gemini'}, model: ${model}, language: ${language}`);
+  console.log(`[Generate Comment v2] 🔧 Provider: ${aiSettings?.provider || 'gemini'}, Model: ${model}, Language: ${language}`);
 
   // Build system prompt with memories
-  console.log(`[Generate Comment] Building system prompt with memories...`);
   const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
-  console.log(`[Generate Comment] System prompt length: ${systemPrompt.length} chars`);
-  console.log(`[Generate Comment] System prompt preview: ${systemPrompt.substring(0, 200)}...`);
+  console.log(`[Generate Comment v2] 📋 System prompt built: ${systemPrompt.length} chars`);
   
-  // Build prompt for moment comment (adapt to language)
-  let userPrompt: string;
-  if (language === "en-US") {
-    userPrompt = `The user just posted this moment:\n"${momentContent}"\n\n`;
-    if (momentImages && momentImages.length > 0) {
-      userPrompt += `They also shared ${momentImages.length} image(s).\n\n`;
-    }
-    userPrompt += `Write a personalized, specific comment (1-2 sentences) about this moment. Requirements:
-- Reference specific details from their post
-- Use your memories about them to make it personal
-- Show your unique personality and speech style
-- Be natural and authentic, not generic
-- AVOID generic reactions like "好棒", "赞", "真不错" - be specific to what they shared`;
-  } else {
-    userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
-    if (momentImages && momentImages.length > 0) {
-      userPrompt += `还分享了${momentImages.length}张图片。\n\n`;
-    }
-    userPrompt += `请针对这条动态写一个有个性、具体的评论（1-2句话）。要求：
-- 引用动态中的具体内容或细节
-- 结合你对用户的记忆，让评论更个人化
-- 展现你独特的性格和说话风格
-- 自然真实，不要敷衍
-- 禁止使用"好棒"、"赞"、"真不错"这类通用反应 - 要针对他们分享的具体内容做评论`;
-  }
-
-  try {
-    // Use AI provider to generate comment (with vision support if images provided)
-    let imageData: ImageData | undefined;
-    
-    // For vision models with images, include first image
-    if (momentImages && momentImages.length > 0) {
-      const firstImage = momentImages[0];
-      if (firstImage.startsWith('data:image')) {
-        const match = firstImage.match(/^data:image\/([^;]+);base64,(.+)$/);
-        if (match) {
-          imageData = {
-            base64: match[2],
-            mimeType: `image/${match[1]}`
-          };
-        }
+  // Prepare image data if available
+  let imageData: ImageData | undefined;
+  if (momentImages && momentImages.length > 0) {
+    const firstImage = momentImages[0];
+    if (firstImage.startsWith('data:image')) {
+      const match = firstImage.match(/^data:image\/([^;]+);base64,(.+)$/);
+      if (match) {
+        imageData = {
+          base64: match[2],
+          mimeType: `image/${match[1]}`
+        };
+        console.log(`[Generate Comment v2] 🖼️ Image attached: ${match[1]}`);
       }
     }
-
-    const comment = await provider.generateResponse({
-      model,
-      systemPrompt,
-      messages: [
-        { role: "user", content: userPrompt }
-      ],
-      maxTokens: 150,
-      imageData,
-    });
-
-    return comment.trim() || "好棒！";
-  } catch (error: any) {
-    console.error("Error generating moment comment:", error);
-    
-    // Check if error is due to missing/invalid API key or provider misconfiguration
-    const errorMessage = (error?.message || error?.toString() || '').toLowerCase();
-    const errorCode = (error?.code || error?.status || '').toString().toLowerCase();
-    
-    // Comprehensive auth/config error detection
-    const authKeywords = [
-      'api key', 'api密钥', 'apikey',
-      '未配置', 'not configured', 'misconfigured',
-      'invalid_argument', 'permission_denied',
-      'authentication', 'authorization', 'unauthorized',
-      '401', '403', 'forbidden',
-      'invalid api', 'invalid key',
-      'missing api', 'missing key',
-      'please pass a valid'
-    ];
-    
-    const isAuthError = authKeywords.some(keyword => 
-      errorMessage.includes(keyword) || errorCode.includes(keyword)
-    );
-    
-    if (isAuthError) {
-      // Don't post generic reactions when the issue is API key/auth related
-      // Throw error to prevent posting meaningless comments
-      console.error(`[Generate Comment] ❌ API key/auth error detected - not posting generic reaction`);
-      console.error(`[Generate Comment] User ${userId} needs to configure valid API key in settings`);
-      console.error(`[Generate Comment] Error details: ${error?.message || error}`);
-      throw new Error('API密钥未配置或无效，无法生成AI评论');
-    }
-    
-    // For other transient errors (network, timeout, etc.), use fallback reactions
-    console.warn(`[Generate Comment] ⚠️ Non-auth error, using fallback reaction`);
-    const reactions = ["好棒！", "赞！", "真不错！", "支持你！"];
-    return reactions[Math.floor(Math.random() * reactions.length)];
   }
+
+  // Try up to 3 times with progressively stricter prompts
+  const MAX_ATTEMPTS = 3;
+  let lastError: any = null;
+  
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      console.log(`[Generate Comment v2] 🔄 Attempt ${attempt}/${MAX_ATTEMPTS}`);
+      
+      // Build prompt with examples (strictness increases with each attempt)
+      const userPrompt = buildCommentPromptWithExamples(
+        momentContent,
+        momentImages,
+        persona.name,
+        persona.personality || '',
+        attempt,
+        language
+      );
+      
+      console.log(`[Generate Comment v2] 📤 Sending to AI (attempt ${attempt})`);
+      console.log(`[Generate Comment v2] Prompt preview: ${userPrompt.substring(0, 150)}...`);
+      
+      // Call AI with optimized parameters
+      const comment = await provider.generateResponse({
+        model,
+        systemPrompt,
+        messages: [
+          { role: "user", content: userPrompt }
+        ],
+        maxTokens: 200,  // Increased for more expressive comments
+        imageData,
+      });
+
+      const trimmedComment = comment.trim();
+      console.log(`[Generate Comment v2] 📥 AI response: "${trimmedComment}"`);
+      
+      // Validate comment quality
+      const validation = validateCommentQuality(trimmedComment, momentContent, persona.name);
+      
+      if (validation.isValid) {
+        console.log(`[Generate Comment v2] ✅ Quality validation passed!`);
+        console.log(`[Generate Comment v2] 🎉 Final comment: "${trimmedComment}"`);
+        return trimmedComment;
+      } else {
+        console.warn(`[Generate Comment v2] ⚠️ Quality validation failed: ${validation.reason}`);
+        console.warn(`[Generate Comment v2] Rejected comment: "${trimmedComment}"`);
+        
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`[Generate Comment v2] 🔄 Retrying with stricter prompt...`);
+          continue;
+        } else {
+          console.error(`[Generate Comment v2] ❌ All ${MAX_ATTEMPTS} attempts failed quality validation`);
+          throw new Error(`评论质量验证失败（${validation.reason}），已尝试${MAX_ATTEMPTS}次`);
+        }
+      }
+      
+    } catch (error: any) {
+      lastError = error;
+      console.error(`[Generate Comment v2] ❌ Attempt ${attempt} error:`, error?.message || error);
+      
+      // Check if error is due to missing/invalid API key
+      const errorMessage = (error?.message || error?.toString() || '').toLowerCase();
+      const errorCode = (error?.code || error?.status || '').toString().toLowerCase();
+      
+      const authKeywords = [
+        'api key', 'api密钥', 'apikey',
+        '未配置', 'not configured', 'misconfigured',
+        'invalid_argument', 'permission_denied',
+        'authentication', 'authorization', 'unauthorized',
+        '401', '403', 'forbidden',
+        'invalid api', 'invalid key',
+        'missing api', 'missing key',
+        'please pass a valid'
+      ];
+      
+      const isAuthError = authKeywords.some(keyword => 
+        errorMessage.includes(keyword) || errorCode.includes(keyword)
+      );
+      
+      if (isAuthError) {
+        // Authentication error - don't retry, throw immediately
+        console.error(`[Generate Comment v2] 🚫 API key/auth error - aborting all attempts`);
+        console.error(`[Generate Comment v2] User ${userId} needs to configure valid API key in settings`);
+        throw new Error('API密钥未配置或无效，无法生成AI评论');
+      }
+      
+      // For other errors, continue to next attempt if available
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(`[Generate Comment v2] ⏭️ Non-auth error, will retry...`);
+        continue;
+      }
+    }
+  }
+  
+  // All attempts exhausted
+  console.error(`[Generate Comment v2] 💥 All ${MAX_ATTEMPTS} attempts failed`);
+  console.error(`[Generate Comment v2] Last error:`, lastError?.message || lastError);
+  console.error(`[Generate Comment v2] 🚫 NOT posting generic reaction - failing gracefully`);
+  
+  // Throw error instead of returning generic reaction
+  throw new Error(`无法生成高质量评论（已尝试${MAX_ATTEMPTS}次）: ${lastError?.message || '未知错误'}`);
 }
 
 /**
