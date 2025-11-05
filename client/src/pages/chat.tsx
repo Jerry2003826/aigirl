@@ -760,7 +760,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             </div>
 
             {/* Message Input */}
-            <div className="border-t bg-background">
+            <div className="border-t bg-background pb-[env(safe-area-inset-bottom)]">
               <div className="px-3 py-2">
               {/* Image Preview */}
               {imagePreview && (
@@ -825,8 +825,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   )}
                 </Button>
               </div>
-              {/* Safe area spacer - ensures background extends to bottom on devices with notches */}
-              <div className="h-[env(safe-area-inset-bottom)] bg-background" />
             </div>
           </div>
         </>
