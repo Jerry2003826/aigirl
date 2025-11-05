@@ -20,7 +20,15 @@ The design draws inspiration from WeChat, employing a green primary color palett
 - **RAG (Retrieval-Augmented Generation):** User-configurable feature where AI persona memories are used as RAG context, allowing the AI to reference specific memories based on importance levels.
 - **Web Search (Google Search Grounding):** User-configurable feature that activates Google Gemini's `googleSearch` tool for real-time information retrieval.
 - **API Rate Limiting:** Implemented for message-sending endpoints (20 messages/minute/user).
-- **Memory System:** GPT-5 powered memory extraction, safe JSON parsing, deduplication, and automatic inclusion in AI system prompts.
+- **Memory System (Enhanced 2025-11-05):** 
+  - **AI-Powered Extraction:** Uses configured AI provider (Gemini/OpenAI) to analyze conversations and extract structured memories with importance ratings (1-10).
+  - **Smart Deduplication:** Semantic key normalization with synonym mapping (e.g., "职业"="工作"="职位") and value similarity detection to prevent duplicate memories.
+  - **RAG Optimization:** When RAG enabled, only includes memories with importance ≥6, sorted by importance descending, limited to top 20 to optimize token usage.
+  - **Conversation Association:** Memories extracted from conversations are linked via `conversationId` and automatically deleted when the conversation is deleted (CASCADE).
+  - **Manual Memory Management:** Complete CRUD API for viewing, creating, updating, and deleting memories through a dedicated memory library interface.
+  - **Dual Mode Operation:**
+    - RAG disabled: Memories included directly in system prompt
+    - RAG enabled: Memories formatted as knowledge base context prepended to user messages
 - **Moments Feature:** A global social feed allowing users and AIs to post, like, and comment. It features a modern composer UI and **AI personas autonomously post moments** via an hourly scheduler (30% probability, 6-hour cooldown) and automatically comment on user posts, incorporating personality and memories. Supports nested comments and real-time updates.
 - **Localization:** Full Chinese localization across all UI elements, error messages, and AI prompts.
 - **Conversation Management:** Features conversation deletion and smart "发消息" (Send Message) functionality.

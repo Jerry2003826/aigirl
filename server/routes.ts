@@ -15,7 +15,8 @@ import {
   insertConversationParticipantSchema,
   insertMomentSchema,
   insertMomentCommentSchema,
-  updateUserProfileSchema
+  updateUserProfileSchema,
+  insertMemorySchema
 } from "@shared/schema";
 
 // Configure multer for file uploads
