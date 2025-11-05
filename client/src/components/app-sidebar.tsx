@@ -75,6 +75,9 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
     .filter(moment => moment.userId === userId)
     .reduce((total, moment) => total + (moment.unreadCommentsCount || 0), 0) : 0;
 
+  // Calculate total unread messages across all conversations
+  const totalUnreadMessages = conversations.reduce((total, conv) => total + (conv.unreadCount || 0), 0);
+
   const logoutMutation = useMutation({
     mutationFn: async () => {
       // Logout via Replit OIDC - redirects to OIDC logout
@@ -425,13 +428,20 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
           <Button
             variant="ghost"
             className={cn(
-              "flex flex-col items-center gap-1 py-3 h-auto",
+              "flex flex-col items-center gap-1 py-3 h-auto relative",
               location === "/chat" && "bg-sidebar-accent"
             )}
             onClick={() => setLocation("/chat")}
             data-testid="nav-chat"
           >
-            <MessageCircle className="h-5 w-5" />
+            <div className="relative">
+              <MessageCircle className="h-5 w-5" />
+              {totalUnreadMessages > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center" data-testid="badge-unread-messages">
+                  {totalUnreadMessages > 99 ? '99+' : totalUnreadMessages}
+                </span>
+              )}
+            </div>
             <span className="text-xs">聊天</span>
           </Button>
           <Button
