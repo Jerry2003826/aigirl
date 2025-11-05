@@ -1008,14 +1008,14 @@ export async function generateMomentComment(
       console.log(`[Generate Comment v2] 📤 Sending to AI (attempt ${attempt})`);
       console.log(`[Generate Comment v2] Prompt preview: ${userPrompt.substring(0, 150)}...`);
       
-      // Call AI with optimized parameters (reduced maxTokens to avoid overwhelming API)
+      // Call AI with sufficient maxTokens (2000 to ensure enough output space)
       const comment = await provider.generateResponse({
         model,
         systemPrompt,
         messages: [
           { role: "user", content: userPrompt }
         ],
-        maxTokens: 80,  // Reduced from 200 - comments should be short (1-2 sentences)
+        maxTokens: 2000,  // Increased to 2000 to provide ample generation space
         imageData,
       });
 
