@@ -41,18 +41,30 @@ export function useGlobalWebSocket() {
             // IMMEDIATELY refetch ALL message caches for this conversation
             // refetchQueries() triggers immediate refetch (unlike invalidateQueries which is async)
             // This ensures Chat component sees the latest messages in real-time
-            queryClient.refetchQueries({
+            console.log('[Global WS] Refetching queries for conversation:', message.conversationId);
+            const refetchResult = queryClient.refetchQueries({
               predicate: (query) => {
                 const key = query.queryKey;
                 // Match both:
                 // - ["/api/messages", conversationId, limit] (main chat query)
                 // - ["/api/messages/all", conversationId] (history dialog query)
-                return (
+                const matches = (
                   (key[0] === "/api/messages" && key[1] === message.conversationId) ||
                   (key[0] === "/api/messages/all" && key[1] === message.conversationId)
                 );
+                if (matches) {
+                  console.log('[Global WS] Matched query key:', key);
+                }
+                return matches;
               },
-              type: 'active', // Only refetch active queries (currently visible)
+              // 移除type: 'active'限制，确保所有匹配的查询都被refetch
+            });
+            
+            // Log refetch completion
+            refetchResult.then(() => {
+              console.log('[Global WS] Refetch completed successfully');
+            }).catch((err) => {
+              console.error('[Global WS] Refetch failed:', err);
             });
             
             // Update conversation list cache (optimistic update)

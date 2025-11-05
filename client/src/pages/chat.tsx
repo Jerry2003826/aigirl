@@ -539,7 +539,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         )
       );
     }
-  }, [rawMessages, optimisticMessages.length]);
+  }, [rawMessages]); // 修复：只依赖rawMessages，避免无限循环
   
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
