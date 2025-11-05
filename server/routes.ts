@@ -903,6 +903,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Memory Routes ====================
+  
+  // Get all memories for a specific persona
+  app.get('/api/memories/persona/:personaId', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { personaId } = req.params;
+      
+      // Verify persona ownership
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "AI persona not found" });
+      }
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+      }
+      
+      const memories = await storage.getMemoriesByPersona(personaId, userId);
+      res.json(memories);
+    } catch (error) {
+      console.error("Error fetching memories:", error);
+      res.status(500).json({ message: "Failed to fetch memories" });
+    }
+  });
+
+  // Create a new memory
+  app.post('/api/memories', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { personaId, key, value, context, importance } = req.body;
+      
+      // Verify persona ownership
+      const persona = await storage.getPersona(personaId);
+      if (!persona) {
+        return res.status(404).json({ message: "AI persona not found" });
+      }
+      if (persona.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this persona" });
+      }
+      
+      // Validate using Zod schema
+      const validatedData = insertMemorySchema.parse({
+        personaId,
+        userId,
+        key,
+        value,
+        context: context || null,
+        importance: importance || 5,
+      });
+      
+      const memory = await storage.createMemory(validatedData);
+      res.json(memory);
+    } catch (error: any) {
+      console.error("Error creating memory:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create memory" });
+    }
+  });
+
+  // Update a memory
+  app.patch('/api/memories/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { id } = req.params;
+      const { key, value, context, importance } = req.body;
+      
+      // Verify memory ownership
+      const existingMemory = await storage.getMemory(id);
+      if (!existingMemory) {
+        return res.status(404).json({ message: "Memory not found" });
+      }
+      if (existingMemory.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this memory" });
+      }
+      
+      // Prepare update data (only include fields that were provided)
+      const updates: Partial<InsertMemory> = {};
+      if (key !== undefined) updates.key = key;
+      if (value !== undefined) updates.value = value;
+      if (context !== undefined) updates.context = context;
+      if (importance !== undefined) updates.importance = importance;
+      
+      const memory = await storage.updateMemory(id, updates);
+      if (!memory) {
+        return res.status(404).json({ message: "Memory not found after update" });
+      }
+      
+      res.json(memory);
+    } catch (error: any) {
+      console.error("Error updating memory:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update memory" });
+    }
+  });
+
+  // Delete a memory
+  app.delete('/api/memories/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { id } = req.params;
+      
+      // Verify memory ownership
+      const memory = await storage.getMemory(id);
+      if (!memory) {
+        return res.status(404).json({ message: "Memory not found" });
+      }
+      if (memory.userId !== userId) {
+        return res.status(403).json({ message: "Forbidden: You don't own this memory" });
+      }
+      
+      await storage.deleteMemory(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting memory:", error);
+      res.status(500).json({ message: "Failed to delete memory" });
+    }
+  });
+
   // ==================== Moments Routes ====================
   
   // Get all moments (from all users and AI personas) with likes and comments
