@@ -189,9 +189,9 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
       collapsible="none"
       className={cn(
         "border-r-0 w-full md:w-[var(--sidebar-width)]",
-        // Mobile: only show when showMobileSidebar is true
-        "md:block",
-        !showMobileSidebar && "hidden"
+        // Desktop: always show. Mobile: only show when showMobileSidebar is true
+        "md:!block",
+        !showMobileSidebar && "hidden md:block"
       )}>
       <SidebarHeader className="border-b border-sidebar-border p-4">
         {/* User Info Section - Clickable */}
