@@ -43,7 +43,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
   // AI Assistant form state
   const [aiName, setAiName] = useState("");
   const [aiDescription, setAiDescription] = useState("");
-  const [generateAvatar, setGenerateAvatar] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const { data: personas = [], isLoading } = useQuery<AiPersona[]>({
@@ -247,7 +246,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
       const response = await apiRequest("POST", "/api/ai/generate-persona", {
         name: aiName,
         description: aiDescription,
-        generateAvatar,
       });
       const data = await response.json();
       
@@ -271,7 +269,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
       // Reset AI assistant form
       setAiName("");
       setAiDescription("");
-      setGenerateAvatar(false);
       
       toast({
         title: "成功",
@@ -357,20 +354,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
                       rows={3}
                       data-testid="input-ai-description"
                     />
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="generate-avatar"
-                      checked={generateAvatar}
-                      onChange={(e) => setGenerateAvatar(e.target.checked)}
-                      className="h-4 w-4"
-                      data-testid="checkbox-generate-avatar"
-                    />
-                    <label htmlFor="generate-avatar" className="text-sm">
-                      让AI生成头像（基于人物形象）
-                    </label>
                   </div>
                   
                   <Button

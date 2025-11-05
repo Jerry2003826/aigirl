@@ -159,7 +159,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/ai/generate-persona', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { name, description, generateAvatar } = req.body;
+      const { name, description } = req.body;
       
       if (!name || typeof name !== 'string') {
         return res.status(400).json({ message: "Name is required" });
@@ -168,8 +168,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Import the generation function
       const { generatePersonaWithAI } = await import("./aiService");
       
-      // Generate persona configuration using AI with user's custom API key
-      const personaData = await generatePersonaWithAI(userId, name, description || "", generateAvatar);
+      // Generate persona configuration using AI with user's custom API key (avatar generation disabled)
+      const personaData = await generatePersonaWithAI(userId, name, description || "", false);
       
       res.json(personaData);
     } catch (error: any) {
