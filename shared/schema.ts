@@ -47,6 +47,8 @@ export const conversations = pgTable("conversations", {
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title"), // For group chats
   isGroup: boolean("is_group").default(false).notNull(),
+  unreadCount: integer("unread_count").default(0).notNull(), // Cached unread count for performance
+  lastReadAt: timestamp("last_read_at"), // Last time user viewed this conversation
   lastMessageAt: timestamp("last_message_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -216,6 +218,8 @@ export const insertConversationSchema = createInsertSchema(conversations).omit({
   id: true,
   createdAt: true,
   lastMessageAt: true,
+  unreadCount: true, // Auto-calculated
+  lastReadAt: true, // Set when user opens conversation
 });
 
 export const insertConversationParticipantSchema = createInsertSchema(conversationParticipants).omit({

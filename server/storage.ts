@@ -266,6 +266,8 @@ export class MemStorage implements IStorage {
       userId: insertConversation.userId,
       title: insertConversation.title ?? null,
       isGroup: insertConversation.isGroup ?? false,
+      unreadCount: 0,
+      lastReadAt: null,
       lastMessageAt: null,
       createdAt: new Date(),
     };
@@ -358,6 +360,16 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     };
     this.messages.set(id, message);
+    
+    // Auto-increment unreadCount for AI messages (matches PgStorage behavior)
+    if (insertMessage.senderType === 'ai') {
+      const conversation = this.conversations.get(insertMessage.conversationId);
+      if (conversation) {
+        conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+        this.conversations.set(insertMessage.conversationId, conversation);
+      }
+    }
+    
     return message;
   }
 
@@ -378,12 +390,21 @@ export class MemStorage implements IStorage {
   }
 
   async markConversationMessagesAsRead(conversationId: string): Promise<void> {
+    // Mark all unread messages as read
     Array.from(this.messages.values()).forEach((message) => {
       if (message.conversationId === conversationId && !message.isRead) {
         message.isRead = true;
         this.messages.set(message.id, message);
       }
     });
+    
+    // Clear unread count and update last read time (matches PgStorage behavior)
+    const conversation = this.conversations.get(conversationId);
+    if (conversation) {
+      conversation.unreadCount = 0;
+      conversation.lastReadAt = new Date();
+      this.conversations.set(conversationId, conversation);
+    }
   }
 
   async getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }> {
@@ -651,6 +672,15 @@ export class DatabaseStorage implements IStorage {
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const result = await db.insert(messages).values(insertMessage).returning();
+    
+    // Auto-increment unreadCount for AI messages
+    if (insertMessage.senderType === 'ai') {
+      await db
+        .update(conversations)
+        .set({ unreadCount: sql`${conversations.unreadCount} + 1` })
+        .where(eq(conversations.id, insertMessage.conversationId));
+    }
+    
     return result[0];
   }
 
@@ -663,12 +693,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async markConversationMessagesAsRead(conversationId: string): Promise<void> {
+    // Mark all unread messages as read
     await db.update(messages).set({ isRead: true }).where(
       and(
         eq(messages.conversationId, conversationId),
         eq(messages.isRead, false)
       )
     );
+    
+    // Clear unread count and update last read time
+    await db
+      .update(conversations)
+      .set({ 
+        unreadCount: 0,
+        lastReadAt: new Date()
+      })
+      .where(eq(conversations.id, conversationId));
   }
 
   async getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }> {
@@ -680,21 +720,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(messages.createdAt))
       .limit(1);
     
-    // Count unread AI messages with an optimized COUNT query
-    const unreadResult = await db
-      .select({ count: count() })
-      .from(messages)
-      .where(
-        and(
-          eq(messages.conversationId, conversationId),
-          eq(messages.senderType, 'ai'),
-          eq(messages.isRead, false)
-        )
-      );
+    // Get cached unreadCount directly from conversations table (no COUNT query needed!)
+    const conversationResult = await db
+      .select({ unreadCount: conversations.unreadCount })
+      .from(conversations)
+      .where(eq(conversations.id, conversationId))
+      .limit(1);
     
     return {
       lastMessage: lastMessageResult[0] || null,
-      unreadCount: unreadResult[0]?.count || 0,
+      unreadCount: conversationResult[0]?.unreadCount || 0,
     };
   }
 

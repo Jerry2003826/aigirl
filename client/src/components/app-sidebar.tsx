@@ -365,7 +365,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                         </Avatar>
                         {(conversation.unreadCount ?? 0) > 0 && (
                           <Badge 
-                            className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold"
+                            className="absolute -top-1 -right-1 h-6 min-w-6 px-1.5 flex items-center justify-center bg-primary text-primary-foreground text-xs font-semibold transition-all duration-200 animate-in fade-in zoom-in-50"
                             data-testid={`badge-unread-${conversation.id}`}
                           >
                             {(conversation.unreadCount ?? 0) > 99 ? '99+' : (conversation.unreadCount ?? 0)}

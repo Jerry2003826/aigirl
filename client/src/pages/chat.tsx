@@ -152,6 +152,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const markAsReadMutation = useMutation({
     mutationFn: (conversationId: string) =>
       apiRequest("POST", `/api/conversations/${conversationId}/read`, {}),
+    onMutate: async (conversationId) => {
+      // OPTIMIZED: 乐观更新 - 立即清零未读数，不等待API响应
+      queryClient.setQueryData(
+        ["/api/conversations"],
+        (old: any[] = []) => {
+          return old.map(conv => 
+            conv.id === conversationId
+              ? { ...conv, unreadCount: 0 }
+              : conv
+          );
+        }
+      );
+    },
   });
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -595,7 +608,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             }
           );
           
-          // 刷新对话列表以更新lastMessageAt
+          // OPTIMIZED: 如果是AI消息且不在当前对话，立即+1未读数（乐观更新）
+          if (message.senderType === 'ai' && message.conversationId !== selectedConversationId) {
+            queryClient.setQueryData(
+              ["/api/conversations"],
+              (old: any[] = []) => {
+                return old.map(conv => 
+                  conv.id === message.conversationId
+                    ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1 }
+                    : conv
+                );
+              }
+            );
+          }
+          
+          // 刷新对话列表以更新lastMessageAt（但unreadCount已经被乐观更新）
           queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           
           // 检测AI消息，管理分段状态
