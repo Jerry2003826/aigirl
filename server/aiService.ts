@@ -1324,18 +1324,31 @@ export async function triggerAIReplyToComment(
         return;
       }
 
-      // Check nesting level - don't allow more than 2 levels
-      let nestingLevel = 1;
-      let currentComment = comment;
+      // Check for consecutive AI comments - limit to 2 consecutive AI replies
+      // Rule: Users can reply infinitely, but AI can only reply max 2 times in a row
+      // Example: User → AI₁ → User → AI₂ → User → AI₃ (✅ allowed, no consecutive AI)
+      // Example: User → AI₁ → AI₂ → ... (❌ blocked, 2 consecutive AI reached)
+      
+      let consecutiveAICount = 0;
+      let currentComment = comment; // This is the user's comment
+      
+      // Start from the parent (the comment user replied to)
       while (currentComment.parentCommentId) {
-        nestingLevel++;
         const parentComment = await storage.getMomentCommentById(currentComment.parentCommentId);
         if (!parentComment) break;
+        
+        if (parentComment.authorType === 'ai') {
+          consecutiveAICount++;
+        } else {
+          // Hit a user comment, stop counting
+          break;
+        }
+        
         currentComment = parentComment;
       }
 
-      if (nestingLevel >= 2) {
-        console.log("Maximum nesting level (2) reached, AI won't reply");
+      if (consecutiveAICount >= 2) {
+        console.log(`Maximum consecutive AI comments (2) reached, AI won't reply. Current count: ${consecutiveAICount}`);
         return;
       }
 
