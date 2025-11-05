@@ -1,10 +1,36 @@
 import { storage } from './storage';
-import { generateAIResponse } from './aiService';
+import { generateAIResponse, ImageData } from './aiService';
 import { broadcastNewMessage } from './websocket';
 
 const MAX_RETRIES = 3;
 const POLL_INTERVAL = 3000; // 3 seconds
 const PROCESSING_LOCK = new Set<string>(); // In-memory lock to prevent duplicate processing
+
+/**
+ * Parse data URL to extract mimeType and base64 data
+ * @param dataUrl - Data URL string (e.g., "data:image/png;base64,iVBORw0KGgo...")
+ * @returns ImageData object or undefined if invalid
+ */
+function parseDataUrl(dataUrl: string): ImageData | undefined {
+  if (!dataUrl || !dataUrl.startsWith('data:')) {
+    return undefined;
+  }
+  
+  try {
+    const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return undefined;
+    }
+    
+    return {
+      mimeType: matches[1],
+      base64: matches[2],
+    };
+  } catch (error) {
+    console.error('[AI Worker] Error parsing data URL:', error);
+    return undefined;
+  }
+}
 
 let isRunning = false;
 
@@ -121,10 +147,20 @@ async function processNextJob() {
     // Generate AI response
     console.log(`[AI Worker] Generating AI response from persona ${respondingPersonaId}`);
     
+    // Parse image data if present
+    let imageData: ImageData | undefined;
+    if (userMessage.imageData) {
+      imageData = parseDataUrl(userMessage.imageData);
+      if (imageData) {
+        console.log(`[AI Worker] Image detected: ${imageData.mimeType}`);
+      }
+    }
+    
     const aiResponse = await generateAIResponse({
       conversationId: conversation.id,
       personaId: respondingPersonaId,
       userMessage: userMessage.content || '[User sent an image]',
+      imageData,
     });
     
     // Get persona info for message broadcast

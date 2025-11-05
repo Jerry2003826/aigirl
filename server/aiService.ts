@@ -3,6 +3,9 @@ import type { AiPersona, Message, InsertMemory } from "@shared/schema";
 import { getAIProvider, getModelName, type ConversationMessage, type ImageData } from "./ai/providers";
 import { broadcastMomentEvent } from "./websocket";
 
+// Re-export ImageData for use in other modules
+export type { ImageData };
+
 interface GenerateResponseOptions {
   conversationId: string;
   personaId: string;
