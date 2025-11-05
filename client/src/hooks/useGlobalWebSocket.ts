@@ -32,6 +32,10 @@ export function useGlobalWebSocket() {
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
             
+            // Check if user is currently viewing this conversation
+            const currentPath = window.location.pathname;
+            const isInThisChat = currentPath === `/chat/${message.conversationId}`;
+            
             // Update ALL message caches for this conversation (with different limits)
             // This ensures Chat component sees the latest messages immediately
             queryClient.setQueriesData(
@@ -58,10 +62,16 @@ export function useGlobalWebSocket() {
                 
                 return old.map(conv => {
                   if (conv.id === message.conversationId) {
+                    // Increment unread count only if:
+                    // 1. User is NOT currently viewing this chat
+                    // 2. Message is from AI (not sent by user)
+                    const shouldIncrement = !isInThisChat && message.senderType === 'ai';
+                    
                     return {
                       ...conv,
                       lastMessageAt: new Date().toISOString(),
                       lastMessage: message,
+                      unreadCount: shouldIncrement ? (conv.unreadCount || 0) + 1 : conv.unreadCount,
                     };
                   }
                   return conv;
