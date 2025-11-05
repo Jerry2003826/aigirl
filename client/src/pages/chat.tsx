@@ -123,6 +123,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       return response.json();
     },
     enabled: !!selectedConversationId,
+    staleTime: 0, // 数据立即过期，确保invalidate后会refetch
     refetchOnWindowFocus: false, // 窗口聚焦时不refetch
     refetchOnReconnect: false, // 重新连接时不refetch
   });

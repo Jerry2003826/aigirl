@@ -40,6 +40,7 @@ export function useGlobalWebSocket() {
             
             // Invalidate ALL message caches for this conversation
             // This ensures Chat component refetches and sees the latest messages
+            // refetchType: 'active' ensures active queries refetch immediately
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;
@@ -50,7 +51,8 @@ export function useGlobalWebSocket() {
                   (key[0] === "/api/messages" && key[1] === message.conversationId) ||
                   (key[0] === "/api/messages/all" && key[1] === message.conversationId)
                 );
-              }
+              },
+              refetchType: 'active', // Force active queries to refetch immediately
             });
             
             // Update conversation list cache (optimistic update)
