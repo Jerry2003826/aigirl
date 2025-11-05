@@ -32,9 +32,15 @@ export function useGlobalWebSocket() {
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
             
-            // Update message list cache for the conversation
-            queryClient.setQueryData(
-              ["/api/messages", message.conversationId],
+            // Update ALL message caches for this conversation (with different limits)
+            // This ensures Chat component sees the latest messages immediately
+            queryClient.setQueriesData(
+              { 
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return key[0] === "/api/messages" && key[1] === message.conversationId;
+                }
+              },
               (old: Message[] = []) => {
                 // Avoid duplicates
                 if (!old.find(m => m.id === message.id)) {
@@ -43,14 +49,6 @@ export function useGlobalWebSocket() {
                 return old;
               }
             );
-            
-            // Also invalidate with different limits
-            queryClient.invalidateQueries({ 
-              predicate: (query) => {
-                const key = query.queryKey;
-                return key[0] === "/api/messages" && key[1] === message.conversationId;
-              }
-            });
             
             // Update conversation list cache (optimistic update)
             queryClient.setQueryData(
