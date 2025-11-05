@@ -367,11 +367,12 @@ export default function GroupsPage({ onBackToList = () => {}, showMobileSidebar 
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    {/* Group Avatar */}
+                    {/* Group Avatar - click to edit */}
                     <div className="relative h-12 w-12 flex-shrink-0">
                       <Avatar 
                         className="h-12 w-12 cursor-pointer hover:opacity-80 transition-opacity"
                         onClick={(e) => handleEditGroup(group, e)}
+                        data-testid={`avatar-group-${group.id}`}
                       >
                         <AvatarImage src={group.avatarUrl || undefined} />
                         <AvatarFallback className="bg-primary/10 text-primary font-semibold">

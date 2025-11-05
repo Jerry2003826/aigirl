@@ -31,6 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 type Conversation = {
   id: string;
   title: string | null;
+  avatarUrl?: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
   personas?: { id: string; name: string; avatarUrl: string | null }[];
@@ -537,9 +538,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <Avatar className="h-10 w-10 shrink-0">
-                <AvatarImage src={selectedConversation.personas?.[0]?.avatarUrl || undefined} />
+                <AvatarImage src={
+                  selectedConversation.isGroup 
+                    ? (selectedConversation.avatarUrl || undefined)
+                    : (selectedConversation.personas?.[0]?.avatarUrl || undefined)
+                } />
                 <AvatarFallback className="bg-primary/10 text-primary">
-                  {selectedConversation.title?.substring(0, 2).toUpperCase() || "AI"}
+                  {selectedConversation.isGroup 
+                    ? (selectedConversation.title?.substring(0, 2).toUpperCase() || "群")
+                    : (selectedConversation.personas?.[0]?.name?.substring(0, 2) || "AI")
+                  }
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
