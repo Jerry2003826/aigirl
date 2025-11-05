@@ -100,7 +100,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     queryKey: ["/api/conversations", selectedConversationId],
     queryFn: async () => {
       if (!selectedConversationId) throw new Error("No conversation selected");
-      const response = await fetch(`/api/conversations/${selectedConversationId}`);
+      const response = await fetch(`/api/conversations/${selectedConversationId}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
       if (!response.ok) throw new Error("Failed to fetch conversation");
       return response.json();
     },
@@ -117,7 +120,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     queryFn: async () => {
       if (!selectedConversationId) return [];
       const response = await fetch(
-        `/api/conversations/${selectedConversationId}/messages?limit=${messageLimit}&offset=0`
+        `/api/conversations/${selectedConversationId}/messages?limit=${messageLimit}&offset=0`,
+        {
+          credentials: 'include',
+          cache: 'no-store', // 强制绕过HTTP缓存，确保refetch时获取最新数据
+        }
       );
       if (!response.ok) throw new Error("获取消息失败");
       return response.json();
@@ -155,7 +162,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     queryFn: async () => {
       if (!selectedConversationId) return [];
       const response = await fetch(
-        `/api/conversations/${selectedConversationId}/messages?limit=9999&offset=0`
+        `/api/conversations/${selectedConversationId}/messages?limit=9999&offset=0`,
+        {
+          credentials: 'include',
+          cache: 'no-store', // 强制绕过HTTP缓存
+        }
       );
       if (!response.ok) throw new Error("获取历史消息失败");
       return response.json();
