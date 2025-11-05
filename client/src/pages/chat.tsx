@@ -800,7 +800,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {messages.map((message, index) => {
+                  {messages
+                    .filter((message) => message.content && message.content.trim().length > 0)
+                    .map((message, index) => {
                     const isUser = message.senderType === "user";
 
                     return (
