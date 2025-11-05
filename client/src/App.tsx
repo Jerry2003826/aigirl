@@ -198,8 +198,8 @@ function Router() {
           <main className={cn(
             "flex-1 overflow-hidden md:flex flex-col bg-background",
             showMobileSidebar ? "hidden" : "flex",
-            // Reserve space for bottom nav bar when visible (56px nav height)
-            !hideBottomNavBar && "pb-[56px] md:pb-0"
+            // Reserve space for bottom nav bar on mobile only (56px nav height)
+            !hideBottomNavBar && "pb-[56px]"
           )}>
             <div className="flex-1 overflow-hidden">
               <Switch>
