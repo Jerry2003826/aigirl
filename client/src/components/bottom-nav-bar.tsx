@@ -30,7 +30,7 @@ export function BottomNavBar({ onChatClick, hide = false }: BottomNavBarProps) {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t">
-      <div className="flex items-center justify-around py-1 px-2 pb-[env(safe-area-inset-bottom)] max-w-3xl mx-auto">
+      <div className="flex items-center justify-around py-2 px-2 pb-[env(safe-area-inset-bottom)] max-w-3xl mx-auto">
         {navItems.map((item) => {
           const isActive = location === item.path || (location === "/" && item.path === "/chat");
           const Icon = item.icon;
