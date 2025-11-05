@@ -71,6 +71,9 @@ export function useGlobalWebSocket() {
               }
             );
             
+            // Force UI refresh for conversation list to show latest message
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+            
             // For AI messages, manage streaming timeout
             if (message.senderType === 'ai') {
               // Clear existing timeout
