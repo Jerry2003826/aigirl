@@ -183,8 +183,8 @@ function Router() {
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
-            "md:flex w-full md:w-auto",
-            showMobileSidebar ? "flex" : "hidden"
+            "md:flex md:w-auto",
+            showMobileSidebar ? "flex w-full" : "hidden"
           )}>
             <AppSidebar
               selectedConversationId={selectedConversationId}
