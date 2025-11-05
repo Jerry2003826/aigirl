@@ -350,7 +350,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         }
       );
       
-      // Update conversation's lastMessageAt without refetching (optimistic update)
+      // Update conversation's lastMessageAt and lastMessage (optimistic update)
       const conversationUpdated = queryClient.setQueryData(
         ["/api/conversations"],
         (old: any[] = []) => {
@@ -361,6 +361,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               return {
                 ...conv,
                 lastMessageAt: new Date().toISOString(),
+                lastMessage: newMessage, // 更新最后一条消息
               };
             }
             return conv;
@@ -647,10 +648,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               
               return old.map(conv => {
                 if (conv.id === message.conversationId) {
-                  // 更新lastMessageAt
+                  // 更新lastMessageAt和lastMessage
                   const updated = {
                     ...conv,
                     lastMessageAt: new Date().toISOString(),
+                    lastMessage: message, // 更新最后一条消息
                   };
                   
                   // 如果是AI消息且不在当前对话，+1未读数
