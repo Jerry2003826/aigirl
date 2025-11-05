@@ -59,7 +59,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // 等待AI回复
+  const [isStreaming, setIsStreaming] = useState(false); // AI正在分段输出
   const [messageLimit, setMessageLimit] = useState(50);
   const [failedMessages, setFailedMessages] = useState<Map<string, { conversationId: string; content: string; imageData?: string | null }>>(new Map());
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -68,11 +69,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [historyMessageType, setHistoryMessageType] = useState<"all" | "text" | "image">("all");
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]); // 乐观更新的用户消息
+  const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪AI消息数量用于检测分段完成
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -108,20 +112,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     enabled: !!selectedConversationId,
   });
 
-  // Deduplicate messages by ID - keep the latest occurrence of each ID
-  // Use Map for O(n) performance, iterating from end to preserve newest duplicates
+  // Merge server messages with optimistic messages
+  // Deduplicate by ID - keep the latest occurrence of each ID
   const messages = useMemo(() => {
+    const allMsgs = [...rawMessages, ...optimisticMessages];
     const messageMap = new Map<string, Message>();
     // Iterate from end to beginning to keep the latest occurrence
-    for (let i = rawMessages.length - 1; i >= 0; i--) {
-      const msg = rawMessages[i];
+    for (let i = allMsgs.length - 1; i >= 0; i--) {
+      const msg = allMsgs[i];
       if (!messageMap.has(msg.id)) {
         messageMap.set(msg.id, msg);
       }
     }
     // Convert back to array and reverse to restore original order
     return Array.from(messageMap.values()).reverse();
-  }, [rawMessages]);
+  }, [rawMessages, optimisticMessages]);
 
   // Separate query for chat history dialog - fetch ALL messages
   const { data: allMessages = [], isLoading: allMessagesLoading } = useQuery<Message[]>({
@@ -309,15 +314,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // Immediately refresh to show user's message
+      // Clear optimistic message after server confirms
+      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+      
+      // Refresh to get server version of user's message
       queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
       queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      setMessageInput("");
-      handleRemoveImage();
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
-      if (!conversation) return;
+      if (!conversation) {
+        // CRITICAL: 找不到对话时也要重置状态
+        setIsLoading(false);
+        setIsStreaming(false);
+        return;
+      }
 
       try {
         // Determine which persona should respond
@@ -325,7 +336,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         
         if (conversation.isGroup) {
           // For group chats, use intelligent rotation
-          setIsTyping(true);
           const selectionResult: any = await apiRequest("POST", "/api/ai/select-persona", {
             conversationId,
             userMessage: content || "[User sent an image]",
@@ -344,7 +354,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           
           const personaParticipant = participants[0];
           if (!personaParticipant) {
-            // If no participant, just refresh to show user's message
+            // CRITICAL: 找不到 persona 时也要重置状态
+            setIsLoading(false);
+            setIsStreaming(false);
             queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
             return;
@@ -353,7 +365,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         }
 
         // Trigger AI response
-        setIsTyping(true);
+        setIsLoading(false); // AI开始回复，结束等待状态
+        setIsStreaming(true); // 进入分段输出状态
+        setAiMessageCount(0); // 重置AI消息计数
+        
         await apiRequest("POST", "/api/ai/generate", {
           conversationId,
           personaId: respondingPersonaId,
@@ -361,6 +376,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         });
       } catch (error: any) {
         console.error("生成AI回复时出错:", error);
+        
+        // CRITICAL: 错误时重置所有状态，解锁输入框
+        setIsLoading(false);
+        setIsStreaming(false);
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current);
+          streamingTimeoutRef.current = null;
+        }
         
         // Parse error response for better error messages
         const errorData = error?.response?.data || error;
@@ -404,14 +427,18 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           variant: "destructive",
         });
       } finally {
-        // Stop typing indicator and refresh after AI response (success or failure)
-        setIsTyping(false);
+        // 刷新消息列表（成功或失败都需要）
         queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
         queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       }
     },
     onError: (error: any, { tempId, content, imageData, conversationId }) => {
-      // Store the failed message with conversationId
+      // 发送失败时解锁输入框
+      setIsLoading(false);
+      setIsStreaming(false);
+      
+      // Clear optimistic message and store as failed
+      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
       setFailedMessages(prev => {
         const newMap = new Map(prev);
         newMap.set(tempId, { conversationId, content, imageData });
@@ -447,14 +474,34 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const handleSendMessage = () => {
     if (!selectedConversationId) return;
     if (!messageInput.trim() && !imageData) return;
+    if (isLoading || isStreaming) return; // 防止连续发送
     
     // Generate a temporary ID for this message
     const tempId = `temp-${Date.now()}-${Math.random()}`;
+    const currentInput = messageInput.trim();
+    const currentImage = imageData;
+    
+    // 立即显示用户消息（乐观更新）
+    const optimisticMessage: Message = {
+      id: tempId,
+      conversationId: selectedConversationId,
+      senderId: null,
+      senderType: "user",
+      content: currentInput || "[Image]",
+      isRead: true,
+      status: "sending",
+      createdAt: new Date(),
+    };
+    
+    setOptimisticMessages(prev => [...prev, optimisticMessage]);
+    setMessageInput(""); // 立即清空输入框
+    handleRemoveImage(); // 立即清空图片
+    setIsLoading(true); // 锁定输入框，等待AI回复
     
     sendMessageMutation.mutate({
       conversationId: selectedConversationId,
-      content: messageInput.trim(),
-      imageData,
+      content: currentInput,
+      imageData: currentImage,
       tempId,
     });
   };
@@ -466,15 +513,24 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
   };
 
-  // Auto-scroll only for new messages, not when loading more history
+  // Auto-scroll to bottom (no animation) for new messages
   useEffect(() => {
     // Only scroll if we got new messages (not loading older ones)
     if (!isLoadingMore && messages.length > prevMessagesLengthRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      // 使用 auto 而不是 smooth，立即跳转到底部（无动画）
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
     prevMessagesLengthRef.current = messages.length;
     setIsLoadingMore(false);
   }, [messages]);
+  
+  // 检测对话切换，立即滚动到底部
+  useEffect(() => {
+    if (selectedConversationId && messages.length > 0) {
+      // 对话切换时立即滚动到底部
+      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+    }
+  }, [selectedConversationId]);
 
   // Mark messages as read when conversation is selected
   useEffect(() => {
@@ -509,9 +565,24 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         const data = JSON.parse(event.data);
         console.log('WebSocket message received:', data.type);
         if (data.type === 'new_message' && data.payload) {
+          const message = data.payload;
+          
           // Refresh messages when receiving new message
           queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversationId] });
           queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          
+          // 检测AI消息，管理分段状态
+          if (message.senderType === 'ai') {
+            // 清除之前的计时器
+            if (streamingTimeoutRef.current) {
+              clearTimeout(streamingTimeoutRef.current);
+            }
+            
+            // 设置新的计时器：5秒内没有新消息就认为分段完成
+            streamingTimeoutRef.current = setTimeout(() => {
+              setIsStreaming(false); // 分段完成，解锁输入框
+            }, 5000);
+          }
         }
       } catch (error) {
         console.error('Error parsing WebSocket message:', error);
@@ -585,7 +656,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <div className="flex items-center gap-1.5">
                   <div className={cn(
                     "h-2 w-2 rounded-full",
-                    isTyping 
+                    (isLoading || isStreaming)
                       ? "bg-blue-500" 
                       : aiStatus?.isOnline 
                         ? "bg-green-500" 
@@ -593,9 +664,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   )} data-testid="status-indicator"></div>
                   <div className="flex flex-col">
                     <p className="text-sm text-muted-foreground" data-testid="text-status">
-                      {isTyping ? "正在输入中..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
+                      {isLoading ? "正在思考..." : isStreaming ? "正在回复..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
                     </p>
-                    {!aiStatus?.isOnline && !isTyping && (
+                    {!aiStatus?.isOnline && !isLoading && !isStreaming && (
                       <button 
                         onClick={() => setLocation("/settings")}
                         className="text-xs text-primary hover:underline text-left"
@@ -779,8 +850,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     )
                   )}
                   
-                  {/* Typing Indicator */}
-                  {isTyping && (
+                  {/* Typing Indicator - 只在等待AI回复时显示 */}
+                  {isLoading && (
                     <div className="flex gap-3 justify-start" data-testid="typing-indicator">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={selectedConversation?.personas?.[0]?.avatarUrl || undefined} />
@@ -849,19 +920,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={handleKeyPress}
-                  placeholder="输入消息..."
+                  placeholder={isLoading ? "AI正在思考..." : isStreaming ? "AI正在回复..." : "输入消息..."}
                   rows={1}
+                  disabled={isLoading || isStreaming}
                   className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
                   data-testid="input-message"
                 />
                 <Button
                   onClick={handleSendMessage}
-                  disabled={(!messageInput.trim() && !imageData) || sendMessageMutation.isPending}
+                  disabled={(!messageInput.trim() && !imageData) || isLoading || isStreaming}
                   size="icon"
                   className="h-10 w-10 shrink-0 rounded-full bg-primary hover:bg-primary/90"
                   data-testid="button-send-message"
                 >
-                  {sendMessageMutation.isPending ? (
+                  {isLoading || isStreaming ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
                     <Send className="h-5 w-5" />
