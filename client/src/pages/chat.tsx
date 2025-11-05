@@ -77,6 +77,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [showMembersDialog, setShowMembersDialog] = useState(false);
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
+  const [replyingAIName, setReplyingAIName] = useState<string | null>(null); // 追踪正在回复的AI名字（仅群聊）
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
@@ -489,12 +490,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     setIsLoadingMore(false);
   }, [messages]);
   
-  // 检测对话切换，立即滚动到底部
+  // 检测对话切换，立即滚动到底部并重置状态
   useEffect(() => {
     if (selectedConversationId && messages.length > 0) {
       // 对话切换时立即滚动到底部
       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
     }
+    // Reset replying AI name when switching conversations
+    setReplyingAIName(null);
   }, [selectedConversationId]);
 
   // Mark messages as read when conversation is selected
@@ -521,12 +524,23 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
   }, [rawMessages, optimisticMessages.length]);
   
+  // Use independent query data if available, otherwise fall back to conversations list
+  const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
+
   // Manage AI streaming state based on new AI messages
   useEffect(() => {
     const aiMessages = messages.filter(m => m.senderType === 'ai');
     if (aiMessages.length > aiMessageCount) {
       // New AI message detected
       setAiMessageCount(aiMessages.length);
+      
+      // For group chats, update the replying AI name from the latest message
+      if (selectedConversation?.isGroup && aiMessages.length > 0) {
+        const latestAIMessage = aiMessages[aiMessages.length - 1];
+        if (latestAIMessage.personaName) {
+          setReplyingAIName(latestAIMessage.personaName);
+        }
+      }
       
       // Clear previous timeout
       if (streamingTimeoutRef.current) {
@@ -536,12 +550,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // Set timeout: if no new message in 5s, streaming is complete
       streamingTimeoutRef.current = setTimeout(() => {
         setIsStreaming(false); // Unlock input
+        setReplyingAIName(null); // Clear replying AI name
       }, 5000);
     }
-  }, [messages, aiMessageCount]);
-
-  // Use independent query data if available, otherwise fall back to conversations list
-  const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
+  }, [messages, aiMessageCount, selectedConversation?.isGroup]);
 
   return (
     <div className={cn(
@@ -597,30 +609,39 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 >
                   {selectedConversation.title || selectedConversation.personas?.[0]?.name || "Chat"}
                 </h3>
-                <div className="flex items-center gap-1.5">
-                  <div className={cn(
-                    "h-2 w-2 rounded-full",
-                    (isLoading || isStreaming)
-                      ? "bg-blue-500" 
-                      : aiStatus?.isOnline 
-                        ? "bg-green-500" 
-                        : "bg-red-500"
-                  )} data-testid="status-indicator"></div>
-                  <div className="flex flex-col">
-                    <p className="text-sm text-muted-foreground" data-testid="text-status">
-                      {isLoading ? "正在思考..." : isStreaming ? "正在回复..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
-                    </p>
-                    {!aiStatus?.isOnline && !isLoading && !isStreaming && (
-                      <button 
-                        onClick={() => setLocation("/settings")}
-                        className="text-xs text-primary hover:underline text-left"
-                        data-testid="link-configure-api"
-                      >
-                        点击配置API密钥
-                      </button>
-                    )}
+                {/* Status indicator - only show for 1-on-1 chats */}
+                {!selectedConversation.isGroup && (
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      (isLoading || isStreaming)
+                        ? "bg-blue-500" 
+                        : aiStatus?.isOnline 
+                          ? "bg-green-500" 
+                          : "bg-red-500"
+                    )} data-testid="status-indicator"></div>
+                    <div className="flex flex-col">
+                      <p className="text-sm text-muted-foreground" data-testid="text-status">
+                        {isLoading ? "正在思考..." : isStreaming ? "正在回复..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
+                      </p>
+                      {!aiStatus?.isOnline && !isLoading && !isStreaming && (
+                        <button 
+                          onClick={() => setLocation("/settings")}
+                          className="text-xs text-primary hover:underline text-left"
+                          data-testid="link-configure-api"
+                        >
+                          点击配置API密钥
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
+                {/* Group chat: show who is replying */}
+                {selectedConversation.isGroup && (isLoading || isStreaming) && (
+                  <p className="text-sm text-muted-foreground" data-testid="text-group-status">
+                    {replyingAIName ? `${replyingAIName}正在回复...` : "AI正在回复..."}
+                  </p>
+                )}
               </div>
             </div>
 
