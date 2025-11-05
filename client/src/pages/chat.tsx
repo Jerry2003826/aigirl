@@ -760,7 +760,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             </div>
 
             {/* Message Input */}
-            <div className="border-t bg-background pb-[env(safe-area-inset-bottom)]">
+            <div className="border-t bg-background pb-[env(safe-area-inset-bottom)] mb-[-56px] md:mb-0">
               <div className="px-3 py-2">
               {/* Image Preview */}
               {imagePreview && (
