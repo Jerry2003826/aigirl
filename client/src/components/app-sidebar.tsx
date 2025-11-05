@@ -409,7 +409,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
       </SidebarContent>
 
       {/* Page Navigation - Desktop Only */}
-      <SidebarFooter className="border-t border-sidebar-border p-3 hidden md:block">
+      <SidebarFooter className="border-t border-sidebar-border px-3 py-2 pb-[env(safe-area-inset-bottom)] hidden md:block">
         <div className="grid grid-cols-4 gap-2">
           <Button
             variant="ghost"
