@@ -51,6 +51,12 @@ export function useGlobalWebSocket() {
               },
               (oldData: Message[] | undefined) => {
                 if (!oldData) return oldData;
+                // Check if message already exists to prevent duplicates
+                const messageExists = oldData.some(m => m.id === message.id);
+                if (messageExists) {
+                  console.log('[Global WS] Message already in cache, skipping:', message.id);
+                  return oldData;
+                }
                 console.log('[Global WS] Adding message to cache:', message.id);
                 // Backend returns DESC (newest first), prepend to maintain DESC order
                 return [message, ...oldData];
@@ -67,6 +73,9 @@ export function useGlobalWebSocket() {
               },
               (oldData: Message[] | undefined) => {
                 if (!oldData) return oldData;
+                // Check if message already exists
+                const messageExists = oldData.some(m => m.id === message.id);
+                if (messageExists) return oldData;
                 return [message, ...oldData];
               }
             );
