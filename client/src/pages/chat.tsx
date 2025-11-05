@@ -78,7 +78,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const wsRef = useRef<WebSocket | null>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const { data: user } = useQuery<{ id: string; nickname: string; avatarUrl: string | null }>({
+  const { data: user } = useQuery<{ id: string; username: string; profileImageUrl: string | null }>({
     queryKey: ["/api/auth/user"],
   });
 
@@ -821,9 +821,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
                         {isUser && (
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={user?.avatarUrl || undefined} />
+                            <AvatarImage src={user?.profileImageUrl || undefined} />
                             <AvatarFallback className="bg-primary/10 text-sm text-primary">
-                              {user?.nickname?.slice(0, 2) || "我"}
+                              {user?.username?.slice(0, 2) || "我"}
                             </AvatarFallback>
                           </Avatar>
                         )}
@@ -870,9 +870,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                           </Button>
                         </div>
                         <Avatar className="h-10 w-10">
-                          <AvatarImage src={user?.avatarUrl || undefined} />
+                          <AvatarImage src={user?.profileImageUrl || undefined} />
                           <AvatarFallback className="bg-primary/10 text-sm text-primary">
-                            {user?.nickname?.slice(0, 2) || "我"}
+                            {user?.username?.slice(0, 2) || "我"}
                           </AvatarFallback>
                         </Avatar>
                       </div>
@@ -1083,8 +1083,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
                             {isUser && (
                               <Avatar className="h-8 w-8 shrink-0">
+                                <AvatarImage src={user?.profileImageUrl || undefined} />
                                 <AvatarFallback className="bg-primary/10 text-xs text-primary">
-                                  我
+                                  {user?.username?.slice(0, 2) || "我"}
                                 </AvatarFallback>
                               </Avatar>
                             )}
