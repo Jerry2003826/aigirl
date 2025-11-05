@@ -1150,12 +1150,15 @@ export async function triggerAICommentsOnMoment(
 
             console.log(`[AI Comment] ${persona.name} generated: "${commentContent}"`);
 
+            // Replace backslashes with commas before saving
+            const cleanedContent = commentContent.replace(/\\/g, '，');
+
             // Create comment
             await storage.createMomentComment({
               momentId,
               authorId: persona.id,
               authorType: 'ai',
-              content: commentContent,
+              content: cleanedContent,
             });
 
             console.log(`[AI Comment] ✅ AI ${persona.name} successfully commented on moment ${momentId}`);
@@ -1357,12 +1360,15 @@ export async function triggerAIReplyToComment(
             comment.content
           );
 
+          // Replace backslashes with commas before saving
+          const cleanedReply = replyContent.replace(/\\/g, '，');
+
           // Create reply
           await storage.createMomentComment({
             momentId: comment.momentId,
             authorId: selectedPersona.id,
             authorType: 'ai',
-            content: replyContent,
+            content: cleanedReply,
             parentCommentId: commentId,
           });
 
