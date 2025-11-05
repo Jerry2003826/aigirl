@@ -6,7 +6,7 @@ import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
-import { setupWebSocket, broadcastNewMessage } from "./websocket";
+import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent } from "./websocket";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -373,6 +373,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Broadcast group creation if this is a group conversation
+      if (conversation.isGroup) {
+        broadcastGroupEvent('created', conversation);
+      }
+      
       res.json(conversation);
     } catch (error: any) {
       console.error("Error creating conversation:", error);
@@ -437,6 +442,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const participant = await storage.addParticipant(validatedData);
+      
+      // Broadcast participant added event if this is a group
+      if (conversation.isGroup) {
+        broadcastGroupEvent('participant_added', { conversationId, personaId, participant });
+      }
+      
       res.json(participant);
     } catch (error: any) {
       console.error("Error adding participant:", error);
@@ -530,6 +541,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.removeParticipant(conversationId, personaId);
+      
+      // Broadcast participant removed event if this is a group
+      if (conversation.isGroup) {
+        broadcastGroupEvent('participant_removed', { conversationId, personaId });
+      }
+      
       res.json({ success: true });
     } catch (error) {
       console.error("Error removing participant:", error);
@@ -1115,6 +1132,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const moment = await storage.createMoment(validatedData);
       
+      // Broadcast moment creation to all users
+      broadcastMomentEvent('created', moment);
+      
       // Trigger AI comments (async, non-blocking)
       triggerAICommentsOnMoment(
         moment.id,
@@ -1152,6 +1172,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.deleteMoment(momentId);
+      
+      // Broadcast moment deletion to all users
+      broadcastMomentEvent('deleted', { id: momentId });
+      
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting moment:", error);
@@ -1172,6 +1196,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const liked = await storage.toggleMomentLike(momentId, userId, 'user');
+      
+      // Broadcast like/unlike event
+      broadcastMomentEvent('liked', { momentId, userId, liked });
+      
       res.json({ liked });
     } catch (error) {
       console.error("Error toggling moment like:", error);
@@ -1236,6 +1264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const comment = await storage.createMomentComment(validatedData);
+      
+      // Broadcast comment creation to all users
+      broadcastMomentEvent('commented', { momentId, comment });
       
       // Trigger AI reply if this is a reply to an AI comment
       if (parentCommentId) {
