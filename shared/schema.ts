@@ -110,6 +110,26 @@ export const memories = pgTable(
   ],
 );
 
+// AI Reply Jobs table (background queue for automatic AI responses)
+export const aiReplyJobs = pgTable(
+  "ai_reply_jobs",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+    userMessageId: varchar("user_message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+    status: text("status").default("pending").notNull(), // 'pending', 'processing', 'completed', 'failed'
+    attempts: integer("attempts").default(0).notNull(), // Number of retry attempts
+    error: text("error"), // Error message if failed
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    processedAt: timestamp("processed_at"), // When job was completed/failed
+  },
+  (table) => [
+    index("idx_ai_reply_jobs_status").on(table.status),
+    index("idx_ai_reply_jobs_conversation_id").on(table.conversationId),
+    index("idx_ai_reply_jobs_created_at").on(table.createdAt),
+  ],
+);
+
 // Moments table (similar to WeChat Moments/Instagram Posts)
 export const moments = pgTable(
   "moments",
@@ -266,6 +286,12 @@ export const updateAiSettingsSchema = createInsertSchema(aiSettings).omit({
   updatedAt: true,
 }).partial();
 
+export const insertAiReplyJobSchema = createInsertSchema(aiReplyJobs).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -299,3 +325,6 @@ export type InsertMomentComment = z.infer<typeof insertMomentCommentSchema>;
 export type AiSettings = typeof aiSettings.$inferSelect;
 export type InsertAiSettings = z.infer<typeof insertAiSettingsSchema>;
 export type UpdateAiSettings = z.infer<typeof updateAiSettingsSchema>;
+
+export type AiReplyJob = typeof aiReplyJobs.$inferSelect;
+export type InsertAiReplyJob = z.infer<typeof insertAiReplyJobSchema>;

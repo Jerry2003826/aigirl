@@ -591,6 +591,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
+      // CRITICAL: Create AI reply job for background processing
+      // This ensures AI responds even if user closes browser
+      await storage.createAiReplyJob({
+        conversationId,
+        userMessageId: message.id,
+        status: 'pending',
+        attempts: 0,
+      });
+      
       res.json(message);
     } catch (error: any) {
       console.error("Error creating message:", error);

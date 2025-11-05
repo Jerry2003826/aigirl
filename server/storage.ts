@@ -9,6 +9,7 @@ import {
   type MomentLike, type InsertMomentLike,
   type MomentComment, type InsertMomentComment,
   type AiSettings, type InsertAiSettings, type UpdateAiSettings,
+  type AiReplyJob, type InsertAiReplyJob,
   users,
   aiPersonas,
   conversations,
@@ -18,11 +19,12 @@ import {
   moments,
   momentLikes,
   momentComments,
-  aiSettings
+  aiSettings,
+  aiReplyJobs
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
-import { eq, and, desc, asc, count, inArray, sql } from "drizzle-orm";
+import { eq, and, or, desc, asc, count, inArray, sql } from "drizzle-orm";
 
 // Storage interface with all CRUD methods needed for the AI chat app
 export interface IStorage {
@@ -91,6 +93,12 @@ export interface IStorage {
   getAiSettings(userId: string): Promise<AiSettings | undefined>;
   createAiSettings(settings: InsertAiSettings): Promise<AiSettings>;
   updateAiSettings(userId: string, settings: UpdateAiSettings): Promise<AiSettings | undefined>;
+  
+  // AI Reply Job operations (background queue)
+  createAiReplyJob(job: InsertAiReplyJob): Promise<AiReplyJob>;
+  getNextPendingJob(): Promise<AiReplyJob | undefined>;
+  updateJobStatus(id: string, status: string, error?: string): Promise<void>;
+  incrementJobAttempts(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -100,6 +108,7 @@ export class MemStorage implements IStorage {
   private conversationParticipants: Map<string, ConversationParticipant>;
   private messages: Map<string, Message>;
   private memories: Map<string, Memory>;
+  private aiReplyJobs: Map<string, AiReplyJob>;
 
   constructor() {
     this.users = new Map();
@@ -108,6 +117,7 @@ export class MemStorage implements IStorage {
     this.conversationParticipants = new Map();
     this.messages = new Map();
     this.memories = new Map();
+    this.aiReplyJobs = new Map();
   }
 
   // User operations
@@ -463,6 +473,47 @@ export class MemStorage implements IStorage {
   async deleteMemory(id: string): Promise<boolean> {
     return this.memories.delete(id);
   }
+  
+  // AI Reply Job operations (background queue)
+  async createAiReplyJob(job: InsertAiReplyJob): Promise<AiReplyJob> {
+    const id = randomUUID();
+    const aiReplyJob: AiReplyJob = {
+      id,
+      conversationId: job.conversationId,
+      userMessageId: job.userMessageId,
+      status: job.status ?? 'pending',
+      attempts: job.attempts ?? 0,
+      error: job.error ?? null,
+      createdAt: new Date(),
+      processedAt: null,
+    };
+    this.aiReplyJobs.set(id, aiReplyJob);
+    return aiReplyJob;
+  }
+  
+  async getNextPendingJob(): Promise<AiReplyJob | undefined> {
+    return Array.from(this.aiReplyJobs.values())
+      .filter((job) => job.status === 'pending')
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0];
+  }
+  
+  async updateJobStatus(id: string, status: string, error?: string): Promise<void> {
+    const job = this.aiReplyJobs.get(id);
+    if (job) {
+      job.status = status;
+      job.error = error || null;
+      job.processedAt = status !== 'pending' ? new Date() : null;
+      this.aiReplyJobs.set(id, job);
+    }
+  }
+  
+  async incrementJobAttempts(id: string): Promise<void> {
+    const job = this.aiReplyJobs.get(id);
+    if (job) {
+      job.attempts += 1;
+      this.aiReplyJobs.set(id, job);
+    }
+  }
 }
 
 export class DatabaseStorage implements IStorage {
@@ -492,21 +543,42 @@ export class DatabaseStorage implements IStorage {
   }
 
   async upsertUser(upsertData: UpsertUser): Promise<User> {
-    const result = await db
-      .insert(users)
-      .values(upsertData)
-      .onConflictDoUpdate({
-        target: users.id,
-        set: {
+    // Handle both id and email conflicts
+    // First try to find existing user by id or email
+    const existing = await db
+      .select()
+      .from(users)
+      .where(
+        or(
+          eq(users.id, upsertData.id),
+          eq(users.email, upsertData.email || '')
+        )
+      )
+      .limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing user
+      const result = await db
+        .update(users)
+        .set({
+          id: upsertData.id, // Update id in case email matched but id different
           email: upsertData.email,
           firstName: upsertData.firstName,
           lastName: upsertData.lastName,
           profileImageUrl: upsertData.profileImageUrl,
           updatedAt: new Date(),
-        },
-      })
-      .returning();
-    return result[0];
+        })
+        .where(eq(users.id, existing[0].id))
+        .returning();
+      return result[0];
+    } else {
+      // Insert new user
+      const result = await db
+        .insert(users)
+        .values(upsertData)
+        .returning();
+      return result[0];
+    }
   }
 
   async updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined> {
@@ -881,6 +953,45 @@ export class DatabaseStorage implements IStorage {
       .where(eq(aiSettings.userId, userId))
       .returning();
     return result[0];
+  }
+  
+  // AI Reply Job operations (background queue)
+  async createAiReplyJob(job: InsertAiReplyJob): Promise<AiReplyJob> {
+    const result = await db
+      .insert(aiReplyJobs)
+      .values(job)
+      .returning();
+    return result[0];
+  }
+  
+  async getNextPendingJob(): Promise<AiReplyJob | undefined> {
+    // Use FOR UPDATE SKIP LOCKED to prevent duplicate processing
+    const result = await db.execute<AiReplyJob>(sql`
+      SELECT * FROM ${aiReplyJobs}
+      WHERE ${aiReplyJobs.status} = 'pending'
+      ORDER BY ${aiReplyJobs.createdAt} ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
+    `);
+    return result.rows[0] as AiReplyJob | undefined;
+  }
+  
+  async updateJobStatus(id: string, status: string, error?: string): Promise<void> {
+    await db
+      .update(aiReplyJobs)
+      .set({ 
+        status, 
+        error: error || null,
+        processedAt: status !== 'pending' ? new Date() : null
+      })
+      .where(eq(aiReplyJobs.id, id));
+  }
+  
+  async incrementJobAttempts(id: string): Promise<void> {
+    await db
+      .update(aiReplyJobs)
+      .set({ attempts: sql`${aiReplyJobs.attempts} + 1` })
+      .where(eq(aiReplyJobs.id, id));
   }
 }
 
