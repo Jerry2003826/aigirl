@@ -1,0 +1,335 @@
+一、发送消息时的逻辑（ChatInterface.tsx 里的 sendMessage）
+
+触发条件：
+
+点击对话框右下角的「发送」按钮
+
+或在输入框里按下 Enter（handleKeyDown 里会调用 sendMessage）
+
+代码核心在：
+
+const sendMessage = async () => { ... }
+
+
+这个函数大致分为 6 步：
+
+1. 入参校验
+if (!input.trim() && !selectedImage) {
+  toast.error('请输入消息或选择图片');
+  return;
+}
+
+
+文本框没字、也没选图片 → 直接弹 toast，函数返回。
+
+然后检查 API Key：
+
+if (!config.geminiApiKey) {
+  toast.error('需要配置API Key', { ... });
+  return;
+}
+
+
+没配 Gemini API Key → 提示错误（沉浸模式只提示文字，完整界面还会给“查看教程”按钮，跳 Google AI Studio）。
+
+2. 构造「用户消息」对象并先插入到本地消息列表
+const userMessage: Message = {
+  id: Date.now().toString(),
+  role: 'user',
+  content: input.trim() || '[图片]',
+  imageUrl: selectedImage || undefined,
+  timestamp: Date.now(),
+};
+
+const newMessages = [...messages, userMessage];
+setMessages(newMessages, true); // 第二个参数 true = 清空未读计数
+setInput('');
+setSelectedImage(null);
+if (fileInputRef.current) fileInputRef.current.value = '';
+setIsLoading(true);
+
+
+创建一条 Message：
+
+role: 'user'
+
+content 是输入文本（如果没有文字就用 "[图片]" 占位）
+
+imageUrl 里放当前选中的图片 base64
+
+timestamp 记录时间
+
+立刻把这条消息加到 messages 里，让 UI 先显示出来（乐观更新）。
+
+同时清空输入框和选择的图片，显示加载状态 isLoading = true。
+
+3. 选择实际使用的模型
+const actualModel = getActualModel(config);
+
+
+根据 config 里的「模型提供商 + 模型名」组合，算出真正要用的 Gemini 模型字符串，例如：
+
+gemini-2.0-flash
+
+或你在设置里写的自定义模型名
+
+4. 根据情况选择三种不同的调用方式
+
+所有 AI 回复都由 try { ... } catch { ... } finally { setIsLoading(false) } 包住。
+
+情况 1：有图片 → 用 Vision 模型
+if (config.geminiApiKey) {
+  if (selectedImage) {
+    const result = await generateWithVision(
+      userMessage.content || '请描述这张图片',
+      selectedImage,
+      config.geminiApiKey,
+      actualModel
+    );
+
+    assistantMessage = {
+      id: (Date.now() + 1).toString(),
+      role: 'assistant',
+      content: result.text,
+      timestamp: Date.now(),
+    };
+  }
+  ...
+}
+
+
+调 generateWithVision（在 utils/gemini-service.ts 中）：
+
+给模型一段文字说明 + 一张图片
+
+走的是 .../models/${model}:generateContent 带图片部分的 Gemini Vision 接口
+
+得到 result.text 作为 AI 回复内容，封装成一条 assistantMessage 消息。
+
+情况 2：启用了 RAG 或 联网搜索 → 用 generateWithRAGAndSearch
+else if (config.enableRAG || config.enableWebSearch) {
+  const result = await generateWithRAGAndSearch(
+    userMessage.content,
+    newMessages,
+    buildSystemPrompt(),       // 把女友人设 + 说话规则拼进 system prompt
+    config.geminiApiKey,
+    config.enableRAG,
+    config.enableWebSearch,
+    personality.memories || [], // 这位女友当前拥有的所有记忆
+    actualModel
+  );
+
+  assistantMessage = {
+    id: (Date.now() + 1).toString(),
+    role: 'assistant',
+    content: result.text,
+    timestamp: Date.now(),
+  };
+
+  // 非沉浸模式下，弹 toast 告诉你是否用到了联网搜索 / RAG
+  if (!immersiveMode) {
+    if (config.enableWebSearch && result.groundingSources?.length) {
+      toast.success(`🌐 已使用联网搜索 (${result.groundingSources.length} 个来源)`);
+    }
+    if (config.enableRAG && result.ragMatches?.length) {
+      toast.success(`📚 已检索${result.ragMatches.length}条历史记录`);
+    }
+  }
+}
+
+
+generateWithRAGAndSearch 里面做的事（简化）：
+
+把最近对话 + 女友记忆整理成一个「上下文文本」；
+
+如果 enableRAG：
+
+用 text-embedding-004 给历史文档/聊天做向量；
+
+找出和当前问题最近的若干条，拼进 prompt；
+
+如果 enableWebSearch：
+
+使用 Gemini 的 googleSearch 工具联网查信息，拿到 groundingSources；
+
+最终构造一个包含：
+
+系统提示（女友人设 + 说话规则）
+
+对话历史
+
+RAG 命中的资料
+
+联网搜索结果（如果需要）
+的大 prompt，调用一次 generateContent，返回：
+
+{
+  text: string;                    // 最终回答
+  ragMatches?: RAGMatch[];
+  webSearchQueries?: string[];
+  groundingSources?: { title?: string; uri?: string }[];
+}
+
+情况 3：普通文本聊天 → 用 generateText
+else {
+  const apiMessages = [
+    { role: 'system', content: buildSystemPrompt() },
+    ...newMessages.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }))
+  ];
+
+  const result = await generateText(
+    apiMessages,
+    config.geminiApiKey,
+    actualModel
+  );
+
+  assistantMessage = {
+    id: (Date.now() + 1).toString(),
+    role: 'assistant',
+    content: result.text,
+    timestamp: Date.now(),
+  };
+}
+
+
+没开 RAG/联网，也没图 → 走纯文本对话：
+
+用 buildSystemPrompt() 拼出一段「你是谁、你和用户的关系、说话风格」的 system prompt；
+
+把当前会话所有消息 messages 转成 { role, content } 列表；
+
+调 generateText 调用 Gemini 普通生成接口。
+
+generateText 在 gemini-service.ts 里就是一个通用封装：
+
+POST 到 .../models/${model}:generateContent；
+
+传入 contents（system + 对话）；
+
+带 generationConfig（温度、最大 tokens 等）；
+
+把返回结果里的文本抽出来。
+
+5. 把 AI 回复分段显示 + 追加到消息列表
+
+生成完 assistantMessage 后，做了一次「分段显示」处理：
+
+const segments = assistantMessage.content.split('\\').filter(s => s.trim());
+
+if (segments.length > 1) {
+  setIsStreaming(true);
+  setMessages(newMessages);
+
+  for (let i = 0; i < segments.length; i++) {
+    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+    const segmentMessage: Message = {
+      id: `${assistantMessage.id}-seg-${i}`,
+      role: 'assistant',
+      content: segments[i].trim(),
+      timestamp: Date.now(),
+    };
+    setMessages(prev => [...prev, segmentMessage]);
+  }
+
+  setIsStreaming(false);
+} else {
+  setMessages([...newMessages, assistantMessage]);
+}
+
+
+把 AI 回复用 \ 做分隔符切段：
+
+如果只有一段 → 直接整条加入消息列表；
+
+如果有多段：
+
+先只保留用户消息；
+
+再每 2~3 秒 append 一段新的 assistant 消息，制造「分段回复 / 连续回消息」的感觉；
+
+isStreaming 控制 UI 上的“正在回复”状态。
+
+6. 自动提取记忆并更新到这位女友身上
+const finalMessages = [...newMessages, assistantMessage];
+
+// 每 5 条消息触发一次记忆提取
+if (config.geminiApiKey && finalMessages.length % 5 === 0 && finalMessages.length >= 5) {
+  try {
+    const memoryResult = await extractMemoriesFromConversation(
+      finalMessages,
+      config.geminiApiKey,
+      actualModel
+    );
+
+    if (memoryResult.memories.length > 0) {
+      const currentMemories = personality.memories || [];
+      const newMemories = memoryResult.memories.map(m => ({
+        id: `memory-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        type: m.type,
+        content: m.content,
+        memoryType: m.memoryType,
+        importance: m.importance,
+        timestamp: Date.now(),
+        tags: m.tags,
+        autoGenerated: true,
+      }));
+
+      // 清理掉过期/溢出的短期记忆
+      const { cleaned: cleanedMemories, removedCount } = cleanShortTermMemories(currentMemories);
+      const finalMemories = [...cleanedMemories, ...newMemories];
+
+      setPersonalities(
+        personalities.map(p =>
+          p.id === personality.id
+            ? { ...p, memories: finalMemories }
+            : p
+        )
+      );
+
+      if (!immersiveMode) {
+        const longTermCount = newMemories.filter(m => m.memoryType === 'long-term').length;
+        const shortTermCount = newMemories.length - longTermCount;
+
+        if (longTermCount > 0) {
+          toast.success(`🧠 AI自动保存了${longTermCount}条长时记忆${shortTermCount > 0 ? `（同时保存了${shortTermCount}条短时记忆）` : ''}${removedCount > 0 ? `（清理了${removedCount}条过期短时记忆）` : ''}`);
+        } else if (shortTermCount > 0) {
+          toast.success(`🧠 AI自动保存了${shortTermCount}条短时记忆${removedCount > 0 ? `（清理了${removedCount}条过期短时记忆）` : ''}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to extract memories:', err);
+  }
+}
+
+
+每聊到第 5、10、15… 条消息时，会调用 extractMemoriesFromConversation：
+
+这函数在 gemini-service.ts 里，用 Gemini 再读一遍最近对话，抽取“可以记住的事实”和标签；
+
+把返回的记忆转成你的 Memory 结构，打上 autoGenerated: true。
+
+再用 cleanShortTermMemories 清理掉过期/过多的短期记忆，保持记忆列表不会无限膨胀。
+
+更新到当前 personality.memories 里，并在非沉浸模式下用 toast 告诉你“记住了几条长时/短时记忆”。
+
+7. 错误处理
+
+catch (error) 部分会：
+
+打日志 console.error('发送消息失败:', error)；
+
+从 error.message 里判断大致类型：
+
+没配置或 Key 错误 → 提示“请在设置中检查 API Key”，附“获取 API Key”按钮（打开 aistudio 链接）；
+
+配额错误 → 提示“API 配额已用完”；
+
+网络错误 → 提示“网络连接失败”；
+
+其它错误 → 提示“请检查 API 配置是否正确”。
+
+finally 一定会 setIsLoading(false) 把加载状态关闭。
