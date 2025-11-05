@@ -1302,10 +1302,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast comment creation to all users
       broadcastMomentEvent('commented', { momentId, comment });
       
-      // Trigger AI reply if this is a reply to an AI comment
+      // Trigger AI reply in two scenarios:
+      // 1. User directly comments on AI's moment (top-level comment)
+      // 2. User replies to AI's comment (nested comment)
+      
       if (parentCommentId) {
+        // Scenario 2: User is replying to another comment
         const parentComment = await storage.getMomentCommentById(parentCommentId);
         if (parentComment && parentComment.authorType === 'ai') {
+          triggerAIReplyToComment(comment.id, userId).catch(err => {
+            console.error("Error triggering AI reply:", err);
+          });
+        }
+      } else {
+        // Scenario 1: User is commenting directly on the moment (top-level)
+        if (moment.authorType === 'ai') {
           triggerAIReplyToComment(comment.id, userId).catch(err => {
             console.error("Error triggering AI reply:", err);
           });
