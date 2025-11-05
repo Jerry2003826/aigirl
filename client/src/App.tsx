@@ -1,6 +1,6 @@
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
@@ -21,11 +21,24 @@ import NotFound from "@/pages/not-found";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
+type Conversation = {
+  id: string;
+  title: string | null;
+  isGroup: boolean;
+  lastMessageAt: Date | null;
+};
+
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const [location, setLocation] = useLocation();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(true);
+
+  // Fetch conversations list
+  const { data: conversations = [] } = useQuery<Conversation[]>({
+    queryKey: ["/api/conversations"],
+    enabled: isAuthenticated,
+  });
 
   // Read conversationId from URL and auto-select (only for chat routes)
   useEffect(() => {
@@ -49,6 +62,19 @@ function Router() {
       setSelectedConversationId(null);
     }
   }, [location]);
+
+  // Auto-select most recent conversation when on chat route with no selection
+  useEffect(() => {
+    if ((location === "/" || location === "/chat") && !selectedConversationId && conversations.length > 0) {
+      // Conversations are already sorted by lastMessageAt (newest first)
+      const mostRecentConversation = conversations[0];
+      setSelectedConversationId(mostRecentConversation.id);
+      // On mobile, hide sidebar to show the chat
+      if (window.innerWidth < 768) {
+        setShowMobileSidebar(false);
+      }
+    }
+  }, [location, selectedConversationId, conversations]);
 
   // Handle mobile sidebar visibility on route changes
   useEffect(() => {
