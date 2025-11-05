@@ -39,25 +39,37 @@ export function useGlobalWebSocket() {
             const currentConversationId = params.get('conversationId');
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
-            console.log('[Global WS] Invalidating message queries for conversation:', message.conversationId);
-            // Invalidate message queries to refetch
-            // This triggers a new fetch which will include the latest message
-            queryClient.invalidateQueries({
-              predicate: (query) => {
-                const key = query.queryKey;
-                // Match both:
-                // - ["/api/messages", conversationId, limit] (main chat query)
-                // - ["/api/messages/all", conversationId] (history dialog query)
-                const matches = (
-                  (key[0] === "/api/messages" && key[1] === message.conversationId) ||
-                  (key[0] === "/api/messages/all" && key[1] === message.conversationId)
-                );
-                if (matches) {
-                  console.log('[Global WS] Invalidating query:', key);
+            console.log('[Global WS] Updating message cache for conversation:', message.conversationId);
+            // Directly update cache instead of invalidate - this is instant!
+            queryClient.setQueriesData(
+              {
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  // Match: ["/api/messages", conversationId, limit]
+                  return key[0] === "/api/messages" && key[1] === message.conversationId && typeof key[2] === 'number';
                 }
-                return matches;
+              },
+              (oldData: Message[] | undefined) => {
+                if (!oldData) return oldData;
+                console.log('[Global WS] Adding message to cache:', message.id);
+                // Backend returns DESC (newest first), prepend to maintain DESC order
+                return [message, ...oldData];
               }
-            });
+            );
+            
+            // Also update history dialog query if it exists
+            queryClient.setQueriesData(
+              {
+                predicate: (query) => {
+                  const key = query.queryKey;
+                  return key[0] === "/api/messages/all" && key[1] === message.conversationId;
+                }
+              },
+              (oldData: Message[] | undefined) => {
+                if (!oldData) return oldData;
+                return [message, ...oldData];
+              }
+            );
             
             // Update conversation list cache (optimistic update)
             queryClient.setQueryData(
