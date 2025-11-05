@@ -804,6 +804,15 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                             {message.content}
                           </p>
                         </div>
+
+                        {isUser && (
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user?.avatarUrl || undefined} />
+                            <AvatarFallback className="bg-primary/10 text-sm text-primary">
+                              {user?.nickname?.slice(0, 2) || "我"}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
                       </div>
                     );
                   })}
@@ -846,6 +855,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                             重试
                           </Button>
                         </div>
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={user?.avatarUrl || undefined} />
+                          <AvatarFallback className="bg-primary/10 text-sm text-primary">
+                            {user?.nickname?.slice(0, 2) || "我"}
+                          </AvatarFallback>
+                        </Avatar>
                       </div>
                     )
                   )}
