@@ -376,11 +376,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const imageMessagesCount = allMessages.filter(m => isImageMessage(m)).length;
 
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, imageData, tempId }: { 
+    mutationFn: async ({ conversationId, content, imageData, clientMessageId }: { 
       conversationId: string; 
       content: string;
       imageData?: string | null;
-      tempId: string;
+      clientMessageId: string;
     }) => {
       // Send user message (with optional image)
       return apiRequest("POST", "/api/messages", {
@@ -388,19 +388,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         content: content || (imageData ? "[Image]" : ""),
         senderType: "user",
         imageData: imageData || undefined,
+        clientMessageId, // Send clientMessageId to server for deduplication
       });
     },
-    onSuccess: async (data, { conversationId, content, tempId }) => {
+    onSuccess: async (data, { conversationId, content, clientMessageId }) => {
       // Remove from failed messages if it was a retry
       setFailedMessages(prev => {
         const newMap = new Map(prev);
-        newMap.delete(tempId);
+        newMap.delete(clientMessageId);
         return newMap;
       });
       
-      // CRITICAL FIX: 立即清理乐观消息，避免双重渲染闪烁
-      // WebSocket会添加真实消息，乐观消息必须立即移除
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+      // CRITICAL FIX: 立即清理乐观消息（根据clientMessageId）
+      // WebSocket会根据clientMessageId替换乐观消息，这里确保清理
+      setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
       
       // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
       // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
@@ -416,16 +417,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // WebSocket会收到AI消息并触发streamingTimeout逻辑
       // 无需手动调用AI接口
     },
-    onError: (error: any, { tempId, content, imageData, conversationId }) => {
+    onError: (error: any, { clientMessageId, content, imageData, conversationId }) => {
       // 发送失败时解锁输入框
       setIsLoading(false);
       setIsStreaming(false);
       
       // Clear optimistic message and store as failed
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+      setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
       setFailedMessages(prev => {
         const newMap = new Map(prev);
-        newMap.set(tempId, { conversationId, content, imageData });
+        newMap.set(clientMessageId, { conversationId, content, imageData });
         return newMap;
       });
       
@@ -437,8 +438,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     },
   });
 
-  const retryFailedMessage = (tempId: string) => {
-    const failedMsg = failedMessages.get(tempId);
+  const retryFailedMessage = (clientMessageId: string) => {
+    const failedMsg = failedMessages.get(clientMessageId);
     if (!failedMsg || !selectedConversationId) return;
     
     // Verify the failed message belongs to the current conversation
@@ -451,7 +452,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       conversationId: selectedConversationId,
       content: failedMsg.content,
       imageData: failedMsg.imageData,
-      tempId,
+      clientMessageId, // Reuse same clientMessageId for retry
     });
   };
 
@@ -460,19 +461,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     if (!messageInput.trim() && !imageData) return;
     if (isLoading || isStreaming) return; // 防止连续发送
     
-    // Generate a temporary ID for this message
-    const tempId = `temp-${Date.now()}-${Math.random()}`;
+    // Generate a client message ID for deduplication (used as stable identifier)
+    const clientMessageId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const currentInput = messageInput.trim();
     const currentImage = imageData;
     
-    // 立即显示用户消息（乐观更新）
+    // 立即显示用户消息（乐观更新）- 使用clientMessageId作为ID
     const optimisticMessage: Message = {
-      id: tempId,
+      id: clientMessageId, // CRITICAL: Use clientMessageId as temporary ID
       conversationId: selectedConversationId,
       senderId: null,
       senderType: "user",
       content: currentInput || "[Image]",
       imageData: currentImage || null,
+      clientMessageId, // Store clientMessageId for server matching
       isRead: true,
       status: "sending",
       createdAt: new Date(),
@@ -487,7 +489,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       conversationId: selectedConversationId,
       content: currentInput,
       imageData: currentImage,
-      tempId,
+      clientMessageId, // Send clientMessageId to server
     });
   };
 

@@ -81,6 +81,7 @@ export const messages = pgTable(
     senderType: text("sender_type").notNull(), // 'user' or 'ai'
     content: text("content").notNull(),
     imageData: text("image_data"), // Base64 encoded image data (optional)
+    clientMessageId: varchar("client_message_id"), // Client-generated ID for optimistic updates deduplication
     isRead: boolean("is_read").default(false).notNull(),
     status: text("status").default("sent").notNull(), // 'sending', 'sent', 'failed'
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -88,6 +89,7 @@ export const messages = pgTable(
   (table) => [
     index("idx_messages_conversation_id").on(table.conversationId),
     index("idx_messages_created_at").on(table.createdAt),
+    index("idx_messages_client_message_id").on(table.clientMessageId),
   ],
 );
 

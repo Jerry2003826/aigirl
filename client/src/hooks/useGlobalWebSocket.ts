@@ -40,7 +40,7 @@ export function useGlobalWebSocket() {
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
             console.log('[Global WS] Updating message cache for conversation:', message.conversationId);
-            // Directly update cache instead of invalidate - this is instant!
+            // CRITICAL: Replace optimistic message by clientMessageId to prevent double-render
             queryClient.setQueriesData(
               {
                 predicate: (query) => {
@@ -51,12 +51,27 @@ export function useGlobalWebSocket() {
               },
               (oldData: Message[] | undefined) => {
                 if (!oldData) return oldData;
-                // Check if message already exists to prevent duplicates
+                
+                // Check if message already exists by ID to prevent duplicates
                 const messageExists = oldData.some(m => m.id === message.id);
                 if (messageExists) {
                   console.log('[Global WS] Message already in cache, skipping:', message.id);
                   return oldData;
                 }
+                
+                // CRITICAL FIX: If message has clientMessageId, replace optimistic message
+                // This prevents double-render (optimistic + real message)
+                if (message.clientMessageId) {
+                  const optimisticIndex = oldData.findIndex(m => m.clientMessageId === message.clientMessageId);
+                  if (optimisticIndex !== -1) {
+                    console.log('[Global WS] Replacing optimistic message with real message:', message.clientMessageId);
+                    // Replace optimistic message with real message (in-place)
+                    const newData = [...oldData];
+                    newData[optimisticIndex] = message;
+                    return newData;
+                  }
+                }
+                
                 console.log('[Global WS] Adding message to cache:', message.id);
                 // Backend returns DESC (newest first), prepend to maintain DESC order
                 return [message, ...oldData];
