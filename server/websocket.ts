@@ -292,6 +292,15 @@ function handleRead(ws: AuthenticatedWebSocket, payload: { messageId: number; co
 export function broadcastNewMessage(conversationId: string, message: any) {
   const convConns = conversationConnections.get(conversationId);
   if (convConns) {
+    // Debug: Log message with persona info
+    console.log('[WS Broadcast] Message:', {
+      id: message.id,
+      senderType: message.senderType,
+      personaName: message.personaName,
+      personaAvatar: message.personaAvatar,
+      content: message.content?.substring(0, 20)
+    });
+    
     const data = JSON.stringify({
       type: 'new_message',
       payload: message
