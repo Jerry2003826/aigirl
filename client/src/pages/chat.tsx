@@ -337,42 +337,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // Immediately remove optimistic message to prevent flickering
       setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
       
-      // Add the server's confirmed message to cache
-      const newMessage = data as unknown as Message;
-      queryClient.setQueryData(
-        ["/api/messages", conversationId, messageLimit],
-        (old: Message[] = []) => {
-          // Add the new message if it's not already in the list
-          if (!old.find(m => m.id === newMessage.id)) {
-            return [...old, newMessage];
-          }
-          return old;
-        }
-      );
-      
-      // Update conversation's lastMessageAt and lastMessage (optimistic update)
-      const conversationUpdated = queryClient.setQueryData(
-        ["/api/conversations"],
-        (old: any[] = []) => {
-          if (!old || old.length === 0) return old;
-          
-          return old.map(conv => {
-            if (conv.id === conversationId) {
-              return {
-                ...conv,
-                lastMessageAt: new Date().toISOString(),
-                lastMessage: newMessage, // 更新最后一条消息
-              };
-            }
-            return conv;
-          });
-        }
-      );
-      
-      // If cache update failed, invalidate to ensure sync
-      if (!conversationUpdated) {
-        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      }
+      // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
+      // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
