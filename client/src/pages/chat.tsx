@@ -83,6 +83,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMarkedConversationRef = useRef<string | null>(null);
   
   // Use global WebSocket for conversation subscription
   useConversationSubscription(wsRef, selectedConversationId);
@@ -524,15 +525,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     setReplyingAIName(null);
   }, [selectedConversationId]);
 
-  // Mark messages as read when conversation is selected
+  // Mark messages as read when conversation is selected (OPTIMIZED to prevent flicker)
+  // Only mark once per conversation switch, not on every message
   useEffect(() => {
-    if (selectedConversationId && messages.length > 0) {
-      const hasUnreadMessages = messages.some(m => !m.isRead && m.senderType === "ai");
-      if (hasUnreadMessages) {
-        markAsReadMutation.mutate(selectedConversationId);
+    if (selectedConversationId && selectedConversationId !== lastMarkedConversationRef.current) {
+      // New conversation selected, check if it has unread messages
+      if (messages.length > 0) {
+        const hasUnreadMessages = messages.some(m => !m.isRead && m.senderType === "ai");
+        if (hasUnreadMessages) {
+          markAsReadMutation.mutate(selectedConversationId);
+        }
       }
+      // Remember we've marked this conversation
+      lastMarkedConversationRef.current = selectedConversationId;
     }
-  }, [selectedConversationId, messages]);
+  }, [selectedConversationId]); // CRITICAL: Only depend on conversation change, NOT messages
 
   // Remove optimistic messages when real messages arrive
   useEffect(() => {
