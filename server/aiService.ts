@@ -777,13 +777,23 @@ export async function generateMomentComment(
     if (momentImages && momentImages.length > 0) {
       userPrompt += `They also shared ${momentImages.length} image(s).\n\n`;
     }
-    userPrompt += `Please write a friendly, natural comment (1-2 sentences) responding to their post. Stay in character.`;
+    userPrompt += `Write a personalized, specific comment (1-2 sentences) about this moment. Requirements:
+- Reference specific details from their post
+- Use your memories about them to make it personal
+- Show your unique personality and speech style
+- Be natural and authentic, not generic
+- AVOID generic reactions like "好棒", "赞", "真不错" - be specific to what they shared`;
   } else {
     userPrompt = `用户刚刚发布了这条动态：\n"${momentContent}"\n\n`;
     if (momentImages && momentImages.length > 0) {
       userPrompt += `还分享了${momentImages.length}张图片。\n\n`;
     }
-    userPrompt += `请写一条友好、自然的评论（1-2句话）回应他们的动态。保持你的性格特点，用中文回复。`;
+    userPrompt += `请针对这条动态写一个有个性、具体的评论（1-2句话）。要求：
+- 引用动态中的具体内容或细节
+- 结合你对用户的记忆，让评论更个人化
+- 展现你独特的性格和说话风格
+- 自然真实，不要敷衍
+- 禁止使用"好棒"、"赞"、"真不错"这类通用反应 - 要针对他们分享的具体内容做评论`;
   }
 
   try {
