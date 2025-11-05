@@ -33,6 +33,7 @@ function Router() {
   const [location, setLocation] = useLocation();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [showMobileSidebar, setShowMobileSidebar] = useState(true);
+  const [hasAutoSelected, setHasAutoSelected] = useState(false);
 
   // Fetch conversations list
   const { data: conversations = [] } = useQuery<Conversation[]>({
@@ -63,18 +64,24 @@ function Router() {
     }
   }, [location]);
 
-  // Auto-select most recent conversation when on chat route with no selection
+  // Auto-select most recent conversation ONLY on first load
   useEffect(() => {
-    if ((location === "/" || location === "/chat") && !selectedConversationId && conversations.length > 0) {
+    if (
+      !hasAutoSelected &&
+      (location === "/" || location === "/chat") && 
+      !selectedConversationId && 
+      conversations.length > 0
+    ) {
       // Conversations are already sorted by lastMessageAt (newest first)
       const mostRecentConversation = conversations[0];
       setSelectedConversationId(mostRecentConversation.id);
+      setHasAutoSelected(true);
       // On mobile, hide sidebar to show the chat
       if (window.innerWidth < 768) {
         setShowMobileSidebar(false);
       }
     }
-  }, [location, selectedConversationId, conversations]);
+  }, [location, selectedConversationId, conversations, hasAutoSelected]);
 
   // Handle mobile sidebar visibility on route changes
   useEffect(() => {
