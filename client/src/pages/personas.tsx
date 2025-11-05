@@ -260,7 +260,6 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
         systemPrompt: data.systemPrompt,
         backstory: data.backstory || "",
         greeting: data.greeting || "",
-        model: data.model || "gemini-2.5-pro",
         responseDelay: data.responseDelay || 0,
         userId: "",
       });
