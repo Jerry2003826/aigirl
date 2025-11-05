@@ -158,12 +158,7 @@ function Router() {
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background flex-col">
-        <div className={cn(
-          "flex-1 flex overflow-hidden",
-          // Add bottom padding for fixed nav bar on mobile only when nav bar is visible
-          // No padding when nav bar is hidden or on desktop
-          hideBottomNavBar ? "pb-0" : "pb-14 md:pb-0"
-        )}>
+        <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
             "md:flex w-full md:w-auto",
@@ -179,8 +174,10 @@ function Router() {
           
           {/* Main content: Always visible on md+, conditionally visible on mobile */}
           <main className={cn(
-            "flex-1 overflow-hidden md:flex flex-col",
-            showMobileSidebar ? "hidden" : "flex"
+            "flex-1 overflow-hidden md:flex flex-col bg-background",
+            showMobileSidebar ? "hidden" : "flex",
+            // Add bottom padding for bottom nav bar on mobile when it's visible
+            !hideBottomNavBar && "pb-[calc(56px+env(safe-area-inset-bottom))] md:pb-0"
           )}>
             <div className="flex-1 overflow-hidden">
               <Switch>
