@@ -370,7 +370,7 @@ export class MemStorage implements IStorage {
   ): Promise<Message[]> {
     return Array.from(this.messages.values())
       .filter((msg) => msg.conversationId === conversationId)
-      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(offset, offset + limit);
   }
 
@@ -748,7 +748,7 @@ export class DatabaseStorage implements IStorage {
       .from(messages)
       .leftJoin(aiPersonas, eq(messages.senderId, aiPersonas.id))
       .where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.createdAt))
+      .orderBy(desc(messages.createdAt))
       .limit(limit)
       .offset(offset);
     

@@ -119,12 +119,16 @@ export function classifyAIError(error: any): AIError {
 async function buildConversationContext(
   conversationId: string,
   personaId: string,
-  limit: number = 20
+  limit: number = 100
 ): Promise<ConversationMessage[]> {
   const messages = await storage.getMessagesByConversation(conversationId, limit, 0);
   
-  // Convert messages to provider-agnostic format (already in chronological order from DB)
-  return messages.map((msg: Message) => {
+  // Messages are returned in DESC order (newest first) from DB
+  // Reverse them so AI reads in chronological order (oldest first)
+  const chronologicalMessages = [...messages].reverse();
+  
+  // Convert messages to provider-agnostic format
+  return chronologicalMessages.map((msg: Message) => {
     if (msg.senderType === "user") {
       return {
         role: "user" as const,
@@ -276,7 +280,7 @@ async function buildRAGContext(
 export async function generateAIResponse(
   options: GenerateResponseOptions
 ): Promise<string> {
-  const { conversationId, personaId, userMessage, contextLimit = 20, imageData } = options;
+  const { conversationId, personaId, userMessage, contextLimit = 100, imageData } = options;
   
   // Fetch persona
   const persona = await storage.getPersona(personaId);
@@ -360,7 +364,7 @@ export async function generateAIResponse(
 export async function generateAIResponseStream(
   options: GenerateResponseOptions
 ): Promise<AsyncIterable<any>> {
-  const { conversationId, personaId, userMessage, contextLimit = 20, imageData } = options;
+  const { conversationId, personaId, userMessage, contextLimit = 100, imageData } = options;
   
   // Fetch persona
   const persona = await storage.getPersona(personaId);
