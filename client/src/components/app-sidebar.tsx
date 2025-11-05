@@ -327,8 +327,8 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-0">
-        <ScrollArea className="flex-1">
+      <SidebarContent className="p-0 overflow-hidden">
+        <ScrollArea className="h-full">
           {conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center">
               <MessageCircle className="mb-4 h-16 w-16 text-muted-foreground" />
