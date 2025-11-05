@@ -1368,13 +1368,16 @@ export async function triggerAIReplyToComment(
           const cleanedReply = replyContent.replace(/\\/g, '，');
 
           // Create reply
-          await storage.createMomentComment({
+          const reply = await storage.createMomentComment({
             momentId: comment.momentId,
             authorId: selectedPersona.id,
             authorType: 'ai',
             content: cleanedReply,
             parentCommentId: commentId,
           });
+
+          // Broadcast to all users for real-time updates
+          broadcastMomentEvent('commented', { momentId: comment.momentId, comment: reply });
 
           console.log(`AI ${selectedPersona.name} replied to comment ${commentId}`);
         } catch (error) {
