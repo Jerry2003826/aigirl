@@ -394,7 +394,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
                               : "text-muted-foreground"
                           )} data-testid={`text-last-message-${conversation.id}`}>
                             {conversation.lastMessage 
-                              ? `${conversation.lastMessage.senderType === 'ai' ? '' : '我: '}${conversation.lastMessage.content}`
+                              ? `${conversation.lastMessage.senderType === 'ai' ? '' : '我: '}${conversation.lastMessage.content || '[图片]'}`
                               : '暂无消息'}
                           </p>
                         </div>
