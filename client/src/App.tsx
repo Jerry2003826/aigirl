@@ -152,13 +152,21 @@ function Router() {
     setLocation("/chat");
   };
 
+  // Determine if bottom nav bar should be hidden (keep this logic in sync with BottomNavBar hide prop)
+  const hideBottomNavBar = !!selectedConversationId && !showMobileSidebar;
+
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex h-screen w-full bg-background flex-col">
-        <div className="flex-1 flex overflow-hidden">
+        <div className={cn(
+          "flex-1 flex overflow-hidden",
+          // Add bottom padding for fixed nav bar on mobile only when nav bar is visible
+          // No padding when nav bar is hidden or on desktop
+          hideBottomNavBar ? "pb-0" : "pb-14 md:pb-0"
+        )}>
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
-            "md:flex pb-14 w-full md:w-auto",
+            "md:flex w-full md:w-auto",
             showMobileSidebar ? "flex" : "hidden"
           )}>
             <AppSidebar
@@ -174,12 +182,7 @@ function Router() {
             "flex-1 overflow-hidden md:flex flex-col",
             showMobileSidebar ? "hidden" : "flex"
           )}>
-            <div className={cn(
-              "flex-1 overflow-hidden",
-              // Mobile: no padding when in chat (nav bar hidden), padding when nav bar shown
-              // Desktop: always no padding (no nav bar on desktop)
-              selectedConversationId && !showMobileSidebar ? "pb-0" : "pb-14 md:pb-0"
-            )}>
+            <div className="flex-1 overflow-hidden">
               <Switch>
                 <Route path="/">
                   {() => (
@@ -230,7 +233,7 @@ function Router() {
         {/* Bottom Navigation Bar - Hide when in chat conversation on mobile */}
         <BottomNavBar 
           onChatClick={handleChatNavClick}
-          hide={!!selectedConversationId && !showMobileSidebar}
+          hide={hideBottomNavBar}
         />
       </div>
     </SidebarProvider>
