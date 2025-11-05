@@ -79,6 +79,7 @@ export const messages = pgTable(
     senderId: varchar("sender_id"), // null for user messages, personaId for AI messages
     senderType: text("sender_type").notNull(), // 'user' or 'ai'
     content: text("content").notNull(),
+    imageData: text("image_data"), // Base64 encoded image data (optional)
     isRead: boolean("is_read").default(false).notNull(),
     status: text("status").default("sent").notNull(), // 'sending', 'sent', 'failed'
     createdAt: timestamp("created_at").defaultNow().notNull(),

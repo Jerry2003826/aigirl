@@ -454,6 +454,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       senderId: null,
       senderType: "user",
       content: currentInput || "[Image]",
+      imageData: currentImage || null,
       isRead: true,
       status: "sending",
       createdAt: new Date(),
@@ -780,9 +781,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                               : "bg-muted rounded-bl-md"
                           )}
                         >
-                          <p className="whitespace-pre-wrap break-words text-base leading-relaxed" data-testid={`text-message-content-${message.id}`}>
-                            {message.content}
-                          </p>
+                          {message.imageData ? (
+                            <div className="mb-2">
+                              <img 
+                                src={message.imageData} 
+                                alt="Sent image" 
+                                className="max-w-full rounded-lg"
+                                data-testid={`image-content-${message.id}`}
+                              />
+                            </div>
+                          ) : null}
+                          {message.content && message.content !== "[Image]" && (
+                            <p className="whitespace-pre-wrap break-words text-base leading-relaxed" data-testid={`text-message-content-${message.id}`}>
+                              {message.content}
+                            </p>
+                          )}
                         </div>
 
                         {isUser && (
