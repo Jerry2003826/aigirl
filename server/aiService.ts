@@ -15,6 +15,100 @@ interface SelectRespondingPersonaOptions {
   userMessage: string;
 }
 
+// Error types for better error handling
+export enum AIErrorType {
+  API_KEY_ERROR = 'API_KEY_ERROR',
+  QUOTA_ERROR = 'QUOTA_ERROR',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  INVALID_REQUEST = 'INVALID_REQUEST',
+  MODEL_ERROR = 'MODEL_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+}
+
+export class AIError extends Error {
+  constructor(
+    public type: AIErrorType,
+    message: string,
+    public originalError?: any
+  ) {
+    super(message);
+    this.name = 'AIError';
+  }
+}
+
+/**
+ * Classify and wrap errors from AI providers
+ */
+export function classifyAIError(error: any): AIError {
+  const errorMessage = error?.message || error?.toString() || 'Unknown error';
+  const errorString = errorMessage.toLowerCase();
+  
+  // API Key errors
+  if (errorString.includes('api key') || 
+      errorString.includes('invalid key') ||
+      errorString.includes('unauthorized') ||
+      errorString.includes('401')) {
+    return new AIError(
+      AIErrorType.API_KEY_ERROR,
+      '请检查您的 API Key 是否正确配置。您可以在设置页面中更新 API Key。',
+      error
+    );
+  }
+  
+  // Quota/Rate limit errors
+  if (errorString.includes('quota') || 
+      errorString.includes('rate limit') ||
+      errorString.includes('too many requests') ||
+      errorString.includes('429')) {
+    return new AIError(
+      AIErrorType.QUOTA_ERROR,
+      'API 配额已用完或请求过于频繁，请稍后再试或升级您的 API 套餐。',
+      error
+    );
+  }
+  
+  // Network errors
+  if (errorString.includes('network') || 
+      errorString.includes('econnrefused') ||
+      errorString.includes('timeout') ||
+      errorString.includes('fetch failed')) {
+    return new AIError(
+      AIErrorType.NETWORK_ERROR,
+      '网络连接失败，请检查您的网络连接后重试。',
+      error
+    );
+  }
+  
+  // Invalid request (model not found, invalid parameters, etc.)
+  if (errorString.includes('invalid') || 
+      errorString.includes('not found') ||
+      errorString.includes('400')) {
+    return new AIError(
+      AIErrorType.INVALID_REQUEST,
+      '请求参数无效，请检查您的配置（模型名称、参数等）。',
+      error
+    );
+  }
+  
+  // Model-specific errors
+  if (errorString.includes('model') || 
+      errorString.includes('503') ||
+      errorString.includes('service unavailable')) {
+    return new AIError(
+      AIErrorType.MODEL_ERROR,
+      'AI 模型暂时不可用，请稍后再试或切换到其他模型。',
+      error
+    );
+  }
+  
+  // Unknown errors
+  return new AIError(
+    AIErrorType.UNKNOWN_ERROR,
+    `AI 服务出错：${errorMessage}`,
+    error
+  );
+}
+
 /**
  * Build conversation context from recent messages
  */
@@ -232,7 +326,7 @@ export async function generateAIResponse(
     return response;
   } catch (error: any) {
     console.error("Error generating AI response:", error);
-    throw new Error(`Failed to generate AI response: ${error.message}`);
+    throw classifyAIError(error);
   }
 }
 

@@ -707,7 +707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast user message first
       broadcastNewMessage(conversationId, userMessage);
       
-      // Save and broadcast AI messages with 1 second delay between each
+      // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
         // No parts after splitting, save original response
@@ -722,11 +722,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiMessages.push(aiMessage);
         broadcastNewMessage(conversationId, aiMessage);
       } else {
-        // Save and broadcast each part with 1 second delay
+        // Save and broadcast each part with 2-3 second random delay
         for (let i = 0; i < messageParts.length; i++) {
           if (i > 0) {
-            // Wait 1 second before saving and sending next message
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait 2-3 seconds randomly before saving and sending next message
+            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
           }
           
           const aiMessage = await storage.createMessage({
@@ -745,17 +745,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
-      // Extract and store memories asynchronously (don't await to avoid blocking response)
-      extractAndStoreMemories(conversationId, personaId, content, aiResponse)
-        .catch(err => console.error("Memory extraction failed:", err));
+      // Extract and store memories every 5 user messages (to reduce API calls)
+      const userMessagesCount = await storage.countUserMessages(conversationId);
+      
+      if (userMessagesCount % 5 === 0 && userMessagesCount >= 5) {
+        extractAndStoreMemories(conversationId, personaId, content, aiResponse)
+          .catch(err => console.error("Memory extraction failed:", err));
+      }
       
       res.json({ userMessage, aiMessages, response: aiResponse });
     } catch (error: any) {
       console.error("Error generating AI response:", error);
+      
+      // Handle Zod validation errors
       if (error.name === 'ZodError') {
-        return res.status(400).json({ message: "Invalid input", errors: error.errors });
+        return res.status(400).json({ 
+          message: "Invalid input", 
+          errors: error.errors 
+        });
       }
-      res.status(500).json({ message: "Failed to generate AI response", error: error.message });
+      
+      // Handle classified AI errors
+      if (error.name === 'AIError') {
+        return res.status(500).json({ 
+          message: error.message,
+          errorType: error.type,
+          canRetry: error.type === 'NETWORK_ERROR' || error.type === 'QUOTA_ERROR' || error.type === 'MODEL_ERROR'
+        });
+      }
+      
+      // Handle unknown errors
+      res.status(500).json({ 
+        message: "AI 服务出错，请稍后重试",
+        errorType: "UNKNOWN_ERROR",
+        canRetry: true
+      });
     }
   });
 
@@ -833,7 +857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Broadcast user message first
       broadcastNewMessage(conversationId, userMessage);
       
-      // Save and broadcast AI messages with 1 second delay between each
+      // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
         // No parts after splitting, save original response
@@ -848,11 +872,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiMessages.push(aiMessage);
         broadcastNewMessage(conversationId, aiMessage);
       } else {
-        // Save and broadcast each part with 1 second delay
+        // Save and broadcast each part with 2-3 second random delay
         for (let i = 0; i < messageParts.length; i++) {
           if (i > 0) {
-            // Wait 1 second before saving and sending next message
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Wait 2-3 seconds randomly before saving and sending next message
+            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
           }
           
           const aiMessage = await storage.createMessage({
@@ -871,19 +895,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update conversation's last message timestamp
       await storage.updateConversationLastMessage(conversationId);
       
-      // Extract and store memories asynchronously (don't await to avoid blocking response)
-      extractAndStoreMemories(conversationId, personaId, content, fullResponse)
-        .catch(err => console.error("Memory extraction failed:", err));
+      // Extract and store memories every 5 user messages (to reduce API calls)
+      const userMessagesCount = await storage.countUserMessages(conversationId);
+      
+      if (userMessagesCount % 5 === 0 && userMessagesCount >= 5) {
+        extractAndStoreMemories(conversationId, personaId, content, fullResponse)
+          .catch(err => console.error("Memory extraction failed:", err));
+      }
       
       // Send final message with saved message data
       res.write(`data: ${JSON.stringify({ done: true, aiMessages })}\n\n`);
       res.end();
     } catch (error: any) {
       console.error("Error generating AI response stream:", error);
+      
+      // Handle Zod validation errors
       if (error.name === 'ZodError') {
-        res.write(`data: ${JSON.stringify({ error: "Invalid input", details: error.errors })}\n\n`);
-      } else {
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+        res.write(`data: ${JSON.stringify({ 
+          error: "Invalid input", 
+          details: error.errors 
+        })}\n\n`);
+      } 
+      // Handle classified AI errors
+      else if (error.name === 'AIError') {
+        res.write(`data: ${JSON.stringify({ 
+          error: error.message,
+          errorType: error.type,
+          canRetry: error.type === 'NETWORK_ERROR' || error.type === 'QUOTA_ERROR' || error.type === 'MODEL_ERROR'
+        })}\n\n`);
+      } 
+      // Handle unknown errors
+      else {
+        res.write(`data: ${JSON.stringify({ 
+          error: "AI 服务出错，请稍后重试",
+          errorType: "UNKNOWN_ERROR",
+          canRetry: true
+        })}\n\n`);
       }
       res.end();
     }

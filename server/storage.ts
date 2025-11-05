@@ -58,6 +58,7 @@ export interface IStorage {
   getMessage(id: string): Promise<Message | undefined>;
   getMessagesByConversation(conversationId: string, limit?: number, offset?: number): Promise<(Message & { personaName?: string; personaAvatar?: string | null })[]>;
   getConversationStats(conversationId: string): Promise<{ lastMessage: Message | null; unreadCount: number }>;
+  countUserMessages(conversationId: string): Promise<number>; // Count total user messages in conversation
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessageStatus(id: string, status: string): Promise<void>;
   markMessageAsRead(id: string): Promise<void>;
@@ -632,6 +633,20 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
     
     return results as (Message & { personaName?: string; personaAvatar?: string | null })[];
+  }
+
+  async countUserMessages(conversationId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.senderType, 'user')
+        )
+      );
+    
+    return result[0]?.count || 0;
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {

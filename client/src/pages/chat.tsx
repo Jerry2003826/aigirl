@@ -361,9 +361,46 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         });
       } catch (error: any) {
         console.error("生成AI回复时出错:", error);
+        
+        // Parse error response for better error messages
+        const errorData = error?.response?.data || error;
+        const errorType = errorData?.errorType || 'UNKNOWN_ERROR';
+        const errorMessage = errorData?.message || error.message || "AI回复生成失败";
+        const canRetry = errorData?.canRetry !== false;
+        
+        // Customize toast based on error type
+        let title = "AI服务错误";
+        let description = errorMessage;
+        
+        switch (errorType) {
+          case 'API_KEY_ERROR':
+            title = "API Key 配置错误";
+            description = errorMessage + " 点击前往设置页面配置。";
+            break;
+          case 'QUOTA_ERROR':
+            title = "API 配额不足";
+            description = errorMessage;
+            break;
+          case 'NETWORK_ERROR':
+            title = "网络连接失败";
+            description = errorMessage + " 请检查网络后重试。";
+            break;
+          case 'MODEL_ERROR':
+            title = "模型暂时不可用";
+            description = errorMessage + " 请稍后再试或更换模型。";
+            break;
+          case 'INVALID_REQUEST':
+            title = "请求参数错误";
+            description = errorMessage;
+            break;
+          default:
+            title = "AI服务错误";
+            description = errorMessage + (canRetry ? " 请稍后重试。" : "");
+        }
+        
         toast({
-          title: "AI服务错误",
-          description: error.message || "AI回复生成失败",
+          title,
+          description,
           variant: "destructive",
         });
       } finally {
