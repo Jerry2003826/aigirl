@@ -28,6 +28,7 @@ import { useState, useRef } from "react";
 type Conversation = {
   id: string;
   title: string | null;
+  avatarUrl?: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
   unreadCount?: number;

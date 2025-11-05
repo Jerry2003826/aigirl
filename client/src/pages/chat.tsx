@@ -73,6 +73,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [historyMessageType, setHistoryMessageType] = useState<"all" | "text" | "image">("all");
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]); // 乐观更新的用户消息
   const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪AI消息数量用于检测分段完成
+  const [showMembersDialog, setShowMembersDialog] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
@@ -286,6 +287,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     setShowHistoryDialog(true);
     setHistorySearchQuery("");
     setHistoryMessageType("all");
+  };
+
+  const handleViewMembers = () => {
+    setShowMembersDialog(true);
   };
 
   // Helper function to check if a message contains an image
@@ -589,6 +594,18 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     >
                       <Brain className="mr-2 h-4 w-4" />
                       查看记忆
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                {selectedConversation.isGroup && (
+                  <>
+                    <DropdownMenuItem
+                      onClick={handleViewMembers}
+                      data-testid="menu-view-members"
+                    >
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      查看成员
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
@@ -973,6 +990,54 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 </ScrollArea>
               </TabsContent>
             </Tabs>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Members Dialog */}
+      <Dialog open={showMembersDialog} onOpenChange={setShowMembersDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>群聊成员</DialogTitle>
+            <DialogDescription>
+              查看当前群聊的所有成员
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-4">
+            {selectedConversation?.personas && selectedConversation.personas.length > 0 ? (
+              selectedConversation.personas.map((persona) => (
+                <div
+                  key={persona.id}
+                  className="flex items-center gap-3 p-3 rounded-lg hover-elevate cursor-pointer"
+                  onClick={() => {
+                    setShowMembersDialog(false);
+                    setLocation(`/contacts/${persona.id}`);
+                  }}
+                  data-testid={`member-item-${persona.id}`}
+                >
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={persona.avatarUrl || undefined} />
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {persona.name?.slice(0, 2) || "AI"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-foreground truncate">
+                      {persona.name}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      AI成员
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <UserCircle className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-muted-foreground">暂无成员</p>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>
