@@ -799,7 +799,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 <div className="space-y-4">
                   {messages.map((message, index) => {
                     const isUser = message.senderType === "user";
-                    const showAvatar = !isUser && (index === 0 || messages[index - 1].senderType !== "ai");
 
                     return (
                       <div
@@ -810,7 +809,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                         )}
                         data-testid={`message-${message.id}`}
                       >
-                        {!isUser && showAvatar && (
+                        {!isUser && (
                           <Avatar className="h-10 w-10">
                             <AvatarImage src={message.personaAvatar || undefined} />
                             <AvatarFallback className="bg-primary/10 text-sm text-primary">
