@@ -675,22 +675,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden: You don't own this persona" });
       }
       
-      // Validate and save user message first (must persist before AI generation)
-      const validatedUserMessage = insertMessageSchema.parse({
-        conversationId,
-        senderId: null,
-        senderType: "user",
-        content,
-        isRead: false,
-        status: "sent",
-      });
+      // NOTE: User message is already saved via POST /api/messages before this endpoint is called
+      // No need to save it again here - that would cause duplicate messages!
       
-      const userMessage = await storage.createMessage(validatedUserMessage);
-      if (!userMessage) {
-        throw new Error("Failed to save user message");
-      }
-      
-      // Generate AI response (conversation history now includes user message)
+      // Generate AI response (conversation history includes the user message already in DB)
       const aiResponse = await generateAIResponse({
         conversationId,
         personaId,
@@ -703,9 +691,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .split(/[\\\/]/)  // Split by both \ and /
         .map(part => part.trim())  // Trim whitespace
         .filter(part => part.length > 0);  // Remove empty parts
-      
-      // Broadcast user message first
-      broadcastNewMessage(conversationId, userMessage);
       
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
@@ -753,7 +738,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .catch(err => console.error("Memory extraction failed:", err));
       }
       
-      res.json({ userMessage, aiMessages, response: aiResponse });
+      res.json({ aiMessages, response: aiResponse });
     } catch (error: any) {
       console.error("Error generating AI response:", error);
       
@@ -806,30 +791,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden: You don't own this persona" });
       }
       
-      // Validate and save user message first (must persist before AI generation)
-      const validatedUserMessage = insertMessageSchema.parse({
-        conversationId,
-        senderId: null,
-        senderType: "user",
-        content,
-        isRead: false,
-        status: "sent",
-      });
-      
-      const userMessage = await storage.createMessage(validatedUserMessage);
-      if (!userMessage) {
-        return res.status(500).json({ message: "Failed to save user message" });
-      }
+      // NOTE: User message is already saved via POST /api/messages before this endpoint is called
+      // No need to save it again here - that would cause duplicate messages!
       
       // Set up SSE headers
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache');
       res.setHeader('Connection', 'keep-alive');
       
-      // Send user message confirmation
-      res.write(`data: ${JSON.stringify({ userMessage })}\n\n`);
-      
-      // Generate AI response stream (conversation history now includes user message)
+      // Generate AI response stream (conversation history includes the user message already in DB)
       const stream = await generateAIResponseStream({
         conversationId,
         personaId,
@@ -853,9 +823,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .split(/[\\\/]/)  // Split by both \ and /
         .map(part => part.trim())
         .filter(part => part.length > 0);
-      
-      // Broadcast user message first
-      broadcastNewMessage(conversationId, userMessage);
       
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
