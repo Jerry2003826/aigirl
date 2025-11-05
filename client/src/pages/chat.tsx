@@ -582,6 +582,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         if (data.type === 'new_message' && data.payload) {
           const message = data.payload;
           
+          // CRITICAL: 如果这是用户消息，立即移除对应的乐观消息
+          if (message.senderType === 'user') {
+            setOptimisticMessages(prev => 
+              prev.filter(m => 
+                // 根据内容和时间戳移除匹配的乐观消息
+                !(m.content === message.content && m.senderType === 'user')
+              )
+            );
+          }
+          
           // 更新消息列表缓存
           if (message.conversationId === selectedConversationId) {
             // 当前对话：立即添加到缓存
