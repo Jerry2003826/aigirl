@@ -584,8 +584,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         if (data.type === 'new_message' && data.payload) {
           const message = data.payload;
           
-          // Refresh messages when receiving new message
-          queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversationId] });
+          // OPTIMIZED: 立即添加消息到缓存，无需等待网络请求
+          queryClient.setQueryData(
+            ["/api/messages", selectedConversationId, messageLimit],
+            (old: Message[] = []) => {
+              // 避免重复添加
+              if (!old.find(m => m.id === message.id)) {
+                return [...old, message];
+              }
+              return old;
+            }
+          );
+          
+          // 刷新对话列表以更新lastMessageAt
           queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           
           // 检测AI消息，管理分段状态
