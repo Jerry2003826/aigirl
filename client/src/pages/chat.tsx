@@ -614,17 +614,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   <div className="flex items-center gap-1.5">
                     <div className={cn(
                       "h-2 w-2 rounded-full",
-                      (isLoading || isStreaming)
-                        ? "bg-blue-500" 
-                        : aiStatus?.isOnline 
-                          ? "bg-green-500" 
-                          : "bg-red-500"
+                      aiStatus?.isOnline === true
+                        ? (isLoading || isStreaming)
+                          ? "bg-blue-500" 
+                          : "bg-green-500"
+                        : "bg-red-500"
                     )} data-testid="status-indicator"></div>
                     <div className="flex flex-col">
                       <p className="text-sm text-muted-foreground" data-testid="text-status">
-                        {isLoading ? "正在思考..." : isStreaming ? "正在回复..." : aiStatus?.isOnline ? "在线" : "AI服务离线"}
+                        {aiStatus?.isOnline === true
+                          ? (isLoading ? "正在思考..." : isStreaming ? "正在回复..." : "在线")
+                          : "AI服务离线"
+                        }
                       </p>
-                      {!aiStatus?.isOnline && !isLoading && !isStreaming && (
+                      {aiStatus?.isOnline !== true && (
                         <button 
                           onClick={() => setLocation("/settings")}
                           className="text-xs text-primary hover:underline text-left"
@@ -636,8 +639,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     </div>
                   </div>
                 )}
-                {/* Group chat: show who is replying */}
-                {selectedConversation.isGroup && (isLoading || isStreaming) && (
+                {/* Group chat: show who is replying - only when API is configured */}
+                {selectedConversation.isGroup && aiStatus?.isOnline && (isLoading || isStreaming) && (
                   <p className="text-sm text-muted-foreground" data-testid="text-group-status">
                     {replyingAIName ? `${replyingAIName}正在回复...` : "AI正在回复..."}
                   </p>
