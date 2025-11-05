@@ -220,19 +220,32 @@ async function buildSystemPrompt(
 
 /**
  * Build RAG context from memories (when RAG is enabled)
+ * - Filters memories with importance >= 6 (medium-high priority)
+ * - Sorts by importance descending
+ * - Limits to top 20 memories to avoid token waste
  */
 async function buildRAGContext(
   personaId: string,
   userId: string
 ): Promise<string> {
-  const memories = await storage.getMemoriesByPersona(personaId, userId);
+  const allMemories = await storage.getMemoriesByPersona(personaId, userId);
   
-  if (memories.length === 0) {
+  if (allMemories.length === 0) {
     return "（知识库里没有找到相关记忆）";
   }
   
+  // Filter and sort memories
+  const relevantMemories = allMemories
+    .filter(m => (m.importance || 5) >= 6) // Only include medium-high importance (>= 6)
+    .sort((a, b) => (b.importance || 5) - (a.importance || 5)) // Sort by importance descending
+    .slice(0, 20); // Limit to top 20 memories
+  
+  if (relevantMemories.length === 0) {
+    return "（知识库里没有找到重要的相关记忆）";
+  }
+  
   // Format memories as RAG documents
-  return memories
+  return relevantMemories
     .map((memory, i) => {
       let doc = `【记忆${i + 1}：${memory.key}】\n${memory.value}`;
       if (memory.context) {
@@ -530,6 +543,62 @@ ${Object.entries(responseCounts).map(([id, count]) => {
 }
 
 /**
+ * Common memory key synonyms for deduplication
+ */
+const KEY_SYNONYMS: Record<string, string[]> = {
+  "职业": ["工作", "职位", "岗位", "行业"],
+  "爱好": ["兴趣", "喜好", "喜欢做的事"],
+  "年龄": ["岁数", "多大"],
+  "生日": ["出生日期", "诞辰"],
+  "家乡": ["老家", "出生地", "籍贯"],
+  "宠物": ["宠物名字", "养的动物"],
+  "喜欢的食物": ["最爱吃的", "爱吃的", "喜欢吃的"],
+  "喜欢的书": ["最爱的书", "爱看的书"],
+  "喜欢的电影": ["最爱的电影", "爱看的电影"],
+  "喜欢的音乐": ["最爱的音乐", "爱听的音乐"],
+};
+
+/**
+ * Normalize memory key to detect semantic duplicates
+ * Returns the canonical form if key matches a synonym group
+ */
+function normalizeMemoryKey(key: string): string {
+  const normalizedKey = key.trim().toLowerCase();
+  
+  // Check if this key is in any synonym group
+  for (const [canonical, synonyms] of Object.entries(KEY_SYNONYMS)) {
+    if (canonical.toLowerCase() === normalizedKey) {
+      return canonical;
+    }
+    if (synonyms.some(syn => syn.toLowerCase() === normalizedKey)) {
+      return canonical;
+    }
+  }
+  
+  return key.trim(); // Return trimmed original if no synonym match
+}
+
+/**
+ * Check if two memory values are semantically similar
+ */
+function areValuesSimilar(value1: string, value2: string): boolean {
+  const v1 = value1.trim().toLowerCase();
+  const v2 = value2.trim().toLowerCase();
+  
+  // Exact match
+  if (v1 === v2) return true;
+  
+  // Very similar (one contains the other)
+  if (v1.includes(v2) || v2.includes(v1)) {
+    // But not if one is much longer (avoid "软件" matching "软件工程师")
+    const lengthRatio = Math.max(v1.length, v2.length) / Math.min(v1.length, v2.length);
+    return lengthRatio < 1.5;
+  }
+  
+  return false;
+}
+
+/**
  * Extract and store user memories from conversation
  */
 export async function extractAndStoreMemories(
@@ -581,6 +650,11 @@ AI：${aiResponse}
 - key：简短的类别或标识符（例如："职业"、"最喜欢的食物"、"宠物名字"）
 - value：要记住的具体信息
 - context：可选的附加上下文，说明这些信息是何时/如何提到的
+- importance：重要程度（1-10）
+  - 1-3：次要信息（临时兴趣、一次性提及）
+  - 4-6：中等重要（一般偏好、日常活动）
+  - 7-9：重要信息（核心身份、重要关系、长期目标）
+  - 10：关键信息（姓名、重大生活事件）
 
 如果没有需要提取的新记忆，返回空数组[]。
 
@@ -589,12 +663,14 @@ AI：${aiResponse}
   {
     "key": "职业",
     "value": "软件工程师",
-    "context": "讨论工作压力时提到"
+    "context": "讨论工作压力时提到",
+    "importance": 8
   },
   {
     "key": "最喜欢的书",
     "value": "了不起的盖茨比",
-    "context": "用户最喜欢的书"
+    "context": "用户最喜欢的书",
+    "importance": 6
   }
 ]`;
 
@@ -616,7 +692,7 @@ AI：${aiResponse}
     }
     
     // Parse the JSON response
-    let memories: Array<{ key: string; value: string; context?: string }> = [];
+    let memories: Array<{ key: string; value: string; context?: string; importance?: number }> = [];
     try {
       memories = JSON.parse(content);
     } catch (parseError) {
@@ -624,29 +700,45 @@ AI：${aiResponse}
       return;
     }
     
-    // Store each extracted memory
+    // Store each extracted memory with improved deduplication
     for (const memory of memories) {
       if (!memory.key || !memory.value) {
         continue;
       }
       
+      // Normalize the key to detect semantic duplicates
+      const normalizedKey = normalizeMemoryKey(memory.key);
+      
+      // Validate and clamp importance to 1-10 range, default to 5 if not provided
+      let importance = memory.importance || 5;
+      importance = Math.max(1, Math.min(10, Math.round(importance)));
+      
       // Check if a similar memory already exists
       const existingMemories = await storage.getMemoriesByPersona(personaId, conversation.userId);
-      const duplicate = existingMemories.find(m => 
-        m.key.toLowerCase() === memory.key.toLowerCase()
-      );
+      const duplicate = existingMemories.find(m => {
+        const existingNormalizedKey = normalizeMemoryKey(m.key);
+        // Check if keys are semantically the same
+        if (existingNormalizedKey.toLowerCase() === normalizedKey.toLowerCase()) {
+          // Keys match - now check if values are similar
+          return areValuesSimilar(m.value, memory.value);
+        }
+        return false;
+      });
       
-      // Only store if not a duplicate or if the value is significantly different
-      if (!duplicate || duplicate.value !== memory.value) {
+      // Only store if not a duplicate
+      if (!duplicate) {
         await storage.createMemory({
           personaId,
           userId: conversation.userId,
           conversationId, // Track which conversation this memory came from
-          key: memory.key,
+          key: normalizedKey, // Use normalized key for consistency
           value: memory.value,
           context: memory.context || null,
+          importance, // Use AI-determined importance
         });
-        console.log(`Stored memory for persona ${personaId} from conversation ${conversationId}: ${memory.key} = ${memory.value}`);
+        console.log(`Stored memory for persona ${personaId} from conversation ${conversationId}: ${normalizedKey} = ${memory.value} (importance: ${importance})`);
+      } else {
+        console.log(`Skipped duplicate memory: ${normalizedKey} (similar to existing: ${duplicate.key})`);
       }
     }
   } catch (error) {
