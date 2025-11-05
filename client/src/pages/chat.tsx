@@ -318,14 +318,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // Clear optimistic message - it will be replaced by server message
-      setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
-      
-      // Refresh conversations list to update lastMessageAt
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      
-      // Optimistically add the server's confirmed message to cache
-      // This prevents the "disappearing message" issue during refetch
+      // FIRST: Add the server's confirmed message to cache
+      // This ensures there's always a message visible during the transition
       const newMessage = data as unknown as Message;
       queryClient.setQueryData(
         ["/api/messages", conversationId, messageLimit],
@@ -337,6 +331,15 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           return old;
         }
       );
+      
+      // THEN: Clear optimistic message after server message is in cache
+      // Use setTimeout to ensure React processes the cache update first
+      setTimeout(() => {
+        setOptimisticMessages(prev => prev.filter(m => m.id !== tempId));
+      }, 0);
+      
+      // Refresh conversations list to update lastMessageAt
+      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
