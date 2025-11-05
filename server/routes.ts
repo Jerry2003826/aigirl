@@ -59,8 +59,8 @@ const messageLimiter = rateLimit({
     if (userId) {
       return `user:${userId}`;
     }
-    // Use the provided ipKeyGenerator for proper IPv6 handling
-    return rateLimit.ipKeyGenerator(req, res);
+    // Fallback to IP address
+    return req.ip || 'unknown';
   },
 });
 
@@ -1074,7 +1074,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Prepare update data (only include fields that were provided)
-      const updates: Partial<InsertMemory> = {};
+      const updates: any = {};
       if (key !== undefined) updates.key = key;
       if (value !== undefined) updates.value = value;
       if (context !== undefined) updates.context = context;
@@ -1174,7 +1174,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         moment.id,
         userId,
         moment.content,
-        moment.images
+        moment.images || undefined
       ).catch(err => {
         console.error("Error triggering AI comments:", err);
         // Don't fail the response if AI comments fail
