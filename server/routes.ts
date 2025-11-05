@@ -696,17 +696,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
-        // No parts after splitting, save original response
-        const aiMessage = await storage.createMessage({
-          conversationId,
-          senderId: personaId,
-          senderType: "ai",
-          content: aiResponse,
-          isRead: false,
-          status: "sent",
-        });
-        aiMessages.push(aiMessage);
-        broadcastNewMessage(conversationId, aiMessage);
+        // No parts after splitting - check if original response is empty
+        const trimmedResponse = aiResponse.trim();
+        if (trimmedResponse.length > 0) {
+          // Save original response only if it's not empty
+          const aiMessage = await storage.createMessage({
+            conversationId,
+            senderId: personaId,
+            senderType: "ai",
+            content: aiResponse,
+            isRead: false,
+            status: "sent",
+          });
+          aiMessages.push(aiMessage);
+          broadcastNewMessage(conversationId, aiMessage);
+        }
       } else {
         // Save and broadcast each part with 2-3 second random delay
         for (let i = 0; i < messageParts.length; i++) {
@@ -828,17 +832,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
       if (messageParts.length === 0) {
-        // No parts after splitting, save original response
-        const aiMessage = await storage.createMessage({
-          conversationId,
-          senderId: personaId,
-          senderType: "ai",
-          content: fullResponse,
-          isRead: false,
-          status: "sent",
-        });
-        aiMessages.push(aiMessage);
-        broadcastNewMessage(conversationId, aiMessage);
+        // No parts after splitting - check if original response is empty
+        const trimmedResponse = fullResponse.trim();
+        if (trimmedResponse.length > 0) {
+          // Save original response only if it's not empty
+          const aiMessage = await storage.createMessage({
+            conversationId,
+            senderId: personaId,
+            senderType: "ai",
+            content: fullResponse,
+            isRead: false,
+            status: "sent",
+          });
+          aiMessages.push(aiMessage);
+          broadcastNewMessage(conversationId, aiMessage);
+        }
       } else {
         // Save and broadcast each part with 2-3 second random delay
         for (let i = 0; i < messageParts.length; i++) {
