@@ -38,10 +38,10 @@ export function useGlobalWebSocket() {
             const currentConversationId = params.get('conversationId');
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
-            // Invalidate ALL message caches for this conversation
-            // This ensures Chat component refetches and sees the latest messages
-            // refetchType: 'active' ensures active queries refetch immediately
-            queryClient.invalidateQueries({
+            // IMMEDIATELY refetch ALL message caches for this conversation
+            // refetchQueries() triggers immediate refetch (unlike invalidateQueries which is async)
+            // This ensures Chat component sees the latest messages in real-time
+            queryClient.refetchQueries({
               predicate: (query) => {
                 const key = query.queryKey;
                 // Match both:
@@ -52,7 +52,7 @@ export function useGlobalWebSocket() {
                   (key[0] === "/api/messages/all" && key[1] === message.conversationId)
                 );
               },
-              refetchType: 'active', // Force active queries to refetch immediately
+              type: 'active', // Only refetch active queries (currently visible)
             });
             
             // Update conversation list cache (optimistic update)
