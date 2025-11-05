@@ -31,6 +31,7 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ momentId: string; commentId: string; authorName: string } | null>(null);
 
   // Fetch current user
   const { data: currentUser } = useQuery<User>({
@@ -110,8 +111,8 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
 
   // Create comment mutation
   const createCommentMutation = useMutation({
-    mutationFn: async ({ momentId, content }: { momentId: string; content: string }) => {
-      return apiRequest('POST', `/api/moments/${momentId}/comments`, { content });
+    mutationFn: async ({ momentId, content, parentCommentId }: { momentId: string; content: string; parentCommentId?: string }) => {
+      return apiRequest('POST', `/api/moments/${momentId}/comments`, { content, parentCommentId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/moments'] });
@@ -172,14 +173,27 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
     const commentContent = commentInputs[momentId]?.trim();
     if (!commentContent) return;
 
+    const parentCommentId = replyingTo?.momentId === momentId ? replyingTo.commentId : undefined;
+
     createCommentMutation.mutate(
-      { momentId, content: commentContent },
+      { momentId, content: commentContent, parentCommentId },
       {
         onSuccess: () => {
           setCommentInputs(prev => ({ ...prev, [momentId]: "" }));
+          setReplyingTo(null);
         },
       }
     );
+  };
+
+  const handleReply = (momentId: string, commentId: string, authorName: string) => {
+    setReplyingTo({ momentId, commentId, authorName });
+    const inputElement = document.querySelector(`[data-testid="input-comment-${momentId}"]`) as HTMLInputElement;
+    inputElement?.focus();
+  };
+
+  const cancelReply = () => {
+    setReplyingTo(null);
   };
 
   const handleDelete = (momentId: string) => {
@@ -452,61 +466,129 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
                     {/* Comments List */}
                     {moment.comments.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-border">
-                        {moment.comments.map((comment) => {
-                          const commentAuthor = getAuthor(comment.authorId, comment.authorType);
-                          return (
-                            <div key={comment.id} className="flex gap-2 text-sm">
-                              <Avatar className="h-6 w-6 flex-shrink-0">
-                                <AvatarImage src={commentAuthor.avatarUrl || undefined} />
-                                <AvatarFallback className="text-xs bg-primary/10">
-                                  {commentAuthor.name[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <div className="bg-muted/50 rounded-lg px-3 py-1.5">
-                                  <span className="font-medium text-foreground">{commentAuthor.name}: </span>
-                                  <span className="text-foreground/90" data-testid={`text-comment-${comment.id}`}>
-                                    {comment.content}
-                                  </span>
+                        {moment.comments
+                          .filter(comment => !comment.parentCommentId)
+                          .map((comment) => {
+                            const commentAuthor = getAuthor(comment.authorId, comment.authorType);
+                            const replies = moment.comments.filter(c => c.parentCommentId === comment.id);
+                            
+                            return (
+                              <div key={comment.id} className="space-y-2">
+                                {/* Top-level comment */}
+                                <div className="flex gap-2 text-sm">
+                                  <Avatar className="h-6 w-6 flex-shrink-0">
+                                    <AvatarImage src={commentAuthor.avatarUrl || undefined} />
+                                    <AvatarFallback className="text-xs bg-primary/10">
+                                      {commentAuthor.name[0]}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="bg-muted/50 rounded-lg px-3 py-1.5">
+                                      <span className="font-medium text-foreground">{commentAuthor.name}: </span>
+                                      <span className="text-foreground/90" data-testid={`text-comment-${comment.id}`}>
+                                        {comment.content}
+                                      </span>
+                                    </div>
+                                    {/* Reply button */}
+                                    <button
+                                      onClick={() => handleReply(moment.id, comment.id, commentAuthor.name)}
+                                      className="text-xs text-muted-foreground hover:text-purple-600 transition-colors px-1"
+                                      data-testid={`button-reply-${comment.id}`}
+                                    >
+                                      回复
+                                    </button>
+                                  </div>
                                 </div>
+
+                                {/* Nested replies */}
+                                {replies.length > 0 && (
+                                  <div className="ml-8 space-y-2">
+                                    {replies.map((reply) => {
+                                      const replyAuthor = getAuthor(reply.authorId, reply.authorType);
+                                      return (
+                                        <div key={reply.id} className="flex gap-2 text-sm">
+                                          <Avatar className="h-5 w-5 flex-shrink-0">
+                                            <AvatarImage src={replyAuthor.avatarUrl || undefined} />
+                                            <AvatarFallback className="text-[10px] bg-primary/10">
+                                              {replyAuthor.name[0]}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <div className="flex-1 min-w-0 space-y-1">
+                                            <div className="bg-muted/30 rounded-lg px-2.5 py-1">
+                                              <span className="font-medium text-foreground text-xs">{replyAuthor.name}: </span>
+                                              <span className="text-foreground/90 text-xs" data-testid={`text-reply-${reply.id}`}>
+                                                {reply.content}
+                                              </span>
+                                            </div>
+                                            {/* Reply to reply button */}
+                                            <button
+                                              onClick={() => handleReply(moment.id, comment.id, replyAuthor.name)}
+                                              className="text-[11px] text-muted-foreground hover:text-purple-600 transition-colors px-1"
+                                              data-testid={`button-reply-to-reply-${reply.id}`}
+                                            >
+                                              回复
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
                       </div>
                     )}
 
                     {/* Comment Input */}
-                    <div className="flex gap-2 pt-2">
-                      <Avatar className="h-8 w-8 flex-shrink-0">
-                        <AvatarImage src={currentUser.profileImageUrl || undefined} />
-                        <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                          {currentUser.username?.[0] || currentUser.firstName?.[0] || '我'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 flex gap-2">
-                        <input
-                          type="text"
-                          value={commentInputs[moment.id] || ''}
-                          onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
-                          onKeyPress={(e) => {
-                            if (e.key === 'Enter' && commentInputs[moment.id]?.trim()) {
-                              handleComment(moment.id);
-                            }
-                          }}
-                          placeholder="说点什么..."
-                          className="flex-1 px-3 py-2 bg-muted/30 border-0 rounded-full text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                          data-testid={`input-comment-${moment.id}`}
-                        />
-                        <Button
-                          size="icon"
-                          onClick={() => handleComment(moment.id)}
-                          disabled={!commentInputs[moment.id]?.trim() || createCommentMutation.isPending}
-                          className="h-9 w-9 rounded-full bg-purple-600 hover:bg-purple-700 flex-shrink-0"
-                          data-testid={`button-send-comment-${moment.id}`}
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
+                    <div className="space-y-2 pt-2">
+                      {/* Reply indicator */}
+                      {replyingTo?.momentId === moment.id && (
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
+                          <span className="text-xs text-purple-600 dark:text-purple-400">
+                            正在回复 <span className="font-medium">@{replyingTo.authorName}</span>
+                          </span>
+                          <button
+                            onClick={cancelReply}
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                            data-testid={`button-cancel-reply-${moment.id}`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      )}
+                      
+                      <div className="flex gap-2">
+                        <Avatar className="h-8 w-8 flex-shrink-0">
+                          <AvatarImage src={currentUser.profileImageUrl || undefined} />
+                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                            {currentUser.username?.[0] || currentUser.firstName?.[0] || '我'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 flex gap-2">
+                          <input
+                            type="text"
+                            value={commentInputs[moment.id] || ''}
+                            onChange={(e) => setCommentInputs(prev => ({ ...prev, [moment.id]: e.target.value }))}
+                            onKeyPress={(e) => {
+                              if (e.key === 'Enter' && commentInputs[moment.id]?.trim()) {
+                                handleComment(moment.id);
+                              }
+                            }}
+                            placeholder={replyingTo?.momentId === moment.id ? `回复 @${replyingTo.authorName}...` : "说点什么..."}
+                            className="flex-1 px-3 py-2 bg-muted/30 border-0 rounded-full text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                            data-testid={`input-comment-${moment.id}`}
+                          />
+                          <Button
+                            size="icon"
+                            onClick={() => handleComment(moment.id)}
+                            disabled={!commentInputs[moment.id]?.trim() || createCommentMutation.isPending}
+                            className="h-9 w-9 rounded-full bg-purple-600 hover:bg-purple-700 flex-shrink-0"
+                            data-testid={`button-send-comment-${moment.id}`}
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
