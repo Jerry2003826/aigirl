@@ -288,29 +288,50 @@ function handleRead(ws: AuthenticatedWebSocket, payload: { messageId: number; co
 
 /**
  * Broadcast new message to all devices for conversation participants
+ * This ensures messages are received even when users are not in the chat page
  */
-export function broadcastNewMessage(conversationId: string, message: any) {
+export async function broadcastNewMessage(conversationId: string, message: any) {
+  // Debug: Log message with persona info
+  console.log('[WS Broadcast] Message:', {
+    id: message.id,
+    senderType: message.senderType,
+    personaName: message.personaName,
+    personaAvatar: message.personaAvatar,
+    content: message.content?.substring(0, 20)
+  });
+  
+  const data = JSON.stringify({
+    type: 'new_message',
+    payload: message
+  });
+
+  // Method 1: Broadcast to connections actively in the conversation
   const convConns = conversationConnections.get(conversationId);
   if (convConns) {
-    // Debug: Log message with persona info
-    console.log('[WS Broadcast] Message:', {
-      id: message.id,
-      senderType: message.senderType,
-      personaName: message.personaName,
-      personaAvatar: message.personaAvatar,
-      content: message.content?.substring(0, 20)
-    });
-    
-    const data = JSON.stringify({
-      type: 'new_message',
-      payload: message
-    });
-
     convConns.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(data);
       }
     });
+  }
+  
+  // Method 2: Also broadcast to ALL devices of conversation owner (user)
+  // This ensures messages are received even if user navigated away from chat
+  try {
+    const conversation = await storage.getConversation(conversationId);
+    if (conversation && conversation.userId) {
+      // Broadcast to all devices of the conversation owner
+      const userConns = userConnections.get(conversation.userId);
+      if (userConns) {
+        userConns.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(data);
+          }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('[WS Broadcast] Error broadcasting to user:', error);
   }
 }
 
