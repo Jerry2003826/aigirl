@@ -1,6 +1,7 @@
 import { storage } from "./storage";
 import type { AiPersona, Message, InsertMemory } from "@shared/schema";
 import { getAIProvider, getModelName, type ConversationMessage, type ImageData } from "./ai/providers";
+import { broadcastMomentEvent } from "./websocket";
 
 interface GenerateResponseOptions {
   conversationId: string;
@@ -1154,12 +1155,15 @@ export async function triggerAICommentsOnMoment(
             const cleanedContent = commentContent.replace(/\\/g, '，');
 
             // Create comment
-            await storage.createMomentComment({
+            const comment = await storage.createMomentComment({
               momentId,
               authorId: persona.id,
               authorType: 'ai',
               content: cleanedContent,
             });
+
+            // Broadcast to all users for real-time updates
+            broadcastMomentEvent('commented', { momentId, comment });
 
             console.log(`[AI Comment] ✅ AI ${persona.name} successfully commented on moment ${momentId}`);
           } catch (error) {
