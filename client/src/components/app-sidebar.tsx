@@ -193,7 +193,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         "md:!block",
         !showMobileSidebar && "hidden md:block"
       )}>
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+      <SidebarHeader className="border-b border-sidebar-border p-4 h-auto md:h-[200px]">
         {/* User Info Section - Clickable */}
         <button
           onClick={handleOpenEditProfile}
@@ -327,8 +327,8 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-0 overflow-hidden">
-        <ScrollArea className="h-full">
+      <SidebarContent className="p-0 overflow-hidden h-auto md:h-[calc(100vh-280px)]">
+        <ScrollArea className="h-full w-full">
           {conversations.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-8 text-center">
               <MessageCircle className="mb-4 h-16 w-16 text-muted-foreground" />
@@ -409,7 +409,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
       </SidebarContent>
 
       {/* Page Navigation - Desktop Only */}
-      <SidebarFooter className="border-t border-sidebar-border px-3 py-2 pb-[env(safe-area-inset-bottom)] hidden md:block">
+      <SidebarFooter className="border-t border-sidebar-border px-3 py-2 pb-[env(safe-area-inset-bottom)] hidden md:block h-[80px]">
         <div className="grid grid-cols-4 gap-2">
           <Button
             variant="ghost"
