@@ -174,8 +174,10 @@ function Router() {
           
           {/* Main content: Always visible on md+, conditionally visible on mobile */}
           <main className={cn(
-            "flex-1 overflow-hidden md:flex flex-col bg-background pb-[56px] md:pb-0",
-            showMobileSidebar ? "hidden" : "flex"
+            "flex-1 overflow-hidden md:flex flex-col bg-background",
+            showMobileSidebar ? "hidden" : "flex",
+            // Reserve space for bottom nav bar when visible (56px nav height)
+            !hideBottomNavBar && "pb-[56px] md:pb-0"
           )}>
             <div className="flex-1 overflow-hidden">
               <Switch>
