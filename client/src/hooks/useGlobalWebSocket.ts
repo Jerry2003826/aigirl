@@ -81,6 +81,7 @@ export function useGlobalWebSocket() {
             );
             
             // Update conversation list cache (optimistic update)
+            // NO invalidate needed - setQueryData already updates the UI
             queryClient.setQueryData(
               ["/api/conversations"],
               (old: any[] = []) => {
@@ -104,9 +105,6 @@ export function useGlobalWebSocket() {
                 });
               }
             );
-            
-            // Force UI refresh for conversation list to show latest message
-            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
             
             // For AI messages, manage streaming timeout
             if (message.senderType === 'ai') {
