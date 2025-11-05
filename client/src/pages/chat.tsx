@@ -544,19 +544,10 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
   }, [selectedConversationId]); // CRITICAL: Only depend on conversation change, NOT messages
 
-  // Remove optimistic messages when real messages arrive
-  useEffect(() => {
-    if (rawMessages.length > 0 && optimisticMessages.length > 0) {
-      // Remove optimistic messages that match real user messages
-      setOptimisticMessages(prev => 
-        prev.filter(opt => 
-          !rawMessages.some(real => 
-            real.content === opt.content && real.senderType === 'user'
-          )
-        )
-      );
-    }
-  }, [rawMessages]); // 修复：只依赖rawMessages，避免无限循环
+  // CRITICAL FIX: 删除乐观消息清理Effect
+  // WebSocket的替换逻辑（useGlobalWebSocket.ts）是唯一负责替换乐观消息的地方
+  // 这个Effect会在React Query缓存更新时过早清理乐观消息，导致WebSocket找不到要替换的消息
+  // 时序：WebSocket更新缓存 → Effect清理 → WebSocket替换逻辑找不到 → 双重渲染
   
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
