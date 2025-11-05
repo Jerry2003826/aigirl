@@ -94,9 +94,26 @@ export class GeminiProvider implements AIProvider {
       contents.pop();
     }
 
-    // If no messages left or ends with model, something is wrong
-    if (contents.length === 0) {
-      throw new Error("No user messages in conversation history");
+    // Ensure at least one user message remains after pruning
+    if (contents.length === 0 || contents[contents.length - 1].role !== "user") {
+      // No valid user message found - this can happen if conversation starts with persona
+      // Fall back to using the triggering message text
+      const lastUserContent = messages.filter(m => m.role === "user").pop();
+      if (!lastUserContent) {
+        throw new Error("No user messages in conversation history");
+      }
+      
+      // Handle image messages or empty content - use placeholder
+      const textContent = lastUserContent.content && lastUserContent.content.trim().length > 0
+        ? lastUserContent.content
+        : "[User sent an image]";
+      
+      // Reset contents to just the last user message
+      contents.length = 0;
+      contents.push({
+        role: "user",
+        parts: [{ text: textContent }]
+      });
     }
 
     // Add RAG context to the last user message if provided

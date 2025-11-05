@@ -89,21 +89,29 @@ async function processNextJob() {
     if (conversation.isGroup) {
       // For group chats, select persona based on conversation context
       const participants = await storage.getConversationParticipants(conversation.id);
-      if (participants.length === 0) {
-        await storage.updateJobStatus(job.id, 'failed', 'No personas in conversation');
+      // Strict validation: personaId must be non-empty string
+      const validParticipants = participants.filter(p => 
+        typeof p.personaId === 'string' && p.personaId.trim().length > 0
+      );
+      
+      if (validParticipants.length === 0) {
+        await storage.updateJobStatus(job.id, 'failed', 'No valid personas in group conversation');
         return;
       }
       
       // Simple round-robin or random selection
       // TODO: Could use aiService.selectPersonaForGroup for smart selection
-      respondingPersonaId = participants[Math.floor(Math.random() * participants.length)].personaId;
+      respondingPersonaId = validParticipants[Math.floor(Math.random() * validParticipants.length)].personaId;
     } else {
       // For 1-on-1 chats, use the single participant
       const participants = await storage.getConversationParticipants(conversation.id);
-      const personaParticipant = participants[0];
+      // Strict validation: personaId must be non-empty string
+      const personaParticipant = participants.find(p => 
+        typeof p.personaId === 'string' && p.personaId.trim().length > 0
+      );
       
-      if (!personaParticipant) {
-        await storage.updateJobStatus(job.id, 'failed', 'No persona in 1-on-1 conversation');
+      if (!personaParticipant || !personaParticipant.personaId) {
+        await storage.updateJobStatus(job.id, 'failed', 'No valid persona in 1-on-1 conversation');
         return;
       }
       
@@ -126,10 +134,10 @@ async function processNextJob() {
       return;
     }
     
-    // Split AI response by backslash (\) and forward slash (/)
-    // This creates multiple messages for more natural conversation flow
+    // Split AI response by backslash (\) only - this is the intentional delimiter
+    // Do NOT split by forward slash (/) as that would break URLs and other content
     const messageParts = aiResponse
-      .split(/[\\\/]/)  // Split by both \ and /
+      .split('\\')  // Split by backslash only
       .map(part => part.trim())  // Trim whitespace
       .filter(part => part.length > 0);  // Remove empty parts
     
