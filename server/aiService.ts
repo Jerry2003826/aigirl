@@ -1437,7 +1437,7 @@ async function generateCommentReply(
       messages: [
         { role: "user", content: userPrompt },
       ],
-      maxTokens: 100,
+      maxTokens: 2000, // Increased to 2000 to provide ample generation space
     });
 
     return reply.trim();
