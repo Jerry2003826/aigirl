@@ -227,6 +227,55 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
     }
   };
 
+  // Recursive comment renderer
+  const renderCommentThread = (comment: MomentComment, allComments: MomentComment[], momentId: string, depth: number = 0) => {
+    const commentAuthor = getAuthor(comment.authorId, comment.authorType);
+    const replies = allComments.filter(c => c.parentCommentId === comment.id);
+    
+    // Calculate styling based on depth
+    const avatarSize = depth === 0 ? 'h-6 w-6' : depth === 1 ? 'h-5 w-5' : 'h-4 w-4';
+    const fontSize = depth === 0 ? 'text-sm' : depth === 1 ? 'text-xs' : 'text-[11px]';
+    const bgOpacity = depth === 0 ? 'bg-muted/50' : depth === 1 ? 'bg-muted/30' : 'bg-muted/20';
+    const padding = depth === 0 ? 'px-3 py-1.5' : depth === 1 ? 'px-2.5 py-1' : 'px-2 py-0.5';
+    const buttonSize = depth === 0 ? 'text-xs' : depth === 1 ? 'text-[11px]' : 'text-[10px]';
+    const indent = depth === 0 ? '' : 'ml-8';
+    
+    return (
+      <div key={comment.id} className={`space-y-2 ${indent}`}>
+        <div className={`flex gap-2 ${fontSize}`}>
+          <Avatar className={`${avatarSize} flex-shrink-0`}>
+            <AvatarImage src={commentAuthor.avatarUrl || undefined} />
+            <AvatarFallback className={`${depth === 0 ? 'text-xs' : depth === 1 ? 'text-[10px]' : 'text-[8px]'} bg-primary/10`}>
+              {commentAuthor.name[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0 space-y-1">
+            <div className={`${bgOpacity} rounded-lg ${padding}`}>
+              <span className="font-medium text-foreground">{commentAuthor.name}: </span>
+              <span className="text-foreground/90" data-testid={`text-comment-${comment.id}`}>
+                {comment.content}
+              </span>
+            </div>
+            <button
+              onClick={() => handleReply(momentId, comment.id, commentAuthor.name)}
+              className={`${buttonSize} text-muted-foreground hover:text-purple-600 transition-colors px-1`}
+              data-testid={`button-reply-${comment.id}`}
+            >
+              回复
+            </button>
+          </div>
+        </div>
+        
+        {/* Recursively render child comments */}
+        {replies.length > 0 && (
+          <div className="space-y-2">
+            {replies.map(reply => renderCommentThread(reply, allComments, momentId, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   if (!currentUser) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
@@ -463,80 +512,12 @@ export default function MomentsPage({ onBackToList = () => {}, showMobileSidebar
                       </div>
                     </div>
 
-                    {/* Comments List */}
+                    {/* Comments List - Recursive rendering */}
                     {moment.comments.length > 0 && (
                       <div className="space-y-2 pt-2 border-t border-border">
                         {moment.comments
                           .filter(comment => !comment.parentCommentId)
-                          .map((comment) => {
-                            const commentAuthor = getAuthor(comment.authorId, comment.authorType);
-                            const replies = moment.comments.filter(c => c.parentCommentId === comment.id);
-                            
-                            return (
-                              <div key={comment.id} className="space-y-2">
-                                {/* Top-level comment */}
-                                <div className="flex gap-2 text-sm">
-                                  <Avatar className="h-6 w-6 flex-shrink-0">
-                                    <AvatarImage src={commentAuthor.avatarUrl || undefined} />
-                                    <AvatarFallback className="text-xs bg-primary/10">
-                                      {commentAuthor.name[0]}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="bg-muted/50 rounded-lg px-3 py-1.5">
-                                      <span className="font-medium text-foreground">{commentAuthor.name}: </span>
-                                      <span className="text-foreground/90" data-testid={`text-comment-${comment.id}`}>
-                                        {comment.content}
-                                      </span>
-                                    </div>
-                                    {/* Reply button */}
-                                    <button
-                                      onClick={() => handleReply(moment.id, comment.id, commentAuthor.name)}
-                                      className="text-xs text-muted-foreground hover:text-purple-600 transition-colors px-1"
-                                      data-testid={`button-reply-${comment.id}`}
-                                    >
-                                      回复
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {/* Nested replies */}
-                                {replies.length > 0 && (
-                                  <div className="ml-8 space-y-2">
-                                    {replies.map((reply) => {
-                                      const replyAuthor = getAuthor(reply.authorId, reply.authorType);
-                                      return (
-                                        <div key={reply.id} className="flex gap-2 text-sm">
-                                          <Avatar className="h-5 w-5 flex-shrink-0">
-                                            <AvatarImage src={replyAuthor.avatarUrl || undefined} />
-                                            <AvatarFallback className="text-[10px] bg-primary/10">
-                                              {replyAuthor.name[0]}
-                                            </AvatarFallback>
-                                          </Avatar>
-                                          <div className="flex-1 min-w-0 space-y-1">
-                                            <div className="bg-muted/30 rounded-lg px-2.5 py-1">
-                                              <span className="font-medium text-foreground text-xs">{replyAuthor.name}: </span>
-                                              <span className="text-foreground/90 text-xs" data-testid={`text-reply-${reply.id}`}>
-                                                {reply.content}
-                                              </span>
-                                            </div>
-                                            {/* Reply to reply button */}
-                                            <button
-                                              onClick={() => handleReply(moment.id, comment.id, replyAuthor.name)}
-                                              className="text-[11px] text-muted-foreground hover:text-purple-600 transition-colors px-1"
-                                              data-testid={`button-reply-to-reply-${reply.id}`}
-                                            >
-                                              回复
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                          .map(comment => renderCommentThread(comment, moment.comments, moment.id))}
                       </div>
                     )}
 
