@@ -307,16 +307,20 @@ export async function broadcastNewMessage(conversationId: string, message: any) 
 
   // Method 1: Broadcast to connections actively in the conversation
   const convConns = conversationConnections.get(conversationId);
+  const sentToClients = new Set<WebSocket>();
+  
   if (convConns) {
     convConns.forEach(client => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(data);
+        sentToClients.add(client);
       }
     });
   }
   
   // Method 2: Also broadcast to ALL devices of conversation owner (user)
   // This ensures messages are received even if user navigated away from chat
+  // IMPORTANT: Skip clients that already received the message in Method 1
   try {
     const conversation = await storage.getConversation(conversationId);
     if (conversation && conversation.userId) {
@@ -324,7 +328,8 @@ export async function broadcastNewMessage(conversationId: string, message: any) 
       const userConns = userConnections.get(conversation.userId);
       if (userConns) {
         userConns.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
+          // Skip if this client already received the message
+          if (client.readyState === WebSocket.OPEN && !sentToClients.has(client)) {
             client.send(data);
           }
         });
