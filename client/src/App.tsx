@@ -154,7 +154,7 @@ function Router() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-background flex-col">
+      <div className="flex h-full w-full bg-background flex-col">
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
