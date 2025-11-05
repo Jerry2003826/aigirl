@@ -340,112 +340,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
       // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
       
-      // IMPORTANT: 继续触发AI回复流程
-      const conversation = conversations.find(c => c.id === conversationId);
-      if (!conversation) {
-        // CRITICAL: 找不到对话时也要重置状态
-        setIsLoading(false);
-        setIsStreaming(false);
-        return;
-      }
-
-      try {
-        // Determine which persona should respond
-        let respondingPersonaId: string;
-        
-        if (conversation.isGroup) {
-          // For group chats, use intelligent rotation
-          const selectionResult: any = await apiRequest("POST", "/api/ai/select-persona", {
-            conversationId,
-            userMessage: content || "[User sent an image]",
-          });
-          respondingPersonaId = selectionResult.personaId;
-        } else {
-          // For 1-on-1 chats, use the single participant
-          const participants = await queryClient.fetchQuery({
-            queryKey: ["/api/conversations/participants", conversationId],
-            queryFn: async () => {
-              const response = await fetch(`/api/conversations/${conversationId}/participants`);
-              if (!response.ok) throw new Error("获取参与者失败");
-              return response.json();
-            },
-          });
-          
-          const personaParticipant = participants[0];
-          if (!personaParticipant) {
-            // CRITICAL: 找不到 persona 时也要重置状态
-            setIsLoading(false);
-            setIsStreaming(false);
-            // Note: No need to invalidate, WebSocket handles updates
-            return;
-          }
-          respondingPersonaId = personaParticipant.personaId;
-        }
-
-        // Trigger AI response
-        setIsLoading(false); // AI开始回复，结束等待状态
-        setIsStreaming(true); // 进入分段输出状态
-        setAiMessageCount(0); // 重置AI消息计数
-        
-        await apiRequest("POST", "/api/ai/generate", {
-          conversationId,
-          personaId: respondingPersonaId,
-          content: content || "[User sent an image, please analyze it]",
-        });
-      } catch (error: any) {
-        console.error("生成AI回复时出错:", error);
-        
-        // CRITICAL: 错误时重置所有状态，解锁输入框
-        setIsLoading(false);
-        setIsStreaming(false);
-        if (streamingTimeoutRef.current) {
-          clearTimeout(streamingTimeoutRef.current);
-          streamingTimeoutRef.current = null;
-        }
-        
-        // Parse error response for better error messages
-        const errorData = error?.response?.data || error;
-        const errorType = errorData?.errorType || 'UNKNOWN_ERROR';
-        const errorMessage = errorData?.message || error.message || "AI回复生成失败";
-        const canRetry = errorData?.canRetry !== false;
-        
-        // Customize toast based on error type
-        let title = "AI服务错误";
-        let description = errorMessage;
-        
-        switch (errorType) {
-          case 'API_KEY_ERROR':
-            title = "API Key 配置错误";
-            description = errorMessage + " 点击前往设置页面配置。";
-            break;
-          case 'QUOTA_ERROR':
-            title = "API 配额不足";
-            description = errorMessage;
-            break;
-          case 'NETWORK_ERROR':
-            title = "网络连接失败";
-            description = errorMessage + " 请检查网络后重试。";
-            break;
-          case 'MODEL_ERROR':
-            title = "模型暂时不可用";
-            description = errorMessage + " 请稍后再试或更换模型。";
-            break;
-          case 'INVALID_REQUEST':
-            title = "请求参数错误";
-            description = errorMessage;
-            break;
-          default:
-            title = "AI服务错误";
-            description = errorMessage + (canRetry ? " 请稍后重试。" : "");
-        }
-        
-        toast({
-          title,
-          description,
-          variant: "destructive",
-        });
-      }
-      // Note: 不需要在finally中刷新，因为onSuccess已经处理了
+      // IMPORTANT: AI回复现在由后台Worker自动处理
+      // POST /api/messages 已自动创建AI reply job，worker会轮询处理
+      // 前端只需要设置状态，等待WebSocket广播AI消息
+      
+      setIsLoading(false); // 用户消息发送成功，结束等待状态
+      setIsStreaming(true); // 等待AI回复（后台worker处理）
+      setAiMessageCount(0); // 重置AI消息计数
+      
+      // WebSocket会收到AI消息并触发streamingTimeout逻辑
+      // 无需手动调用AI接口
     },
     onError: (error: any, { tempId, content, imageData, conversationId }) => {
       // 发送失败时解锁输入框

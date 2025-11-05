@@ -113,23 +113,79 @@ async function processNextJob() {
     // Generate AI response
     console.log(`[AI Worker] Generating AI response from persona ${respondingPersonaId}`);
     
-    // Note: generateAIResponse returns AI messages as an array automatically
-    await generateAIResponse({
+    const aiResponse = await generateAIResponse({
       conversationId: conversation.id,
       personaId: respondingPersonaId,
       userMessage: userMessage.content || '[User sent an image]',
     });
     
-    // Get the AI messages that were just created
-    const allMessages = await storage.getMessagesByConversation(conversation.id, 10);
-    const aiMessages = allMessages.filter(m => 
-      m.senderType === 'ai' && 
-      m.createdAt > userMessage.createdAt
-    );
+    // Get persona info for message broadcast
+    const persona = await storage.getPersona(respondingPersonaId);
+    if (!persona) {
+      await storage.updateJobStatus(job.id, 'failed', 'Persona not found');
+      return;
+    }
     
-    // Broadcast AI messages to connected clients
-    for (const aiMessage of aiMessages) {
-      broadcastNewMessage(conversation.id, aiMessage);
+    // Split AI response by backslash (\) and forward slash (/)
+    // This creates multiple messages for more natural conversation flow
+    const messageParts = aiResponse
+      .split(/[\\\/]/)  // Split by both \ and /
+      .map(part => part.trim())  // Trim whitespace
+      .filter(part => part.length > 0);  // Remove empty parts
+    
+    // Save and broadcast AI messages with 2-3 second random delay between each
+    const aiMessages = [];
+    if (messageParts.length === 0) {
+      // No parts after splitting - check if original response is empty
+      const trimmedResponse = aiResponse.trim();
+      if (trimmedResponse.length > 0) {
+        // Save original response only if it's not empty
+        const aiMessage = await storage.createMessage({
+          conversationId: conversation.id,
+          senderId: respondingPersonaId,
+          senderType: "ai",
+          content: aiResponse,
+          isRead: false,
+          status: "sent",
+        });
+        
+        // Add persona info for broadcast
+        const messageWithPersona = {
+          ...aiMessage,
+          personaName: persona.name,
+          personaAvatar: persona.avatarUrl
+        };
+        
+        aiMessages.push(aiMessage);
+        broadcastNewMessage(conversation.id, messageWithPersona);
+      }
+    } else {
+      // Save and broadcast each part with 2-3 second random delay
+      for (let i = 0; i < messageParts.length; i++) {
+        if (i > 0) {
+          // Wait 2-3 seconds randomly before saving and sending next message
+          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+        }
+        
+        const aiMessage = await storage.createMessage({
+          conversationId: conversation.id,
+          senderId: respondingPersonaId,
+          senderType: "ai",
+          content: messageParts[i],
+          isRead: false,
+          status: "sent",
+        });
+        
+        // Add persona info for broadcast
+        const messageWithPersona = {
+          ...aiMessage,
+          personaName: persona.name,
+          personaAvatar: persona.avatarUrl
+        };
+        
+        aiMessages.push(aiMessage);
+        broadcastNewMessage(conversation.id, messageWithPersona);
+      }
     }
     
     console.log(`[AI Worker] Successfully generated ${aiMessages.length} AI messages`);

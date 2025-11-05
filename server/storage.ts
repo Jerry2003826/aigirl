@@ -966,14 +966,29 @@ export class DatabaseStorage implements IStorage {
   
   async getNextPendingJob(): Promise<AiReplyJob | undefined> {
     // Use FOR UPDATE SKIP LOCKED to prevent duplicate processing
-    const result = await db.execute<AiReplyJob>(sql`
-      SELECT * FROM ${aiReplyJobs}
-      WHERE ${aiReplyJobs.status} = 'pending'
-      ORDER BY ${aiReplyJobs.createdAt} ASC
+    // Note: Raw SQL returns snake_case, so we manually map to camelCase
+    const result = await db.execute(sql`
+      SELECT * FROM ai_reply_jobs
+      WHERE status = 'pending'
+      ORDER BY created_at ASC
       LIMIT 1
       FOR UPDATE SKIP LOCKED
     `);
-    return result.rows[0] as AiReplyJob | undefined;
+    
+    const row: any = result.rows[0];
+    if (!row) return undefined;
+    
+    // Manually map snake_case to camelCase
+    return {
+      id: row.id,
+      conversationId: row.conversation_id,
+      userMessageId: row.user_message_id,
+      status: row.status,
+      attempts: row.attempts,
+      error: row.error,
+      createdAt: row.created_at,
+      processedAt: row.processed_at,
+    };
   }
   
   async updateJobStatus(id: string, status: string, error?: string): Promise<void> {

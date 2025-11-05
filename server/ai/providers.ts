@@ -88,6 +88,17 @@ export class GeminiProvider implements AIProvider {
       });
     }
 
+    // CRITICAL FIX: Gemini API requires the last message to be from 'user'
+    // Remove any trailing 'model' messages
+    while (contents.length > 0 && contents[contents.length - 1].role === "model") {
+      contents.pop();
+    }
+
+    // If no messages left or ends with model, something is wrong
+    if (contents.length === 0) {
+      throw new Error("No user messages in conversation history");
+    }
+
     // Add RAG context to the last user message if provided
     if (ragContext && contents.length > 0) {
       const lastUserMsg = contents[contents.length - 1];
