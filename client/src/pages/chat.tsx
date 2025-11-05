@@ -340,7 +340,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // Note: 不再主动添加消息到缓存，完全依赖WebSocket广播
       // 这样避免了onSuccess和WebSocket的竞态条件，保证单一数据源
       
-      // Get conversation participants to find AI persona
+      // IMPORTANT: 继续触发AI回复流程
       const conversation = conversations.find(c => c.id === conversationId);
       if (!conversation) {
         // CRITICAL: 找不到对话时也要重置状态
