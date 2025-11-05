@@ -34,7 +34,9 @@ export function useGlobalWebSocket() {
             
             // Check if user is currently viewing this conversation
             const currentPath = window.location.pathname;
-            const isInThisChat = currentPath === `/chat/${message.conversationId}`;
+            const params = new URLSearchParams(window.location.search);
+            const currentConversationId = params.get('conversationId');
+            const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
             // Update ALL message caches for this conversation (with different limits)
             // This ensures Chat component sees the latest messages immediately
