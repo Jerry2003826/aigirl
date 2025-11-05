@@ -145,6 +145,7 @@ async function buildSystemPrompt(
   language: string = "zh-CN"
 ): Promise<string> {
   let systemPrompt = persona.systemPrompt;
+  console.log(`[Build System Prompt] Starting for persona ${persona.id} (${persona.name})`);
   
   // Add personality context
   systemPrompt += `\n\n你的性格特点：${persona.personality}`;
@@ -158,6 +159,8 @@ async function buildSystemPrompt(
   // If RAG is enabled, memories will be added as RAG context instead
   if (!ragEnabled) {
     const memories = await storage.getMemoriesByPersona(persona.id, userId);
+    console.log(`[Build System Prompt] Retrieved ${memories.length} memories for persona ${persona.id}`);
+    
     if (memories.length > 0) {
       systemPrompt += "\n\n你记得的关于用户的信息：";
       memories.forEach((memory) => {
@@ -165,11 +168,15 @@ async function buildSystemPrompt(
         if (memory.context) {
           systemPrompt += `（${memory.context}）`;
         }
+        console.log(`[Build System Prompt] Added memory: ${memory.key} = ${memory.value}`);
       });
+    } else {
+      console.log(`[Build System Prompt] No memories found for this persona`);
     }
   } else {
     // In RAG mode, inform AI that knowledge base will be provided in the message
     systemPrompt += "\n\n你拥有一个关于用户的记忆知识库。当用户提问时，系统会自动从知识库中检索相关记忆并提供给你。请优先使用这些知识库内容来理解用户和生成回复。";
+    console.log(`[Build System Prompt] RAG mode enabled, memories will be added as context`);
   }
   
   // Add language instruction based on user preference
@@ -756,19 +763,29 @@ export async function generateMomentComment(
   momentContent: string,
   momentImages?: string[]
 ): Promise<string> {
+  console.log(`[Generate Comment] Starting for persona ${personaId}, user ${userId}`);
+  
   const persona = await storage.getPersona(personaId);
   if (!persona) {
+    console.error(`[Generate Comment] ❌ Persona ${personaId} not found`);
     throw new Error("Persona not found");
   }
+  
+  console.log(`[Generate Comment] Persona info: ${persona.name}, personality: ${persona.personality?.substring(0, 50)}...`);
 
   // Get user's AI settings to use their custom API key
   const aiSettings = await storage.getAiSettings(userId);
   const provider = getAIProvider(aiSettings);
   const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
+  
+  console.log(`[Generate Comment] Using provider: ${aiSettings?.provider || 'gemini'}, model: ${model}, language: ${language}`);
 
   // Build system prompt with memories
+  console.log(`[Generate Comment] Building system prompt with memories...`);
   const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
+  console.log(`[Generate Comment] System prompt length: ${systemPrompt.length} chars`);
+  console.log(`[Generate Comment] System prompt preview: ${systemPrompt.substring(0, 200)}...`);
   
   // Build prompt for moment comment (adapt to language)
   let userPrompt: string;
@@ -842,13 +859,19 @@ export async function triggerAICommentsOnMoment(
   momentContent: string,
   momentImages?: string[]
 ): Promise<void> {
+  console.log(`[AI Comment] Triggered for moment ${momentId} by user ${userId}`);
+  console.log(`[AI Comment] Moment content: "${momentContent}"`);
+  console.log(`[AI Comment] Has images: ${momentImages && momentImages.length > 0 ? 'Yes (' + momentImages.length + ')' : 'No'}`);
+  
   // Run async without blocking the response
   (async () => {
     try {
       // Get user's AI personas
       const personas = await storage.getPersonasByUser(userId);
+      console.log(`[AI Comment] Found ${personas.length} AI personas for user ${userId}`);
       
       if (personas.length === 0) {
+        console.log(`[AI Comment] No AI personas found, skipping comments`);
         return; // No AI personas to comment
       }
 
@@ -860,10 +883,13 @@ export async function triggerAICommentsOnMoment(
       const selectedPersonas = personas
         .sort(() => Math.random() - 0.5)
         .slice(0, numCommenters);
+      
+      console.log(`[AI Comment] Selected ${numCommenters} personas to comment:`, selectedPersonas.map(p => p.name));
 
       // Generate comments with random delays (5-15 seconds)
       for (const persona of selectedPersonas) {
         const delay = Math.floor(Math.random() * 10000) + 5000; // 5-15s
+        console.log(`[AI Comment] Scheduling comment from ${persona.name} in ${delay}ms`);
         
         setTimeout(async () => {
           try {
@@ -873,6 +899,8 @@ export async function triggerAICommentsOnMoment(
               await new Promise(resolve => setTimeout(resolve, additionalDelay));
             }
 
+            console.log(`[AI Comment] Generating comment from ${persona.name} (personaId: ${persona.id})`);
+            
             // Generate comment
             const commentContent = await generateMomentComment(
               persona.id,
@@ -880,6 +908,8 @@ export async function triggerAICommentsOnMoment(
               momentContent,
               momentImages
             );
+
+            console.log(`[AI Comment] ${persona.name} generated: "${commentContent}"`);
 
             // Create comment
             await storage.createMomentComment({
@@ -889,14 +919,14 @@ export async function triggerAICommentsOnMoment(
               content: commentContent,
             });
 
-            console.log(`AI ${persona.name} commented on moment ${momentId}`);
+            console.log(`[AI Comment] ✅ AI ${persona.name} successfully commented on moment ${momentId}`);
           } catch (error) {
-            console.error(`Error creating AI comment from ${persona.name}:`, error);
+            console.error(`[AI Comment] ❌ Error creating AI comment from ${persona.name}:`, error);
           }
         }, delay);
       }
     } catch (error) {
-      console.error("Error triggering AI comments:", error);
+      console.error("[AI Comment] ❌ Error triggering AI comments:", error);
     }
   })();
 }
