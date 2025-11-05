@@ -1235,8 +1235,14 @@ export async function triggerAICommentsOnMoment(
 
             console.log(`[AI Comment] ${persona.name} generated: "${commentContent}"`);
 
-            // Replace backslashes with commas before saving
-            const cleanedContent = commentContent.replace(/\\/g, '，');
+            // Get language setting for proper punctuation replacement
+            const aiSettings = await storage.getAiSettings(userId);
+            const language = aiSettings?.language || "zh-CN";
+            
+            // Replace backslashes with appropriate punctuation based on language
+            const cleanedContent = language === "en-US"
+              ? commentContent.replace(/\\/g, ', ')  // English: use comma + space
+              : commentContent.replace(/\\/g, '，');  // Chinese: use Chinese comma
 
             // Create comment
             const comment = await storage.createMomentComment({
@@ -1333,9 +1339,14 @@ export async function generateAIMomentContent(
       throw new Error("生成的动态内容不完整");
     }
     
-    console.log(`[AI Moment] Generated content (${trimmedContent.length} chars): ${trimmedContent.substring(0, 100)}...`);
+    // Replace backslashes with appropriate punctuation based on language
+    const cleanedContent = language === "en-US"
+      ? trimmedContent.replace(/\\/g, ', ')  // English: use comma + space
+      : trimmedContent.replace(/\\/g, '，');  // Chinese: use Chinese comma
     
-    return trimmedContent;
+    console.log(`[AI Moment] Generated content (${cleanedContent.length} chars): ${cleanedContent.substring(0, 100)}...`);
+    
+    return cleanedContent;
   } catch (error) {
     console.error("Error generating AI moment content:", error);
     throw error;
@@ -1461,8 +1472,14 @@ export async function triggerAIReplyToComment(
             comment.content
           );
 
-          // Replace backslashes with commas before saving
-          const cleanedReply = replyContent.replace(/\\/g, '，');
+          // Get language setting for proper punctuation replacement
+          const aiSettings = await storage.getAiSettings(userId);
+          const language = aiSettings?.language || "zh-CN";
+          
+          // Replace backslashes with appropriate punctuation based on language
+          const cleanedReply = language === "en-US"
+            ? replyContent.replace(/\\/g, ', ')  // English: use comma + space
+            : replyContent.replace(/\\/g, '，');  // Chinese: use Chinese comma
 
           // Create reply
           const reply = await storage.createMomentComment({
