@@ -271,6 +271,11 @@
     @apply border-border;
   }
 
+  /* Fix iOS viewport height jumping when address bar shows/hides */
+  :root {
+    --app-height: 100vh;
+  }
+
   html, body, #root {
     height: 100%;
     overflow: hidden;

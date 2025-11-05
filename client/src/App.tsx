@@ -39,6 +39,28 @@ function Router() {
   // Global WebSocket connection - maintains connection across all pages
   const wsRef = useGlobalWebSocket();
 
+  // Fix iOS viewport height jumping when address bar shows/hides
+  useEffect(() => {
+    const updateAppHeight = () => {
+      const height = window.innerHeight;
+      document.documentElement.style.setProperty('--app-height', `${height}px`);
+    };
+
+    // Set initial height
+    updateAppHeight();
+
+    // Update on resize (iOS Safari changes viewport when address bar hides)
+    window.addEventListener('resize', updateAppHeight);
+    
+    // Also listen to orientationchange for better mobile support
+    window.addEventListener('orientationchange', updateAppHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateAppHeight);
+      window.removeEventListener('orientationchange', updateAppHeight);
+    };
+  }, []);
+
   // Fetch conversations list
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
@@ -157,7 +179,7 @@ function Router() {
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full bg-background flex-col">
+      <div className="flex w-full bg-background flex-col" style={{ height: 'var(--app-height)' }}>
         <div className="flex-1 flex overflow-hidden">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
