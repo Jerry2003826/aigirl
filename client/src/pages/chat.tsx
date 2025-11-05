@@ -350,8 +350,23 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         }
       );
       
-      // Refresh conversations list to update lastMessageAt
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+      // Update conversation's lastMessageAt without refetching (optimistic update)
+      queryClient.setQueryData(
+        ["/api/conversations"],
+        (old: any[] = []) => {
+          return old.map(conv => {
+            if (conv.id === conversationId) {
+              return {
+                ...conv,
+                lastMessageAt: new Date().toISOString(),
+              };
+            }
+            return conv;
+          });
+        }
+      );
+      
+      // Note: WebSocket will handle real-time updates, no need to invalidate
       
       // Get conversation participants to find AI persona
       const conversation = conversations.find(c => c.id === conversationId);
@@ -389,8 +404,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             // CRITICAL: 找不到 persona 时也要重置状态
             setIsLoading(false);
             setIsStreaming(false);
-            queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
-            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+            // Note: No need to invalidate, WebSocket handles updates
             return;
           }
           respondingPersonaId = personaParticipant.personaId;
@@ -608,22 +622,31 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             }
           );
           
-          // OPTIMIZED: 如果是AI消息且不在当前对话，立即+1未读数（乐观更新）
-          if (message.senderType === 'ai' && message.conversationId !== selectedConversationId) {
-            queryClient.setQueryData(
-              ["/api/conversations"],
-              (old: any[] = []) => {
-                return old.map(conv => 
-                  conv.id === message.conversationId
-                    ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1 }
-                    : conv
-                );
-              }
-            );
-          }
+          // OPTIMIZED: 立即更新对话列表（未读数+lastMessageAt），避免网络请求
+          queryClient.setQueryData(
+            ["/api/conversations"],
+            (old: any[] = []) => {
+              return old.map(conv => {
+                if (conv.id === message.conversationId) {
+                  // 更新lastMessageAt
+                  const updated = {
+                    ...conv,
+                    lastMessageAt: new Date().toISOString(),
+                  };
+                  
+                  // 如果是AI消息且不在当前对话，+1未读数
+                  if (message.senderType === 'ai' && message.conversationId !== selectedConversationId) {
+                    updated.unreadCount = (conv.unreadCount || 0) + 1;
+                  }
+                  
+                  return updated;
+                }
+                return conv;
+              });
+            }
+          );
           
-          // 刷新对话列表以更新lastMessageAt（但unreadCount已经被乐观更新）
-          queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          // Note: No need to invalidate, we've updated the cache directly
           
           // 检测AI消息，管理分段状态
           if (message.senderType === 'ai') {
