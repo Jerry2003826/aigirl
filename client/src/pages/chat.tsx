@@ -430,11 +430,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           description,
           variant: "destructive",
         });
-      } finally {
-        // 刷新消息列表（成功或失败都需要）
-        queryClient.invalidateQueries({ queryKey: ["/api/messages", conversationId] });
-        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
       }
+      // Note: 不需要在finally中刷新，因为onSuccess已经处理了
     },
     onError: (error: any, { tempId, content, imageData, conversationId }) => {
       // 发送失败时解锁输入框
