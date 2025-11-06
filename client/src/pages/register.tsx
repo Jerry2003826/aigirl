@@ -128,7 +128,7 @@ export default function Register() {
 
           {step === 'register' ? (
             /* 注册表单 */
-            <Form {...registerForm}>
+            <Form {...registerForm} key="register-form">
               <form onSubmit={registerForm.handleSubmit(onRegisterSubmit)} className="space-y-4">
                 <FormField
                   control={registerForm.control}
@@ -188,7 +188,7 @@ export default function Register() {
             </Form>
           ) : (
             /* 验证码表单 */
-            <Form {...verifyForm}>
+            <Form {...verifyForm} key="verify-form">
               <form onSubmit={verifyForm.handleSubmit(onVerifySubmit)} className="space-y-4">
                 <FormField
                   control={verifyForm.control}
@@ -202,8 +202,11 @@ export default function Register() {
                           <Input
                             {...field}
                             type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
                             placeholder="请输入6位验证码"
                             maxLength={6}
+                            autoComplete="off"
                             className="pl-10 bg-gray-800 border-gray-700 text-white text-center text-lg tracking-widest"
                             data-testid="input-code"
                           />
