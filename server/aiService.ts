@@ -271,16 +271,27 @@ ${validOtherPersonas.map(p => `- ${p.name}：${p.personality}`).join('\n')}
 }
 
 /**
- * Build RAG context from memories (when RAG is enabled)
- * - Loads ALL memories (no importance filtering)
- * - Sorts by importance descending (most important first)
- * - Limits by maxMemories count and maxTokens
- * - Smart forgetting: drops least important memories first when limits are reached
+ * Build RAG context from memories
+ * 
+ * TWO MODES:
+ * 1. Embedding-based (useEmbeddings=true): Uses Gemini Embeddings API to find Top-K most relevant memories
+ * 2. Importance-based (useEmbeddings=false): Sorts by importance score (fallback mode)
+ * 
+ * @param personaId - AI persona ID
+ * @param userId - User ID
+ * @param userMessage - Current user message (used for semantic search)
+ * @param provider - AI provider instance (must be GeminiProvider for embeddings)
+ * @param useEmbeddings - Whether to use embedding-based retrieval (true) or importance-based (false)
+ * @param maxMemories - Maximum number of memories to return (default: 10 for embeddings, 100 for importance)
+ * @param maxTokens - Maximum total tokens allowed
  */
 async function buildRAGContext(
   personaId: string,
   userId: string,
-  maxMemories: number = 100,
+  userMessage: string,
+  provider: any,
+  useEmbeddings: boolean = true,
+  maxMemories: number = 10,
   maxTokens: number = 50000
 ): Promise<string> {
   const allMemories = await storage.getMemoriesByPersona(personaId, userId);
@@ -289,22 +300,62 @@ async function buildRAGContext(
     return "（知识库里没有找到相关记忆）";
   }
   
-  // Sort by importance descending (most important first)
-  const sortedMemories = allMemories
-    .sort((a, b) => (b.importance || 5) - (a.importance || 5));
+  let sortedMemories;
   
-  // Build memory documents with token limit (smart forgetting)
+  if (useEmbeddings && provider.embedText && provider.embedBatch) {
+    // ✅ TRUE RAG: Use Gemini Embeddings API for semantic search
+    console.log(`[RAG Context] 🚀 Using embedding-based retrieval for ${allMemories.length} memories`);
+    
+    try {
+      // 1. Generate embedding for user query
+      console.log(`[RAG Context] 📊 Embedding user query: "${userMessage.substring(0, 50)}..."`);
+      const queryEmbedding = await provider.embedText(userMessage);
+      
+      // 2. Generate embeddings for all memory texts
+      const memoryTexts = allMemories.map(m => `${m.key}: ${m.value} ${m.context || ''}`);
+      console.log(`[RAG Context] 📊 Embedding ${memoryTexts.length} memories...`);
+      const memoryEmbeddings = await provider.embedBatch(memoryTexts);
+      
+      // 3. Calculate cosine similarity for each memory
+      const { cosineSimilarity } = await import('./ai/providers');
+      const memoriesWithScores = allMemories.map((memory, index) => ({
+        memory,
+        similarity: cosineSimilarity(queryEmbedding, memoryEmbeddings[index]),
+      }));
+      
+      // 4. Sort by similarity (highest first) and take Top-K
+      sortedMemories = memoriesWithScores
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, maxMemories)
+        .map(item => item.memory);
+      
+      console.log(`[RAG Context] ✅ Top-${maxMemories} most relevant memories selected by semantic similarity`);
+      
+    } catch (error) {
+      console.error(`[RAG Context] ❌ Embedding-based retrieval failed:`, error);
+      console.log(`[RAG Context] 🔄 Falling back to importance-based retrieval`);
+      
+      // Fallback to importance-based if embeddings fail
+      sortedMemories = allMemories
+        .sort((a, b) => (b.importance || 5) - (a.importance || 5))
+        .slice(0, maxMemories);
+    }
+    
+  } else {
+    // ❌ FALLBACK: Use importance-based sorting (no embeddings)
+    console.log(`[RAG Context] 📋 Using importance-based retrieval (RAG disabled or provider doesn't support embeddings)`);
+    
+    sortedMemories = allMemories
+      .sort((a, b) => (b.importance || 5) - (a.importance || 5))
+      .slice(0, maxMemories);
+  }
+  
+  // Build memory documents with token limit
   const memoryDocs: string[] = [];
   let totalTokens = 0;
   let memoryCount = 0;
   
   for (const memory of sortedMemories) {
-    // Stop if we've reached max memory count
-    if (memoryCount >= maxMemories) {
-      console.log(`[RAG Context] Reached max memory count (${maxMemories}), stopping`);
-      break;
-    }
-    
     // Format memory document
     let doc = `【记忆${memoryCount + 1}：${memory.key}】\n${memory.value}`;
     if (memory.context) {
@@ -316,7 +367,7 @@ async function buildRAGContext(
     
     const docTokens = estimateTokens(doc);
     
-    // Stop if adding this memory would exceed token limit (smart forgetting)
+    // Stop if adding this memory would exceed token limit
     if (totalTokens + docTokens > maxTokens) {
       console.log(`[RAG Context] Token limit reached at ${totalTokens} tokens, stopping at memory ${memoryCount}`);
       break;
@@ -384,7 +435,10 @@ export async function generateAIResponse(
     ragContext = await buildRAGContext(
       persona.id, 
       conversation.userId,
-      100,  // max 100 memories
+      userMessage,  // Current user message for semantic search
+      provider,  // AI provider for embeddings
+      true,  // useEmbeddings: true (RAG enabled)
+      10,  // Top-10 most relevant memories
       memoryTokenBudget
     );
   }
@@ -482,7 +536,10 @@ export async function generateAIResponseStream(
     ragContext = await buildRAGContext(
       persona.id, 
       conversation.userId,
-      100,  // max 100 memories
+      userMessage,  // Current user message for semantic search
+      provider,  // AI provider for embeddings
+      true,  // useEmbeddings: true (RAG enabled)
+      10,  // Top-10 most relevant memories
       memoryTokenBudget
     );
   }
