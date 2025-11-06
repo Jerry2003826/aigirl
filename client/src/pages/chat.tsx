@@ -755,6 +755,38 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
 
+  // 🆕 将selectedConversationId存储到window对象，供WebSocket使用
+  useEffect(() => {
+    // @ts-ignore - 临时存储在window对象上
+    window.__currentConversationId = selectedConversationId;
+    
+    // 🆕 对话切换时的安全重置：清空队列和定时器
+    console.log('[队列管理] 🔄 对话切换，重置队列状态', {
+      newConversationId: selectedConversationId,
+      pendingQueueLength: pendingAIMessages.length,
+    });
+    
+    // 清空待处理的消息队列
+    setPendingAIMessages([]);
+    
+    // 清理队列处理器定时器
+    if (messageQueueProcessorRef.current) {
+      clearTimeout(messageQueueProcessorRef.current);
+      messageQueueProcessorRef.current = null;
+    }
+    
+    // 清理streaming超时定时器
+    if (streamingTimeoutRef.current) {
+      clearTimeout(streamingTimeoutRef.current);
+      streamingTimeoutRef.current = null;
+    }
+    
+    return () => {
+      // @ts-ignore
+      window.__currentConversationId = null;
+    };
+  }, [selectedConversationId]);
+
   // 🆕 监听WebSocket的AI消息队列事件
   useEffect(() => {
     const handleAIMessageQueue = (event: CustomEvent) => {
