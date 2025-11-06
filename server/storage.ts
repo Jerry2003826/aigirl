@@ -310,6 +310,7 @@ export class MemStorage implements IStorage {
     const conversation = this.conversations.get(id);
     if (conversation) {
       conversation.lastMessageAt = new Date();
+      conversation.messageCount = (conversation.messageCount || 0) + 1;
       this.conversations.set(id, conversation);
     }
   }
@@ -767,7 +768,10 @@ export class DatabaseStorage implements IStorage {
   async updateConversationLastMessage(id: string): Promise<void> {
     await db
       .update(conversations)
-      .set({ lastMessageAt: new Date() })
+      .set({ 
+        lastMessageAt: new Date(),
+        messageCount: sql`${conversations.messageCount} + 1`
+      })
       .where(eq(conversations.id, id));
   }
 
