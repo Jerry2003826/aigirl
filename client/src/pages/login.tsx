@@ -72,25 +72,24 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-900 via-purple-800 to-blue-900 p-4">
       <div className="w-full max-w-md">
-        <div className="bg-gray-900/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-gray-800">
-          {/* Logo */}
-          <div className="flex justify-center mb-6">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center shadow-lg shadow-pink-500/50">
-              <Heart className="w-8 h-8 text-white fill-white" />
-            </div>
+        {/* Logo */}
+        <div className="flex justify-center mb-4">
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center shadow-lg shadow-pink-500/50">
+            <Heart className="w-8 h-8 text-white fill-white" />
           </div>
+        </div>
 
-          {/* Title */}
-          <h1 className="text-2xl font-bold text-center text-white mb-2">
-            AI伴侣聊天
-          </h1>
-          <p className="text-center text-gray-400 mb-8 text-sm">
-            登录到您的账户
-          </p>
+        {/* Title */}
+        <h1 className="text-2xl font-bold text-center text-white mb-2">
+          AI伴侣聊天
+        </h1>
+        <p className="text-center text-gray-400 mb-5 text-sm">
+          登录到您的账户
+        </p>
 
-          {/* 登录表单 */}
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        {/* 登录表单 */}
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
               <FormField
                 control={form.control}
                 name="email"
@@ -145,53 +144,52 @@ export default function Login() {
               >
                 {isLoading ? "登录中..." : "登录"}
               </Button>
-            </form>
-          </Form>
+          </form>
+        </Form>
 
-          {/* 忘记密码 */}
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => setLocation("/forgot-password")}
-              className="text-sm text-gray-400 hover:text-pink-400 transition-colors"
-              data-testid="link-forgot-password"
-            >
-              忘记密码？
-            </button>
-          </div>
+        {/* 忘记密码 */}
+        <div className="mt-3 text-center">
+          <button
+            onClick={() => setLocation("/forgot-password")}
+            className="text-sm text-gray-400 hover:text-pink-400 transition-colors"
+            data-testid="link-forgot-password"
+          >
+            忘记密码？
+          </button>
+        </div>
 
-          {/* 注册链接 */}
-          <div className="mt-6">
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-700"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-gray-900 text-gray-400">
-                  还没有账户？
-                </span>
-              </div>
+        {/* 注册链接 */}
+        <div className="mt-4">
+          <div className="relative mb-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
             </div>
-            
-            <Button
-              variant="outline"
-              className="w-full border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
-              onClick={() => setLocation("/register")}
-              data-testid="link-register"
-            >
-              <UserPlus className="w-4 h-4 mr-2" />
-              创建新账户
-            </Button>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-transparent text-gray-400">
+                还没有账户？
+              </span>
+            </div>
           </div>
+          
+          <Button
+            variant="outline"
+            className="w-full border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
+            onClick={() => setLocation("/register")}
+            data-testid="link-register"
+          >
+            <UserPlus className="w-4 h-4 mr-2" />
+            创建新账户
+          </Button>
+        </div>
 
-          {/* Footer Text */}
-          <div className="text-center space-y-1 mt-6">
-            <p className="text-xs text-gray-500">
-              数据将安全存储在云端
-            </p>
-            <p className="text-xs text-gray-500">
-              支持多设备同步
-            </p>
-          </div>
+        {/* Footer Text */}
+        <div className="text-center space-y-1 mt-4">
+          <p className="text-xs text-gray-500">
+            数据将安全存储在云端
+          </p>
+          <p className="text-xs text-gray-500">
+            支持多设备同步
+          </p>
         </div>
       </div>
     </div>
