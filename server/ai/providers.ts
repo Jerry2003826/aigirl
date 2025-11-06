@@ -166,16 +166,17 @@ ${originalText}`;
       }
     }
 
-    // Build config with optional Google Search grounding and/or Function Calling
+    // Build config with optional Google Search grounding OR Function Calling
+    // NOTE: Gemini API does NOT support using both simultaneously - they are mutually exclusive
     const config: any = {
       systemInstruction: systemPrompt, // System instruction in config
       maxOutputTokens: maxTokens,
     };
 
-    // Build tools array (can include both Function Calling and Google Search)
+    // Build tools array (Function Calling takes priority over Google Search)
     const tools: any[] = [];
     
-    // Add Function Calling for structured chat responses
+    // Add Function Calling for structured chat responses (takes priority)
     if (useFunctionCalling) {
       tools.push({
         functionDeclarations: [CHAT_RESPONSE_FUNCTION]
@@ -185,15 +186,15 @@ ${originalText}`;
           mode: "ANY" // Force function call
         }
       };
-      console.log('[Gemini API] Function Calling enabled for structured chat response');
+      console.log('[Gemini API] ✅ Function Calling enabled (format enforcement)');
+      console.log('[Gemini API] ⚠️ Google Search disabled (mutually exclusive with Function Calling)');
     }
-    
-    // Add Google Search tool if enabled (can coexist with Function Calling)
-    if (searchEnabled) {
+    // Only add Google Search if Function Calling is NOT enabled (mutually exclusive)
+    else if (searchEnabled) {
       tools.push({
         googleSearch: {}, // Enable Google Search grounding
       });
-      console.log('[Gemini API] Google Search grounding enabled');
+      console.log('[Gemini API] ✅ Google Search grounding enabled');
     }
     
     // Only set tools if we have any
