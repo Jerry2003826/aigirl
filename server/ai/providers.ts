@@ -2,28 +2,6 @@ import { GoogleGenAI } from "@google/genai";
 import OpenAI from "openai";
 import type { AiSettings } from "@shared/schema";
 
-// Function Calling Schema for structured chat responses
-const CHAT_RESPONSE_FUNCTION = {
-  name: "generate_chat_response",
-  description: "生成符合微信聊天风格的分句回复，模拟一句我一句的自然聊天节奏",
-  parameters: {
-    type: "object",
-    properties: {
-      phrases: {
-        type: "array",
-        description: "2-4个简短自然的中文短句，每句话简洁有力，总共不超过50字",
-        items: { 
-          type: "string",
-          description: "一个简短的中文句子，不使用标点符号"
-        },
-        minItems: 2,
-        maxItems: 4
-      }
-    },
-    required: ["phrases"]
-  }
-};
-
 // AI Provider interface
 export interface AIProvider {
   generateResponse(params: GenerateParams): Promise<string>;
@@ -38,7 +16,6 @@ export interface GenerateParams {
   imageData?: ImageData;
   ragContext?: string; // RAG retrieved documents context
   searchEnabled?: boolean; // Enable Google Search grounding
-  useFunctionCalling?: boolean; // Use Function Calling for structured output
 }
 
 export interface ConversationMessage {
@@ -97,7 +74,7 @@ export class GeminiProvider implements AIProvider {
       throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled, useFunctionCalling = false } = params;
+    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
 
     // Build contents array for Gemini (convert conversation history)
     const contents = [];
@@ -166,40 +143,17 @@ ${originalText}`;
       }
     }
 
-    // Build config with optional Google Search grounding OR Function Calling
-    // NOTE: Gemini API does NOT support using both simultaneously - they are mutually exclusive
+    // Build config with optional Google Search grounding
     const config: any = {
       systemInstruction: systemPrompt, // System instruction in config
       maxOutputTokens: maxTokens,
     };
 
-    // Build tools array (Function Calling takes priority over Google Search)
-    const tools: any[] = [];
-    
-    // Add Function Calling for structured chat responses (takes priority)
-    if (useFunctionCalling) {
-      tools.push({
-        functionDeclarations: [CHAT_RESPONSE_FUNCTION]
-      });
-      config.toolConfig = {
-        functionCallingConfig: {
-          mode: "ANY" // Force function call
-        }
-      };
-      console.log('[Gemini API] ✅ Function Calling enabled (format enforcement)');
-      console.log('[Gemini API] ⚠️ Google Search disabled (mutually exclusive with Function Calling)');
-    }
-    // Only add Google Search if Function Calling is NOT enabled (mutually exclusive)
-    else if (searchEnabled) {
-      tools.push({
+    // Add Google Search tool if enabled
+    if (searchEnabled) {
+      config.tools = [{
         googleSearch: {}, // Enable Google Search grounding
-      });
-      console.log('[Gemini API] ✅ Google Search grounding enabled');
-    }
-    
-    // Only set tools if we have any
-    if (tools.length > 0) {
-      config.tools = tools;
+      }];
     }
 
     try {
@@ -208,7 +162,6 @@ ${originalText}`;
         contentsLength: contents.length,
         systemPromptLength: systemPrompt.length,
         maxTokens,
-        useFunctionCalling,
       });
       
       const response = await this.client.models.generateContent({
@@ -219,43 +172,10 @@ ${originalText}`;
 
       // Log full response for debugging
       console.log('[Gemini API] Response object keys:', Object.keys(response));
-      
-      // Handle Function Calling response
-      if (useFunctionCalling && response.candidates && response.candidates.length > 0) {
-        const candidate = response.candidates[0];
-        console.log('[Gemini API] Function Calling candidate:', JSON.stringify(candidate, null, 2));
-        
-        // Extract function call from candidate
-        if (candidate.content?.parts) {
-          for (const part of candidate.content.parts) {
-            if (part.functionCall) {
-              const functionCall = part.functionCall;
-              console.log('[Gemini API] Function call detected:', functionCall.name);
-              console.log('[Gemini API] Function args:', JSON.stringify(functionCall.args, null, 2));
-              
-              if (functionCall.name === 'generate_chat_response' && functionCall.args?.phrases) {
-                const phrases = functionCall.args.phrases;
-                if (Array.isArray(phrases) && phrases.length > 0) {
-                  // Join phrases with backslash separator
-                  const result = phrases.join('\\');
-                  console.log('[Gemini API] Function Calling result:', result);
-                  return result;
-                } else {
-                  console.warn('[Gemini API] Invalid phrases array:', phrases);
-                }
-              }
-            }
-          }
-        }
-        
-        console.warn('[Gemini API] Function Calling expected but no valid function call found, falling back to text');
-      }
-      
-      // Fallback to regular text response
       console.log('[Gemini API] response.text value:', JSON.stringify(response.text));
       console.log('[Gemini API] response.text length:', response.text?.length || 0);
       
-      // Check if response has candidates (for non-function-calling mode)
+      // Check if response has candidates
       if (response.candidates && response.candidates.length > 0) {
         console.log('[Gemini API] candidates[0]:', JSON.stringify(response.candidates[0], null, 2));
       }
