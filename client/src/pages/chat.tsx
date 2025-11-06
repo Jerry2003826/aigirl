@@ -48,6 +48,8 @@ type Message = {
   createdAt: Date;
   personaName?: string;
   personaAvatar?: string | null;
+  clientMessageId?: string | null;
+  imageData?: string | null;
 };
 
 interface ChatProps {
@@ -163,10 +165,28 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     // Step 1: Reverse rawMessages to get ASC order (oldest first)
     const reversedRaw = [...rawMessages].reverse();
     
-    // Step 2: Append optimistic messages (they are new, so they go at the end)
-    const allMsgs = [...reversedRaw, ...optimisticMessages];
+    // Step 2: Find clientMessageIds that already exist in rawMessages
+    const existingClientMessageIds = new Set(
+      reversedRaw.map(m => m.clientMessageId).filter(Boolean)
+    );
     
-    // Step 3: Deduplicate by ID - keep first occurrence (which is the real one)
+    // Step 3: Filter optimistic messages - exclude those already in rawMessages
+    const filteredOptimistic = optimisticMessages.filter(m => {
+      // Remove optimistic messages that have been replaced by real messages
+      const shouldRemove = m.clientMessageId && existingClientMessageIds.has(m.clientMessageId);
+      if (shouldRemove) {
+        console.log('[UI渲染] 🔄 过滤已替换的乐观消息', {
+          clientMessageId: m.clientMessageId,
+          optimisticId: m.id,
+        });
+      }
+      return !shouldRemove;
+    });
+    
+    // Step 4: Append remaining optimistic messages
+    const allMsgs = [...reversedRaw, ...filteredOptimistic];
+    
+    // Step 5: Deduplicate by ID - keep first occurrence (which is the real one)
     const messageMap = new Map<string, Message>();
     for (const msg of allMsgs) {
       if (!messageMap.has(msg.id)) {
@@ -174,11 +194,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       }
     }
     
-    // Step 4: Return as array - already in ASC order (oldest first, newest last)
+    // Step 6: Return as array - already in ASC order (oldest first, newest last)
     const finalMessages = Array.from(messageMap.values());
     
     console.log('[UI渲染] ✅ 消息合并完成', {
       finalCount: finalMessages.length,
+      filteredOptimisticCount: filteredOptimistic.length,
       finalMessagesPreview: finalMessages.slice(-3).map(m => ({
         id: m.id,
         clientMessageId: m.clientMessageId,
@@ -465,14 +486,25 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // CRITICAL FIX: 不清理乐观消息！让WebSocket的替换逻辑处理
-      // WebSocket收到带有clientMessageId的真实消息时会自动就地替换乐观消息
-      // 如果在这里清理，WebSocket收到消息时找不到要替换的，会添加新消息导致双重渲染
+      // CRITICAL: 延迟清理乐观消息，等WebSocket收到真实消息后再清理
+      // 这避免了消息短暂消失的问题
+      // WebSocket会在收到真实消息时通过clientMessageId匹配并替换
       
-      // Note: 完全依赖WebSocket广播来替换乐观消息
-      // 这样保证单一数据源，避免竞态条件
+      console.log('[API成功] 🚫 暂不清理乐观消息，等待WebSocket替换');
       
-      console.log('[API成功] 🚫 不清理乐观消息，等待WebSocket替换');
+      // 设置一个延迟清理器，防止WebSocket失败时乐观消息永远存在
+      setTimeout(() => {
+        setOptimisticMessages(prev => {
+          const filtered = prev.filter(m => m.clientMessageId !== clientMessageId);
+          if (filtered.length < prev.length) {
+            console.log('[API成功] 🧹 延迟清理超时的乐观消息', {
+              clientMessageId,
+              removedCount: prev.length - filtered.length,
+            });
+          }
+          return filtered;
+        });
+      }, 2000); // 2秒后清理，给WebSocket足够时间
       
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理

@@ -88,7 +88,10 @@ export function useGlobalWebSocket() {
                 // CRITICAL FIX: If message has clientMessageId, replace optimistic message
                 // This prevents double-render (optimistic + real message)
                 if (message.clientMessageId) {
-                  const optimisticIndex = oldData.findIndex(m => m.clientMessageId === message.clientMessageId);
+                  // Look for optimistic message by ID (optimistic messages use clientMessageId as their ID)
+                  const optimisticIndex = oldData.findIndex(m => 
+                    m.id === message.clientMessageId || m.clientMessageId === message.clientMessageId
+                  );
                   if (optimisticIndex !== -1) {
                     console.log('[WebSocket] 🔄 找到乐观消息，执行替换', {
                       clientMessageId: message.clientMessageId,
@@ -111,6 +114,7 @@ export function useGlobalWebSocket() {
                     console.log('[WebSocket] ⚠️ 未找到匹配的乐观消息', {
                       clientMessageId: message.clientMessageId,
                       existingClientMessageIds: oldData.map(m => m.clientMessageId).filter(Boolean),
+                      existingIds: oldData.map(m => m.id).slice(0, 5),
                     });
                   }
                 }
