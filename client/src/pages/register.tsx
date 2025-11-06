@@ -53,11 +53,7 @@ export default function Register() {
 
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterFormValues) => {
-      const response = await apiRequest("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const response = await apiRequest("POST", "/api/auth/register", data);
       return response;
     },
     onSuccess: (_, variables) => {
@@ -79,10 +75,9 @@ export default function Register() {
 
   const verifyMutation = useMutation({
     mutationFn: async (data: VerifyFormValues) => {
-      const response = await apiRequest("/api/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, code: data.code }),
+      const response = await apiRequest("POST", "/api/auth/verify", { 
+        email, 
+        code: data.code 
       });
       return response;
     },
