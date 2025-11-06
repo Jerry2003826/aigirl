@@ -11,11 +11,35 @@ export function useGlobalWebSocket() {
   const queryClient = useQueryClient();
   const streamingTimeoutRef = useRef<NodeJS.Timeout>();
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
     let shouldReconnect = true;  // Flag to control reconnection
+    
+    function startHeartbeat(ws: WebSocket) {
+      // Clear existing heartbeat
+      if (heartbeatIntervalRef.current) {
+        clearInterval(heartbeatIntervalRef.current);
+      }
+      
+      // Send ping every 25 seconds when page is visible, 60 seconds when hidden
+      const sendPing = () => {
+        if (ws.readyState === WebSocket.OPEN) {
+          const interval = document.hidden ? 60000 : 25000;
+          heartbeatIntervalRef.current = setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping' }));
+              console.log('[WebSocket] 💓 发送心跳');
+            }
+            sendPing(); // Schedule next ping
+          }, interval);
+        }
+      };
+      
+      sendPing();
+    }
     
     function connect() {
       const ws = new WebSocket(wsUrl);
@@ -23,12 +47,20 @@ export function useGlobalWebSocket() {
 
       ws.onopen = () => {
         console.log('[WebSocket] 🔌 连接成功');
+        // Start heartbeat to keep connection alive
+        startHeartbeat(ws);
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           console.log('[WebSocket] 📩 收到消息', { type: data.type });
+          
+          // Handle pong response from server
+          if (data.type === 'pong') {
+            console.log('[WebSocket] 💓 收到心跳响应');
+            return;
+          }
           
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
@@ -339,10 +371,47 @@ export function useGlobalWebSocket() {
 
     connect();
 
+    // Handle page visibility changes to ensure connection stays alive
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[WebSocket] 👁️ 页面回到前台');
+        
+        // Check if WebSocket is still connected
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          console.log('[WebSocket] 🔄 连接已断开，重新连接');
+          connect();
+        }
+        
+        // Invalidate queries to fetch any missed updates
+        console.log('[WebSocket] 🔄 刷新数据缓存');
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+        
+        // If viewing a specific conversation, refresh its messages
+        // @ts-ignore - Read from window object
+        const currentConversationId = window.__currentConversationId;
+        if (currentConversationId) {
+          queryClient.invalidateQueries({ 
+            queryKey: ["/api/messages", currentConversationId] 
+          });
+        }
+      } else {
+        console.log('[WebSocket] 👁️ 页面进入后台');
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Cleanup: stop reconnection and close connection
     return () => {
       shouldReconnect = false;  // Prevent reconnection after cleanup
       
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      
+      if (heartbeatIntervalRef.current) {
+        clearTimeout(heartbeatIntervalRef.current);
+      }
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current);
       }

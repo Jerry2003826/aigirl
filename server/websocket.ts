@@ -11,8 +11,8 @@ interface AuthenticatedWebSocket extends WebSocket {
 }
 
 interface WSMessage {
-  type: 'message' | 'typing' | 'read' | 'join_conversation' | 'leave_conversation';
-  payload: any;
+  type: 'message' | 'typing' | 'read' | 'join_conversation' | 'leave_conversation' | 'ping';
+  payload?: any;
 }
 
 // Track connected clients by userId
@@ -140,6 +140,11 @@ async function handleWebSocketMessage(ws: AuthenticatedWebSocket, message: WSMes
   const { type, payload } = message;
 
   switch (type) {
+    case 'ping':
+      // Respond to heartbeat ping with pong
+      ws.send(JSON.stringify({ type: 'pong' }));
+      break;
+
     case 'join_conversation':
       await handleJoinConversation(ws, payload.conversationId);
       break;
