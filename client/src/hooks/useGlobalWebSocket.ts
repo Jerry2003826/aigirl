@@ -152,12 +152,26 @@ export function useGlobalWebSocket() {
                     // 1. User is NOT currently viewing this chat
                     // 2. Message is from AI (not sent by user)
                     const shouldIncrement = !isInThisChat && message.senderType === 'ai';
+                    const oldUnreadCount = conv.unreadCount || 0;
+                    const newUnreadCount = shouldIncrement ? oldUnreadCount + 1 : oldUnreadCount;
+                    
+                    console.log('[未读计数] 📊 更新对话未读数', {
+                      conversationId: conv.id,
+                      conversationTitle: conv.title,
+                      isInThisChat,
+                      messageType: message.senderType,
+                      shouldIncrement,
+                      oldUnreadCount,
+                      newUnreadCount,
+                      messageId: message.id,
+                      messageContent: message.content?.substring(0, 20),
+                    });
                     
                     return {
                       ...conv,
                       lastMessageAt: new Date().toISOString(),
                       lastMessage: message,
-                      unreadCount: shouldIncrement ? (conv.unreadCount || 0) + 1 : conv.unreadCount,
+                      unreadCount: newUnreadCount,
                     };
                   }
                   return conv;

@@ -209,20 +209,46 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   });
 
   const markAsReadMutation = useMutation({
-    mutationFn: (conversationId: string) =>
-      apiRequest("POST", `/api/conversations/${conversationId}/read`, {}),
+    mutationFn: (conversationId: string) => {
+      console.log('[未读标记] 📤 发送标记已读API请求', { conversationId });
+      return apiRequest("POST", `/api/conversations/${conversationId}/read`, {});
+    },
     onMutate: async (conversationId) => {
+      console.log('[未读标记] 🔄 乐观更新：立即清零未读数', { conversationId });
+      
       // OPTIMIZED: 乐观更新 - 立即清零未读数，不等待API响应
       queryClient.setQueryData(
         ["/api/conversations"],
         (old: any[] = []) => {
-          return old.map(conv => 
+          const targetConv = old.find(c => c.id === conversationId);
+          console.log('[未读标记] 📊 更新前状态', {
+            conversationId,
+            conversationTitle: targetConv?.title,
+            oldUnreadCount: targetConv?.unreadCount,
+          });
+          
+          const newData = old.map(conv => 
             conv.id === conversationId
               ? { ...conv, unreadCount: 0 }
               : conv
           );
+          
+          const updatedConv = newData.find(c => c.id === conversationId);
+          console.log('[未读标记] 📊 更新后状态', {
+            conversationId,
+            conversationTitle: updatedConv?.title,
+            newUnreadCount: updatedConv?.unreadCount,
+          });
+          
+          return newData;
         }
       );
+    },
+    onSuccess: (data, conversationId) => {
+      console.log('[未读标记] ✅ 标记已读成功', { conversationId, response: data });
+    },
+    onError: (error, conversationId) => {
+      console.error('[未读标记] ❌ 标记已读失败', { conversationId, error });
     },
   });
 
@@ -623,16 +649,59 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   useEffect(() => {
     if (selectedConversationId && selectedConversationId !== lastMarkedConversationRef.current) {
       // New conversation selected, check if it has unread messages
+      console.log('[未读标记] 🔄 对话切换检测', {
+        conversationId: selectedConversationId,
+        messagesCount: messages.length,
+        lastMarkedConversation: lastMarkedConversationRef.current,
+      });
+      
       if (messages.length > 0) {
-        const hasUnreadMessages = messages.some(m => !m.isRead && m.senderType === "ai");
+        const unreadAIMessages = messages.filter(m => !m.isRead && m.senderType === "ai");
+        const hasUnreadMessages = unreadAIMessages.length > 0;
+        
+        console.log('[未读标记] 📊 未读消息检查', {
+          totalMessages: messages.length,
+          unreadAIMessages: unreadAIMessages.length,
+          unreadMessageIds: unreadAIMessages.map(m => m.id),
+          hasUnreadMessages,
+        });
+        
         if (hasUnreadMessages) {
+          console.log('[未读标记] ✅ 开始标记对话为已读', {
+            conversationId: selectedConversationId,
+          });
           markAsReadMutation.mutate(selectedConversationId);
+        } else {
+          console.log('[未读标记] ⏭️ 无需标记，没有未读消息');
         }
       }
       // Remember we've marked this conversation
       lastMarkedConversationRef.current = selectedConversationId;
     }
   }, [selectedConversationId]); // CRITICAL: Only depend on conversation change, NOT messages
+  
+  // CRITICAL FIX: Mark new AI messages as read when user is viewing the chat
+  // This prevents unread count from showing when user exits after receiving AI replies
+  useEffect(() => {
+    if (!selectedConversationId || messages.length === 0) {
+      return;
+    }
+    
+    // Find unread AI messages
+    const unreadAIMessages = messages.filter(m => !m.isRead && m.senderType === "ai");
+    
+    if (unreadAIMessages.length > 0) {
+      console.log('[未读标记] 🆕 检测到未读AI消息', {
+        conversationId: selectedConversationId,
+        unreadCount: unreadAIMessages.length,
+        unreadMessageIds: unreadAIMessages.map(m => m.id),
+        messageContents: unreadAIMessages.map(m => m.content?.substring(0, 20)),
+      });
+      
+      console.log('[未读标记] ✅ 自动标记为已读（用户正在查看聊天）');
+      markAsReadMutation.mutate(selectedConversationId);
+    }
+  }, [messages, selectedConversationId]); // Trigger when messages change
 
   // Remove optimistic messages when real messages arrive
   useEffect(() => {
