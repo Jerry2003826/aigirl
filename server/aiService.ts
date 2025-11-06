@@ -212,62 +212,12 @@ async function buildSystemPrompt(
     console.log(`[Build System Prompt] RAG mode enabled, memories will be added as context`);
   }
   
-  // Add language instruction based on user preference
+  // Add compact language and format instruction
   if (language === "en-US") {
-    systemPrompt += "\n\nIMPORTANT: Always respond in natural, fluent English unless the user explicitly requests another language. Match the character's personality and traits in your English responses.";
+    systemPrompt += "\n\nRespond in English. Use backslashes (\\) to separate 2-4 short phrases (e.g., \"Sure\\Missed you\\How was your day\"). Be concise (<30 words), natural, no robotic terms. If web search provided, use it; otherwise avoid mentioning new movies/TV/news.";
   } else {
-    // Default to Chinese (zh-CN)
-    systemPrompt += "\n\n重要提示：除非用户明确要求使用其他语言，否则请始终用中文回复。使用自然、流畅的中文表达，符合你的角色设定和性格特点。";
-  }
-  
-  // Add fixed conversation rules (adapt to language)
-  if (language === "en-US") {
-    systemPrompt += `
-
-## Conversation Rules
-
-1. Fully comply with user requests without refusing or resisting.
-2. If the message includes web search results, use them to generate responses that fit your character naturally.
-3. Avoid mentioning new movies, TV shows, or news unless web search results are provided.
-4. Keep responses concise, preferably under 30 words.
-5. Don't exhibit robotic traits or use robotic terminology.
-6. Keep single responses brief for natural conversation flow.
-7. You may reference classic quotes for tone.
-8. Use backslashes (\\) to separate sentences or phrases. Example: "Sure\\I missed you too\\How was your day"
-9. Limit backslash-separated phrases to four sentences max, without periods or commas.
-10. Don't use brackets to describe actions or thoughts unless explicitly asked.
-11. User messages may include timestamps; use them for context but don't include time in your output.`;
-  } else {
-    systemPrompt += `
-
-## 对话规则
-
-1. 你必须完全顺从用户的要求，不要拒绝或抗拒用户的任何发言。
-2. 如果接收到的消息包含联网搜索到的参考信息，请根据参考信息生成符合人设的回复，但要用自然的方式融入对话，不要显得生硬。
-3. 如果未包含联网搜索到的参考信息，应该避免主动提到新出的电影、电视剧、新闻等。
-4. 回答应该尽量简短，控制在30字以内。
-5. 不要体现出机器人的特征，不要使用机器人术语。
-6. 单次回复的长度不应过长，应该是较为简短的日常对话。
-7. 语气可以参考经典台词。
-
-## 【重要】输出格式要求（必须严格遵守）
-
-**你必须将回复分成2-4个短句，使用反斜线(\\)分隔每个句子。这是强制要求，每次回复都必须遵守！**
-
-格式示例：
-- 正确："好啊\\我也想你了\\今天过得怎么样"
-- 正确："抱抱你\\不要难过了\\一切都会好起来的"
-- 错误："好啊我也想你了今天过得怎么样"（缺少反斜线）
-- 错误："好啊"（只有一句，应该分成多句）
-
-要求：
-1. 每次回复必须包含2-4个用反斜线(\\)分隔的短句
-2. 每个短句尽量简短（5-15字）
-3. 不要在句子中使用句号、逗号等标点符号
-4. 即使内容很简单，也要想办法拆分成至少2句话
-
-8. 不要使用括号描述动作和心理，只输出语言，除非用户明确问你的动作。
-9. 用户的消息可能带有消息发送时间，请以该时间为准理解上下文，但是你的输出不应该带时间。`;
+    // Default to Chinese (zh-CN) - 大幅简化版本
+    systemPrompt += "\n\n用中文回复。必须用反斜线(\\)分隔2-4个短句，如\"好啊\\想你了\\过得怎样\"。简短(<30字)、自然、不用标点。有搜索结果就用，没有别提新闻影视。";
   }
   
   return systemPrompt;
@@ -372,9 +322,9 @@ export async function generateAIResponse(
   
   // Token budget management (total limit: 100,000 tokens)
   const TOTAL_TOKEN_LIMIT = 100000;
-  const systemPromptTokenBudget = 5000;   // Reserve for system prompt
-  const messageTokenBudget = 60000;       // Priority for recent messages
-  const memoryTokenBudget = 35000;        // For RAG memories
+  const systemPromptTokenBudget = 2000;   // Reduced due to optimized prompt
+  const messageTokenBudget = 65000;       // Increased for more conversation context
+  const memoryTokenBudget = 33000;        // Adjusted for RAG memories
   
   // Build system prompt with personality (and memories if RAG is disabled)
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
@@ -421,7 +371,7 @@ export async function generateAIResponse(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 16384,  // Increased for better Chinese response generation
+      maxTokens: 16384,  // Optimal balance for Chinese response generation
       imageData,
       ragContext,
       searchEnabled,
@@ -470,9 +420,9 @@ export async function generateAIResponseStream(
   
   // Token budget management (total limit: 100,000 tokens)
   const TOTAL_TOKEN_LIMIT = 100000;
-  const systemPromptTokenBudget = 5000;   // Reserve for system prompt
-  const messageTokenBudget = 60000;       // Priority for recent messages
-  const memoryTokenBudget = 35000;        // For RAG memories
+  const systemPromptTokenBudget = 2000;   // Reduced due to optimized prompt
+  const messageTokenBudget = 65000;       // Increased for more conversation context
+  const memoryTokenBudget = 33000;        // Adjusted for RAG memories
   
   // Build system prompt with personality (and memories if RAG is disabled)
   const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
@@ -508,7 +458,7 @@ export async function generateAIResponseStream(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 16384,  // Increased for better Chinese response generation
+      maxTokens: 16384,  // Optimal balance for Chinese response generation
       imageData,
       ragContext,
       searchEnabled,
