@@ -4,9 +4,9 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendVerificationEmail(email: string, code: string): Promise<void> {
   try {
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: 'AI伴侣 <noreply@ai-girlchat.com>',
-      to: email,
+      to: [email],
       subject: '验证您的邮箱 - AI伴侣',
       html: `
         <!DOCTYPE html>
@@ -91,9 +91,17 @@ export async function sendVerificationEmail(email: string, code: string): Promis
         </html>
       `,
     });
-    console.log(`✅ [Email] 验证码已发送至 ${email}`);
-  } catch (error) {
+
+    if (error) {
+      console.error('❌ [Email] Resend API 错误:', error);
+      throw new Error(`发送验证邮件失败: ${error.message}`);
+    }
+
+    if (data) {
+      console.log(`✅ [Email] 邮件已发送 - ID: ${data.id}, 收件人: ${email}`);
+    }
+  } catch (error: any) {
     console.error('❌ [Email] 发送失败:', error);
-    throw new Error('发送验证邮件失败');
+    throw new Error(error.message || '发送验证邮件失败');
   }
 }
