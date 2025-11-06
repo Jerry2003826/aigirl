@@ -81,8 +81,26 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // Logout via Replit OIDC - redirects to OIDC logout
-      window.location.href = "/api/logout";
+      // Send logout request to backend
+      const response = await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('登出失败');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      // Clear React Query cache
+      queryClient.clear();
+      // Redirect to login page
+      window.location.href = "/login";
     },
     onError: () => {
       toast({
