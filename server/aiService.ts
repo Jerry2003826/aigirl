@@ -1159,7 +1159,7 @@ AI：${aiResponse}
           content: extractionPrompt
         }
       ],
-      maxTokens: 1000,
+      maxTokens: 10000,
     });
     
     const content = response.trim();
