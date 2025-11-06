@@ -32,6 +32,11 @@ The design is inspired by WeChat, featuring a green primary color palette and a 
 - **Background AI Auto-Reply System:** Job-based background worker for AI responses when users are offline or in different conversations, using `ai_reply_jobs` table for status tracking, retry mechanisms, and row-level locking.
 - **Multi-AI Group Chat System:** Intelligent multi-AI response system for group chats with AI-to-AI interaction:
   - **Intelligent AI Selection:** Uses AI judgment (scoring 0-100) combined with probability filtering (30-50%) to select 1-3 AIs to respond to each user message in group chats
+  - **@ Mention Functionality:** Users can @mention specific AIs in group chats to direct questions to them. Features include:
+    - **Autocomplete Picker:** Type @ to display a list of all AI members in the group
+    - **Smart AI Override:** When a message contains @mention, only the mentioned AI responds (bypasses intelligent selection)
+    - **Visual Highlighting:** @mentions are highlighted in messages with adaptive styling for both user and AI bubbles
+    - **Fallback Handling:** If mentioned AI is not in the conversation, falls back to normal intelligent selection
   - **Group Chat Context:** AIs are aware of group membership and other participants through enhanced system prompts
   - **Staggered Responses:** Multiple AI responses are sent with 2-3 second delays between each for natural conversation flow
   - **AI-to-AI Interaction:** AIs can respond to each other's messages with 20-30% probability, limited to 3 consecutive AI messages maximum
