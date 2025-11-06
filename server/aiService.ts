@@ -1439,13 +1439,28 @@ export async function triggerAIReplyToComment(
       // Example: User → AI₁ → User → AI₂ → User → AI₃ (✅ allowed, no consecutive AI)
       // Example: User → AI₁ → AI₂ → ... (❌ blocked, 2 consecutive AI reached)
       
+      console.log(`[AI评论回复] 开始检查是否可以回复`, {
+        commentId,
+        commentContent: comment.content?.substring(0, 30),
+        commentAuthor: comment.authorType,
+        momentId: comment.momentId,
+        parentCommentId: comment.parentCommentId,
+      });
+      
       let consecutiveAICount = 0;
       let currentComment = comment; // This is the user's comment
+      const commentChain = [];
       
       // Start from the parent (the comment user replied to)
       while (currentComment.parentCommentId) {
         const parentComment = await storage.getMomentCommentById(currentComment.parentCommentId);
         if (!parentComment) break;
+        
+        commentChain.push({
+          id: parentComment.id,
+          authorType: parentComment.authorType,
+          content: parentComment.content?.substring(0, 20),
+        });
         
         if (parentComment.authorType === 'ai') {
           consecutiveAICount++;
@@ -1456,36 +1471,73 @@ export async function triggerAIReplyToComment(
         
         currentComment = parentComment;
       }
+      
+      console.log(`[AI评论回复] 评论链分析`, {
+        consecutiveAICount,
+        commentChain,
+        willBlock: consecutiveAICount >= 2,
+      });
 
       if (consecutiveAICount >= 2) {
-        console.log(`Maximum consecutive AI comments (2) reached, AI won't reply. Current count: ${consecutiveAICount}`);
+        console.log(`[AI评论回复] ❌ 达到连续AI评论上限(2)，不回复`);
         return;
       }
+      
+      console.log(`[AI评论回复] ✅ 通过连续AI检查，继续处理`);
+
 
       // Get user's AI personas
       const personas = await storage.getPersonasByUser(userId);
+      console.log(`[AI评论回复] 获取用户AI女友`, {
+        userId,
+        personaCount: personas.length,
+        personaNames: personas.map(p => p.name),
+      });
+      
       if (personas.length === 0) {
+        console.log(`[AI评论回复] ❌ 用户没有AI女友，无法回复`);
         return;
       }
 
       // Randomly select 1 persona to reply (50% chance)
-      if (Math.random() > 0.5) {
+      const randomValue = Math.random();
+      console.log(`[AI评论回复] 随机概率检查`, {
+        randomValue,
+        threshold: 0.5,
+        willReply: randomValue <= 0.5,
+      });
+      
+      if (randomValue > 0.5) {
+        console.log(`[AI评论回复] ❌ 未触发50%概率，不回复`);
         return; // Don't always reply
       }
 
       const selectedPersona = personas[Math.floor(Math.random() * personas.length)];
+      console.log(`[AI评论回复] ✅ 选中AI女友回复`, {
+        personaId: selectedPersona.id,
+        personaName: selectedPersona.name,
+      });
 
       // Generate reply with delay
       const delay = Math.floor(Math.random() * 10000) + 3000; // 3-13s
+      console.log(`[AI评论回复] 延迟${(delay/1000).toFixed(1)}秒后生成回复`);
       
       setTimeout(async () => {
         try {
+          console.log(`[AI评论回复] 开始生成回复内容`, {
+            personaId: selectedPersona.id,
+            personaName: selectedPersona.name,
+            replyToContent: comment.content?.substring(0, 30),
+          });
+          
           // Generate reply content
           const replyContent = await generateCommentReply(
             selectedPersona.id,
             userId,
             comment.content
           );
+          
+          console.log(`[AI评论回复] 生成的回复内容:`, replyContent?.substring(0, 50));
 
           // Get language setting for proper punctuation replacement
           const aiSettings = await storage.getAiSettings(userId);
@@ -1508,13 +1560,19 @@ export async function triggerAIReplyToComment(
           // Broadcast to all users for real-time updates
           broadcastMomentEvent('commented', { momentId: comment.momentId, comment: reply });
 
-          console.log(`AI ${selectedPersona.name} replied to comment ${commentId}`);
+          console.log(`[AI评论回复] ✅ 成功发布回复`, {
+            personaName: selectedPersona.name,
+            replyId: reply.id,
+            replyContent: reply.content?.substring(0, 30),
+            momentId: comment.momentId,
+            parentCommentId: commentId,
+          });
         } catch (error) {
-          console.error(`Error creating AI reply:`, error);
+          console.error(`[AI评论回复] ❌ 创建回复失败:`, error);
         }
       }, delay);
     } catch (error) {
-      console.error("Error triggering AI reply:", error);
+      console.error("[AI评论回复] ❌ 触发AI回复时出错:", error);
     }
   })();
 }

@@ -21,13 +21,13 @@ export function useGlobalWebSocket() {
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('[Global WS] Connected');
+        console.log('[WebSocket] 🔌 连接成功');
       };
 
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('[Global WS] Message received:', data.type);
+          console.log('[WebSocket] 📩 收到消息', { type: data.type });
           
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
@@ -188,7 +188,10 @@ export function useGlobalWebSocket() {
               
               // Set new timeout to detect end of streaming
               streamingTimeoutRef.current = setTimeout(() => {
-                console.log('[Global WS] AI streaming complete (timeout)');
+                console.log('[WebSocket] ⏱️ AI流式响应超时完成', {
+                  conversationId: message.conversationId,
+                  timeout: '5s',
+                });
               }, 5000);
               
               // CRITICAL FIX: If user is viewing this chat, mark messages as read immediately
@@ -212,22 +215,22 @@ export function useGlobalWebSocket() {
           
           // Handle Moments events
           else if (data.type === 'moment_created' && data.payload) {
-            console.log('[Global WS] Moment created, refreshing moments...');
+            console.log('[WebSocket] 📸 动态创建事件，刷新动态列表');
             // Invalidate moments list to show new moment
             queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
           }
           else if (data.type === 'moment_deleted' && data.payload) {
-            console.log('[Global WS] Moment deleted, refreshing moments...');
+            console.log('[WebSocket] 🗑️ 动态删除事件，刷新动态列表');
             // Invalidate moments list to remove deleted moment
             queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
           }
           else if (data.type === 'moment_liked' && data.payload) {
-            console.log('[Global WS] Moment liked/unliked, refreshing moments...');
+            console.log('[WebSocket] ❤️ 动态点赞事件，刷新动态列表');
             // Invalidate moments list to update like count
             queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
           }
           else if (data.type === 'moment_commented' && data.payload) {
-            console.log('[Global WS] New moment comment, refreshing moments and comments...');
+            console.log('[WebSocket] 💬 动态评论事件，刷新动态和评论');
             const { momentId } = data.payload;
             // Invalidate moments list to update comment count
             queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
@@ -241,12 +244,12 @@ export function useGlobalWebSocket() {
           
           // Handle Groups events
           else if (data.type === 'group_created' && data.payload) {
-            console.log('[Global WS] Group created, refreshing conversations...');
+            console.log('[WebSocket] 👥 群组创建事件，刷新对话列表');
             // Invalidate conversations list to show new group
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           }
           else if (data.type === 'group_participant_added' && data.payload) {
-            console.log('[Global WS] Participant added, refreshing conversation details...');
+            console.log('[WebSocket] ➕ 成员添加事件，刷新对话详情');
             const { conversationId } = data.payload;
             // Invalidate specific conversation details
             if (conversationId) {
@@ -257,7 +260,7 @@ export function useGlobalWebSocket() {
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           }
           else if (data.type === 'group_participant_removed' && data.payload) {
-            console.log('[Global WS] Participant removed, refreshing conversation details...');
+            console.log('[WebSocket] ➖ 成员移除事件，刷新对话详情');
             const { conversationId } = data.payload;
             // Invalidate specific conversation details
             if (conversationId) {
@@ -268,19 +271,19 @@ export function useGlobalWebSocket() {
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
           }
         } catch (error) {
-          console.error('[Global WS] Error parsing message:', error);
+          console.error('[WebSocket] ❌ 消息解析错误', { error });
         }
       };
 
       ws.onerror = (error) => {
-        console.error('[Global WS] Error:', error);
+        console.error('[WebSocket] ⚠️ 连接错误', { error });
       };
 
       ws.onclose = () => {
-        console.log('[Global WS] Disconnected, reconnecting in 3s...');
+        console.log('[WebSocket] 🔌 连接断开，3秒后重连...');
         // Auto reconnect after 3 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[Global WS] Attempting reconnect...');
+          console.log('[WebSocket] 🔄 尝试重新连接...');
           connect();
         }, 3000);
       };
@@ -325,7 +328,7 @@ export function useConversationSubscription(
           type: 'join_conversation',
           payload: { conversationId }
         }));
-        console.log('[WS] Joined conversation:', conversationId);
+        console.log('[WebSocket] 👀 加入对话', { conversationId });
       } else {
         // Connection not ready, wait and retry
         setTimeout(sendJoin, 100);
@@ -341,7 +344,7 @@ export function useConversationSubscription(
           type: 'leave_conversation',
           payload: { conversationId }
         }));
-        console.log('[WS] Left conversation:', conversationId);
+        console.log('[WebSocket] 👋 离开对话', { conversationId });
       }
     };
   }, [wsRef, conversationId]);
