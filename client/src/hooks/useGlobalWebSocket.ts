@@ -15,6 +15,7 @@ export function useGlobalWebSocket() {
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
+    let shouldReconnect = true;  // Flag to control reconnection
     
     function connect() {
       const ws = new WebSocket(wsUrl);
@@ -280,19 +281,47 @@ export function useGlobalWebSocket() {
       };
 
       ws.onclose = () => {
-        console.log('[WebSocket] 🔌 连接断开，3秒后重连...');
-        // Auto reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(() => {
-          console.log('[WebSocket] 🔄 尝试重新连接...');
-          connect();
-        }, 3000);
+        console.log('[WebSocket] 🔌 连接断开');
+        
+        // Only reconnect if we should (component not unmounted)
+        if (shouldReconnect) {
+          console.log('[WebSocket] 📅 3秒后重连...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            // Check auth status before reconnecting
+            fetch('/api/auth/user', { credentials: 'include' })
+              .then(res => {
+                if (res.ok) {
+                  // User is logged in, safe to reconnect
+                  console.log('[WebSocket] ✅ 用户已登录，重新连接');
+                  connect();
+                } else if (res.status === 401) {
+                  // User is logged out (401 Unauthorized), stop reconnecting
+                  console.log('[WebSocket] ❌ 用户未登录（401），停止重连');
+                  shouldReconnect = false;
+                } else {
+                  // Other HTTP errors (5xx, network issues) - keep retrying
+                  console.log(`[WebSocket] ⚠️ 认证检查返回${res.status}，继续尝试重连`);
+                  connect();
+                }
+              })
+              .catch((error) => {
+                // Network errors or timeouts - keep retrying
+                console.log('[WebSocket] ⚠️ 认证检查网络错误，继续尝试重连:', error.message);
+                connect();
+              });
+          }, 3000);
+        } else {
+          console.log('[WebSocket] 🛑 停止重连（组件已卸载）');
+        }
       };
     }
 
     connect();
 
-    // Cleanup: close connection but don't leave conversations
+    // Cleanup: stop reconnection and close connection
     return () => {
+      shouldReconnect = false;  // Prevent reconnection after cleanup
+      
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current);
       }

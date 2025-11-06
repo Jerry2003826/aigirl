@@ -159,12 +159,38 @@ async function processNextJob() {
       }
     }
     
-    const aiResponse = await generateAIResponse({
-      conversationId: conversation.id,
-      personaId: respondingPersonaId,
-      userMessage: userMessage.content || '[User sent an image]',
-      imageData,
-    });
+    // Generate AI response with enhanced error logging
+    let aiResponse: string;
+    try {
+      console.log(`[AI Worker] Calling generateAIResponse with:`, {
+        conversationId: conversation.id,
+        personaId: respondingPersonaId,
+        userMessagePreview: (userMessage.content || '[User sent an image]').substring(0, 50),
+        hasImage: !!imageData
+      });
+      
+      aiResponse = await generateAIResponse({
+        conversationId: conversation.id,
+        personaId: respondingPersonaId,
+        userMessage: userMessage.content || '[User sent an image]',
+        imageData,
+      });
+      
+      console.log(`[AI Worker] AI response generated successfully, length: ${aiResponse.length} chars`);
+    } catch (aiError: any) {
+      console.error(`[AI Worker] ❌ FAILED to generate AI response:`, {
+        errorMessage: aiError.message,
+        errorStack: aiError.stack,
+        conversationId: conversation.id,
+        personaId: respondingPersonaId,
+        jobId: job.id
+      });
+      
+      // Provide more specific error message for job status
+      const errorDetail = aiError.message || 'Unknown AI generation error';
+      await storage.updateJobStatus(job.id, 'failed', `AI generation failed: ${errorDetail}`);
+      return;
+    }
     
     // Get persona info for message broadcast
     const persona = await storage.getPersona(respondingPersonaId);

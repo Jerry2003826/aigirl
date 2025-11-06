@@ -421,7 +421,7 @@ export async function generateAIResponse(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 8192,
+      maxTokens: 16384,  // Increased for better Chinese response generation
       imageData,
       ragContext,
       searchEnabled,
@@ -508,7 +508,7 @@ export async function generateAIResponseStream(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 8192,
+      maxTokens: 16384,  // Increased for better Chinese response generation
       imageData,
       ragContext,
       searchEnabled,
