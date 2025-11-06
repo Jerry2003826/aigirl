@@ -5,7 +5,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 export async function sendVerificationEmail(email: string, code: string): Promise<void> {
   try {
     await resend.emails.send({
-      from: 'AI伴侣 <onboarding@resend.dev>',
+      from: 'AI伴侣 <noreply@ai-girlchat.com>',
       to: email,
       subject: '验证您的邮箱 - AI伴侣',
       html: `
