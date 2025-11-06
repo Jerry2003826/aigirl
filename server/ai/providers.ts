@@ -267,6 +267,92 @@ ${originalText}`;
       throw new Error(`Gemini stream failed: ${error.message}`);
     }
   }
+
+  /**
+   * Generate embedding for a single text using Gemini Embeddings API
+   * Model: text-embedding-004 (768 dimensions)
+   */
+  async embedText(text: string): Promise<number[]> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
+    }
+
+    try {
+      // Gemini Embeddings API expects 'contents' array with Content objects
+      const result = await this.client.models.embedContent({
+        model: "text-embedding-004",
+        contents: [{
+          role: "user",
+          parts: [{ text }]
+        }]
+      });
+
+      // Extract values from first embedding in the embeddings array
+      if (!result.embeddings || result.embeddings.length === 0) {
+        console.warn("[Gemini Embeddings] No embeddings returned for text:", text.substring(0, 50));
+        throw new Error("No embeddings returned from API");
+      }
+      
+      const embedding = result.embeddings[0]?.values || [];
+      
+      if (embedding.length === 0) {
+        console.warn("[Gemini Embeddings] Empty embedding values for text:", text.substring(0, 50));
+        throw new Error("Empty embedding values returned from API");
+      }
+      
+      console.log(`[Gemini Embeddings] Successfully generated embedding with ${embedding.length} dimensions`);
+      return embedding;
+    } catch (error: any) {
+      console.error("[Gemini Embeddings] Error:", error?.message || error);
+      throw new Error(`Gemini embeddings failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Generate embeddings for multiple texts in batch
+   */
+  async embedBatch(texts: string[]): Promise<number[][]> {
+    if (!this.isConfigured || !this.client) {
+      throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
+    }
+
+    try {
+      const embeddings = await Promise.all(
+        texts.map(text => this.embedText(text))
+      );
+      return embeddings;
+    } catch (error: any) {
+      console.error("Gemini batch embeddings error:", error);
+      throw new Error(`Gemini batch embeddings failed: ${error.message}`);
+    }
+  }
+}
+
+/**
+ * Calculate cosine similarity between two vectors
+ * Returns a value between -1 and 1 (1 = identical, 0 = orthogonal, -1 = opposite)
+ */
+export function cosineSimilarity(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error("Vectors must have the same length");
+  }
+
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+
+  for (let i = 0; i < vecA.length; i++) {
+    dotProduct += vecA[i] * vecB[i];
+    normA += vecA[i] * vecA[i];
+    normB += vecB[i] * vecB[i];
+  }
+
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  if (denominator === 0) {
+    return 0;
+  }
+
+  return dotProduct / denominator;
 }
 
 // OpenAI Provider (using Replit AI Integrations)
