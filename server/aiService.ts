@@ -622,7 +622,7 @@ ${Object.entries(responseCounts).map(([id, count]) => {
           content: selectionPrompt
         }
       ],
-      maxTokens: 100,
+      maxTokens: 2000,
     });
     
     const selectedId = response.trim();
@@ -751,7 +751,7 @@ ${personaDescriptions}
       model,
       systemPrompt,
       messages: [{ role: "user", content: evaluationPrompt }],
-      maxTokens: 500,
+      maxTokens: 2000,
     });
     
     console.log('[Multi-AI Selection] AI evaluation response:', response);
@@ -934,7 +934,7 @@ ${personaDescriptions}
       model,
       systemPrompt,
       messages: [{ role: "user", content: selectionPrompt }],
-      maxTokens: 100,
+      maxTokens: 2000,
     });
     
     const selectedId = response.trim();
@@ -1495,14 +1495,14 @@ export async function generateMomentComment(
       console.log(`[Generate Comment v2] 📤 Sending to AI (attempt ${attempt})`);
       console.log(`[Generate Comment v2] Prompt preview: ${userPrompt.substring(0, 150)}...`);
       
-      // Call AI with sufficient maxTokens (2000 to ensure enough output space)
+      // Call AI with sufficient maxTokens (10000 to ensure enough output space for Chinese)
       const comment = await provider.generateResponse({
         model,
         systemPrompt,
         messages: [
           { role: "user", content: userPrompt }
         ],
-        maxTokens: 2000,  // Increased to 2000 to provide ample generation space
+        maxTokens: 10000,  // Increased to 10000 for Chinese content generation
         imageData,
       });
 
@@ -1730,7 +1730,7 @@ export async function generateAIMomentContent(
       messages: [
         { role: "user", content: userPrompt },
       ],
-      maxTokens: 2000, // 与评论生成保持一致，提供充足生成空间
+      maxTokens: 10000, // 为中文内容生成提供充足空间
     });
 
     const trimmedContent = content.trim();
@@ -2023,7 +2023,7 @@ async function generateCommentReply(
         messages: [
           { role: "user", content: userPrompt },
         ],
-        maxTokens: 2000, // Increased to 2000 to provide ample generation space
+        maxTokens: 10000, // Increased to 10000 for Chinese content generation
       });
 
       const trimmedReply = reply.trim();
@@ -2153,7 +2153,7 @@ export async function generatePersonaWithAI(
       model,
       systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
-      maxTokens: 2000,
+      maxTokens: 10000,
       searchEnabled: true, // Enable Google Search grounding
     });
     
