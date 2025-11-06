@@ -148,6 +148,17 @@ export default function Login() {
             </form>
           </Form>
 
+          {/* 忘记密码 */}
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => setLocation("/forgot-password")}
+              className="text-sm text-gray-400 hover:text-pink-400 transition-colors"
+              data-testid="link-forgot-password"
+            >
+              忘记密码？
+            </button>
+          </div>
+
           {/* 注册链接 */}
           <div className="mt-6">
             <div className="relative mb-6">

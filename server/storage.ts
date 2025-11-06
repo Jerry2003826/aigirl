@@ -38,6 +38,8 @@ export interface IStorage {
   updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined>;
   createUnverifiedUser(email: string, passwordHash: string, verificationCode: string, expiresAt: Date): Promise<User>;
   verifyUser(email: string): Promise<User | undefined>;
+  updatePasswordResetCode(email: string, code: string, expiresAt: Date): Promise<User | undefined>;
+  updateUserPassword(email: string, passwordHash: string): Promise<User | undefined>;
   
   // AI Persona operations
   getPersona(id: string): Promise<AiPersona | undefined>;
@@ -654,6 +656,33 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({
         emailVerified: true,
+        verificationCode: null,
+        verificationCodeExpiresAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.email, email))
+      .returning();
+    return result[0];
+  }
+
+  async updatePasswordResetCode(email: string, code: string, expiresAt: Date): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({
+        verificationCode: code,
+        verificationCodeExpiresAt: expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.email, email))
+      .returning();
+    return result[0];
+  }
+
+  async updateUserPassword(email: string, passwordHash: string): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({
+        passwordHash,
         verificationCode: null,
         verificationCodeExpiresAt: null,
         updatedAt: new Date(),
