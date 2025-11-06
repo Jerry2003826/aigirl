@@ -261,39 +261,17 @@ async function processNextJob() {
         .map(part => part.trim())  // Trim whitespace
         .filter(part => part.length > 0);  // Remove empty parts
       
-      // Save and broadcast AI messages with 2-3 second random delay between each part
+      // STEP 1: Save ALL messages to database first (atomic operation)
+      // This ensures offline users see all messages when they refresh, not just the first one
+      const savedMessages: Array<{message: any, persona: any}> = [];
+      
       if (messageParts.length === 0) {
-        // No parts after splitting - check if original response is empty
-        const trimmedResponse = aiResponse.trim();
-        if (trimmedResponse.length > 0) {
-          // Save original response only if it's not empty
-          const aiMessage = await storage.createMessage({
-            conversationId: conversation.id,
-            senderId: respondingPersonaId,
-            senderType: "ai",
-            content: aiResponse,
-            isRead: false,
-            status: "sent",
-          });
-          
-          // Add persona info for broadcast
-          const messageWithPersona = {
-            ...aiMessage,
-            personaName: persona.name,
-            personaAvatar: persona.avatarUrl
-          };
-          
-          allAiMessages.push(aiMessage);
-          broadcastNewMessage(conversation.id, messageWithPersona);
-        }
+        // Empty response after filtering - skip
+        console.log(`[AI Worker] Empty AI response after filtering, skipping`);
       } else {
-        // Save and broadcast each part with 2-3 second random delay
+        // Save all message parts to database immediately
+        console.log(`[AI Worker] Saving ${messageParts.length} message part(s) to database`);
         for (let i = 0; i < messageParts.length; i++) {
-          if (i > 0) {
-            // Wait 2-3 seconds randomly before saving and sending next message part
-            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-          }
-          
           const aiMessage = await storage.createMessage({
             conversationId: conversation.id,
             senderId: respondingPersonaId,
@@ -303,16 +281,30 @@ async function processNextJob() {
             status: "sent",
           });
           
-          // Add persona info for broadcast
-          const messageWithPersona = {
-            ...aiMessage,
-            personaName: persona.name,
-            personaAvatar: persona.avatarUrl
-          };
-          
           allAiMessages.push(aiMessage);
-          broadcastNewMessage(conversation.id, messageWithPersona);
+          savedMessages.push({ message: aiMessage, persona });
         }
+        console.log(`[AI Worker] Successfully saved ${savedMessages.length} messages to database`);
+      }
+      
+      // STEP 2: Broadcast messages to WebSocket with delay (for online users)
+      // This creates the natural conversation feel for online users
+      // Offline users will get all messages at once when they refresh
+      console.log(`[AI Worker] Broadcasting ${savedMessages.length} messages with delays`);
+      for (let i = 0; i < savedMessages.length; i++) {
+        if (i > 0) {
+          // Wait 2-3 seconds randomly before broadcasting next message
+          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+        }
+        
+        const { message, persona } = savedMessages[i];
+        const messageWithPersona = {
+          ...message,
+          personaName: persona.name,
+          personaAvatar: persona.avatarUrl
+        };
+        
+        broadcastNewMessage(conversation.id, messageWithPersona);
       }
       
       console.log(`[AI Worker] [${personaIndex + 1}/${respondingPersonaIds.length}] Successfully generated messages from ${persona.name}`);
