@@ -31,11 +31,12 @@ export function useGlobalWebSocket() {
           
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
-            console.log('[Global WS] Received new_message:', {
-              id: message.id,
-              clientMessageId: message.clientMessageId, // CRITICAL DEBUG
+            console.log('[WebSocket] 📨 收到new_message事件', {
+              messageId: message.id,
+              clientMessageId: message.clientMessageId,
               senderType: message.senderType,
-              content: message.content?.substring(0, 20)
+              content: message.content?.substring(0, 30),
+              conversationId: message.conversationId,
             });
             
             // Check if user is currently viewing this conversation
@@ -44,7 +45,13 @@ export function useGlobalWebSocket() {
             const currentConversationId = params.get('conversationId');
             const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
             
-            console.log('[Global WS] Updating message cache for conversation:', message.conversationId);
+            console.log('[WebSocket] 🔍 开始更新缓存', {
+              conversationId: message.conversationId,
+              isInThisChat,
+              currentPath,
+              currentConversationId,
+            });
+            
             // CRITICAL: Replace optimistic message by clientMessageId to prevent double-render
             queryClient.setQueriesData(
               {
@@ -55,12 +62,25 @@ export function useGlobalWebSocket() {
                 }
               },
               (oldData: Message[] | undefined) => {
-                if (!oldData) return oldData;
+                if (!oldData) {
+                  console.log('[WebSocket] ⚠️ 缓存为空，无法更新');
+                  return oldData;
+                }
+                
+                console.log('[WebSocket] 📋 当前缓存状态', {
+                  cacheLength: oldData.length,
+                  cachePreview: oldData.slice(0, 3).map(m => ({
+                    id: m.id,
+                    clientMessageId: m.clientMessageId,
+                    senderType: m.senderType,
+                    content: m.content?.substring(0, 20),
+                  })),
+                });
                 
                 // Check if message already exists by ID to prevent duplicates
                 const messageExists = oldData.some(m => m.id === message.id);
                 if (messageExists) {
-                  console.log('[Global WS] Message already in cache, skipping:', message.id);
+                  console.log('[WebSocket] ⏭️ 消息已存在，跳过', { messageId: message.id });
                   return oldData;
                 }
                 
@@ -69,17 +89,36 @@ export function useGlobalWebSocket() {
                 if (message.clientMessageId) {
                   const optimisticIndex = oldData.findIndex(m => m.clientMessageId === message.clientMessageId);
                   if (optimisticIndex !== -1) {
-                    console.log('[Global WS] Replacing optimistic message with real message:', message.clientMessageId);
+                    console.log('[WebSocket] 🔄 找到乐观消息，执行替换', {
+                      clientMessageId: message.clientMessageId,
+                      optimisticIndex,
+                      oldMessage: {
+                        id: oldData[optimisticIndex].id,
+                        status: oldData[optimisticIndex].status,
+                      },
+                      newMessage: {
+                        id: message.id,
+                        status: message.status,
+                      },
+                    });
                     // Replace optimistic message with real message (in-place)
                     const newData = [...oldData];
                     newData[optimisticIndex] = message;
+                    console.log('[WebSocket] ✅ 替换完成，新缓存长度:', newData.length);
                     return newData;
+                  } else {
+                    console.log('[WebSocket] ⚠️ 未找到匹配的乐观消息', {
+                      clientMessageId: message.clientMessageId,
+                      existingClientMessageIds: oldData.map(m => m.clientMessageId).filter(Boolean),
+                    });
                   }
                 }
                 
-                console.log('[Global WS] Adding message to cache:', message.id);
+                console.log('[WebSocket] ➕ 添加新消息到缓存', { messageId: message.id });
                 // Backend returns DESC (newest first), prepend to maintain DESC order
-                return [message, ...oldData];
+                const newData = [message, ...oldData];
+                console.log('[WebSocket] ✅ 添加完成，新缓存长度:', newData.length);
+                return newData;
               }
             );
             

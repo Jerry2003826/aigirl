@@ -139,6 +139,26 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Merge server messages with optimistic messages
   // Backend returns DESC (newest first), we need ASC (oldest first) for chat display
   const messages = useMemo(() => {
+    console.log('[UI渲染] 🔄 消息合并开始', {
+      rawMessagesCount: rawMessages.length,
+      optimisticMessagesCount: optimisticMessages.length,
+      failedMessagesCount: failedMessages.size,
+      rawMessagesPreview: rawMessages.slice(0, 3).map(m => ({
+        id: m.id,
+        clientMessageId: m.clientMessageId,
+        senderType: m.senderType,
+        content: m.content?.substring(0, 20),
+        status: m.status,
+      })),
+      optimisticMessagesPreview: optimisticMessages.map(m => ({
+        id: m.id,
+        clientMessageId: m.clientMessageId,
+        senderType: m.senderType,
+        content: m.content?.substring(0, 20),
+        status: m.status,
+      })),
+    });
+    
     // Step 1: Reverse rawMessages to get ASC order (oldest first)
     const reversedRaw = [...rawMessages].reverse();
     
@@ -154,8 +174,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
     
     // Step 4: Return as array - already in ASC order (oldest first, newest last)
-    return Array.from(messageMap.values());
-  }, [rawMessages, optimisticMessages]);
+    const finalMessages = Array.from(messageMap.values());
+    
+    console.log('[UI渲染] ✅ 消息合并完成', {
+      finalCount: finalMessages.length,
+      finalMessagesPreview: finalMessages.slice(-3).map(m => ({
+        id: m.id,
+        clientMessageId: m.clientMessageId,
+        senderType: m.senderType,
+        content: m.content?.substring(0, 20),
+        status: m.status,
+      })),
+    });
+    
+    return finalMessages;
+  }, [rawMessages, optimisticMessages, failedMessages]);
 
   // Separate query for chat history dialog - fetch ALL messages
   const { data: allMessages = [], isLoading: allMessagesLoading } = useQuery<Message[]>({
@@ -392,6 +425,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       });
     },
     onSuccess: async (data, { conversationId, content, clientMessageId }) => {
+      console.log('[API成功] ✅ 消息API调用成功', {
+        clientMessageId,
+        conversationId,
+        responseData: data,
+      });
+      
       // Remove from failed messages if it was a retry
       setFailedMessages(prev => {
         const newMap = new Map(prev);
@@ -406,16 +445,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // Note: 完全依赖WebSocket广播来替换乐观消息
       // 这样保证单一数据源，避免竞态条件
       
+      console.log('[API成功] 🚫 不清理乐观消息，等待WebSocket替换');
+      
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
       // 前端只需要设置状态，等待WebSocket广播AI消息
       
+      console.log('[API成功] 🔄 更新状态：解锁isLoading，启用isStreaming');
       setIsLoading(false); // 用户消息发送成功，结束等待状态
       setIsStreaming(true); // 等待AI回复（后台worker处理）
       setAiMessageCount(0); // 重置AI消息计数
       
       // WebSocket会收到AI消息并触发streamingTimeout逻辑
       // 无需手动调用AI接口
+      console.log('[API成功] ⏳ 等待WebSocket广播真实消息和AI回复');
     },
     onError: (error: any, { clientMessageId, content, imageData, conversationId }) => {
       // 发送失败时解锁输入框
@@ -466,6 +509,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     const currentInput = messageInput.trim();
     const currentImage = imageData;
     
+    console.log('[发送消息] 📤 开始发送流程', {
+      clientMessageId,
+      conversationId: selectedConversationId,
+      hasText: !!currentInput,
+      hasImage: !!currentImage,
+      inputLength: currentInput.length,
+    });
+    
     // 立即显示用户消息（乐观更新）- 使用clientMessageId作为ID
     const optimisticMessage: Message = {
       id: clientMessageId, // CRITICAL: Use clientMessageId as temporary ID
@@ -480,10 +531,28 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       createdAt: new Date(),
     };
     
-    setOptimisticMessages(prev => [...prev, optimisticMessage]);
+    console.log('[发送消息] 🎯 创建乐观消息', {
+      clientMessageId,
+      messageId: optimisticMessage.id,
+      content: optimisticMessage.content?.substring(0, 30),
+      status: optimisticMessage.status,
+    });
+    
+    setOptimisticMessages(prev => {
+      const updated = [...prev, optimisticMessage];
+      console.log('[发送消息] 📝 更新optimisticMessages', {
+        previousCount: prev.length,
+        newCount: updated.length,
+        addedMessageId: optimisticMessage.id,
+      });
+      return updated;
+    });
+    
     setMessageInput(""); // 立即清空输入框
     handleRemoveImage(); // 立即清空图片
     setIsLoading(true); // 锁定输入框，等待AI回复
+    
+    console.log('[发送消息] 🔒 输入框已锁定，准备API调用');
     
     sendMessageMutation.mutate({
       conversationId: selectedConversationId,
@@ -503,14 +572,35 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Auto-scroll to bottom (no animation) for new messages
   // CRITICAL: Use scrollTop instead of scrollIntoView to avoid reflow/flicker
   useEffect(() => {
+    console.log('[渲染触发] 🎨 messages变化触发重渲染', {
+      messagesLength: messages.length,
+      prevLength: prevMessagesLengthRef.current,
+      isLoadingMore,
+      diff: messages.length - prevMessagesLengthRef.current,
+      lastThreeMessages: messages.slice(-3).map(m => ({
+        id: m.id,
+        clientMessageId: m.clientMessageId,
+        senderType: m.senderType,
+        content: m.content?.substring(0, 20),
+        status: m.status,
+      })),
+    });
+    
     // Only scroll if we got new messages (not loading older ones)
     if (!isLoadingMore && messages.length > prevMessagesLengthRef.current) {
+      console.log('[渲染触发] 📜 检测到新消息，执行滚动');
       // Use scrollTop directly - much faster than scrollIntoView, no reflow
       const viewport = scrollViewportRef.current;
       if (viewport) {
         viewport.scrollTop = viewport.scrollHeight;
+        console.log('[渲染触发] ✅ 滚动完成');
       }
+    } else {
+      console.log('[渲染触发] ⏭️ 不需要滚动', {
+        reason: isLoadingMore ? '正在加载更多' : '消息数量未增加',
+      });
     }
+    
     prevMessagesLengthRef.current = messages.length;
     setIsLoadingMore(false);
   }, [messages]);
