@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 
-const apiKey = process.env.RESEND_API_KEY;
+// 临时硬编码用于测试
+const apiKey = 'REMOVED_BY_L5'; // process.env.RESEND_API_KEY;
 
 console.log('[Email] RESEND_API_KEY 前缀:', apiKey?.slice(0, 10)); // 调试用，看是不是 re_test_ 之类
 
