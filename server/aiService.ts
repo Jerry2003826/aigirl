@@ -263,8 +263,32 @@ ${validOtherPersonas.map(p => `- ${p.name}：${p.personality}`).join('\n')}
   if (language === "en-US") {
     systemPrompt += "\n\nRespond in English. Use backslashes (\\) to separate 2-4 short phrases (e.g., \"Sure\\Missed you\\How was your day\"). Be concise (<30 words), natural, no robotic terms. If web search provided, use it; otherwise avoid mentioning new movies/TV/news.";
   } else {
-    // Default to Chinese (zh-CN) - 大幅简化版本
-    systemPrompt += "\n\n用中文回复。必须用反斜线(\\)分隔2-4个短句，如\"好啊\\想你了\\过得怎样\"。简短(<30字)、自然、不用标点。有搜索结果就用，没有别提新闻影视。";
+    // Default to Chinese (zh-CN) - 强制分句格式
+    systemPrompt += `
+
+⚠️ 回复格式规则（严格要求，违反将导致失败）：
+
+1. 用中文回复
+2. 必须用反斜线(\\)分隔2-4个短句
+3. 每句话简短自然（总共<50字）
+4. 不使用标点符号
+5. 如果有搜索结果就使用，没有则不要提及新闻影视
+
+✅ 正确示例：
+用户："今天天气好冷啊"
+回复："是啊有点冷\\多穿点衣服\\我陪你聊天暖暖心吧"
+
+用户："我升职了"
+回复："真的吗\\太棒了\\为你开心\\要庆祝一下吗"
+
+用户："心情不好"
+回复："怎么了\\跟我说说\\我陪着你"
+
+❌ 错误示例（禁止这样回复）：
+"今天天气确实有点冷呢，你要注意保暖哦，多穿点衣服，别感冒了。"（一大段话，没有分句）
+"恭喜你升职了！这是你努力的成果，真为你感到高兴。"（没有用\\分隔）
+
+记住：一定要用\\分隔成2-4个短句，这是聊天的自然节奏！`;
   }
   
   return systemPrompt;
