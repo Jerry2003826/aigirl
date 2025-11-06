@@ -176,6 +176,23 @@ export function useGlobalWebSocket() {
               streamingTimeoutRef.current = setTimeout(() => {
                 console.log('[Global WS] AI streaming complete (timeout)');
               }, 5000);
+              
+              // CRITICAL FIX: If user is viewing this chat, mark messages as read immediately
+              // This prevents unread count from showing when user exits the chat
+              if (isInThisChat) {
+                console.log('[WebSocket] 👁️ 用户正在查看此聊天，立即标记消息为已读');
+                // Call mark as read API
+                fetch(`/api/conversations/${message.conversationId}/read`, {
+                  method: 'POST',
+                  credentials: 'include',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({}),
+                }).catch(error => {
+                  console.error('[WebSocket] 标记已读失败:', error);
+                });
+              }
             }
           }
           
