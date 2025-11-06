@@ -134,6 +134,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     staleTime: 0, // 数据立即过期，确保invalidate后会refetch
     refetchOnWindowFocus: false, // 窗口聚焦时不refetch
     refetchOnReconnect: false, // 重新连接时不refetch
+    placeholderData: (previousData) => previousData, // 🔧 保留上一次数据，避免UI闪烁
   });
 
   // Merge server messages with optimistic messages
