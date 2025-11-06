@@ -1317,14 +1317,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Scenario 2: User is replying to another comment
         const parentComment = await storage.getMomentCommentById(parentCommentId);
         if (parentComment && parentComment.authorType === 'ai') {
-          triggerAIReplyToComment(comment.id, userId).catch(err => {
+          // Reply with the same AI persona that made the parent comment
+          triggerAIReplyToComment(comment.id, userId, parentComment.authorId).catch(err => {
             console.error("Error triggering AI reply:", err);
           });
         }
       } else {
         // Scenario 1: User is commenting directly on the moment (top-level)
         if (moment.authorType === 'ai') {
-          triggerAIReplyToComment(comment.id, userId).catch(err => {
+          // Reply with the same AI persona that posted the moment
+          triggerAIReplyToComment(comment.id, userId, moment.authorId).catch(err => {
             console.error("Error triggering AI reply:", err);
           });
         }

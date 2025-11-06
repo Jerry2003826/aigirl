@@ -1423,7 +1423,8 @@ export async function triggerAIPostMoment(
  */
 export async function triggerAIReplyToComment(
   commentId: string,
-  userId: string
+  userId: string,
+  personaId: string
 ): Promise<void> {
   (async () => {
     try {
@@ -1485,25 +1486,23 @@ export async function triggerAIReplyToComment(
       
       console.log(`[AI评论回复] ✅ 通过连续AI检查，继续处理`);
 
-
-      // Get user's AI personas
-      const personas = await storage.getPersonasByUser(userId);
-      console.log(`[AI评论回复] 获取用户AI女友`, {
-        userId,
-        personaCount: personas.length,
-        personaNames: personas.map(p => p.name),
-      });
-      
-      if (personas.length === 0) {
-        console.log(`[AI评论回复] ❌ 用户没有AI女友，无法回复`);
+      // Verify the specified persona exists and belongs to the user
+      const selectedPersona = await storage.getPersona(personaId);
+      if (!selectedPersona) {
+        console.log(`[AI评论回复] ❌ 指定的AI女友不存在`, { personaId });
         return;
       }
 
-      // Always reply (100% probability) - changed from 50% per user request
-      console.log(`[AI评论回复] ✅ 100%概率回复模式已启用`);
+      if (selectedPersona.userId !== userId) {
+        console.log(`[AI评论回复] ❌ AI女友不属于该用户`, {
+          personaId,
+          personaUserId: selectedPersona.userId,
+          expectedUserId: userId,
+        });
+        return;
+      }
 
-      const selectedPersona = personas[Math.floor(Math.random() * personas.length)];
-      console.log(`[AI评论回复] ✅ 选中AI女友回复`, {
+      console.log(`[AI评论回复] ✅ 使用指定的AI女友回复 (100%概率)`, {
         personaId: selectedPersona.id,
         personaName: selectedPersona.name,
       });
