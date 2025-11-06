@@ -80,12 +80,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
   const [replyingAIName, setReplyingAIName] = useState<string | null>(null); // 追踪正在回复的AI名字（仅群聊）
+  const [pendingAIMessages, setPendingAIMessages] = useState<Message[]>([]); // 🆕 待显示的AI消息队列（用于平滑显示）
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMarkedConversationRef = useRef<string | null>(null);
+  const messageQueueProcessorRef = useRef<NodeJS.Timeout | null>(null); // 🆕 队列处理器定时器
   
   // Use global WebSocket for conversation subscription
   useConversationSubscription(wsRef, selectedConversationId);
@@ -752,6 +754,117 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
+
+  // 🆕 监听WebSocket的AI消息队列事件
+  useEffect(() => {
+    const handleAIMessageQueue = (event: CustomEvent) => {
+      const { message } = event.detail as { message: Message };
+      
+      console.log('[队列监听] 📨 收到AI消息，加入显示队列', {
+        messageId: message.id,
+        content: message.content?.substring(0, 30),
+        currentQueueLength: pendingAIMessages.length,
+      });
+      
+      // 加入队列
+      setPendingAIMessages(prev => [...prev, message]);
+      
+      // 设置streaming状态
+      if (!isStreaming) {
+        setIsStreaming(true);
+        console.log('[队列监听] 🔄 启动streaming状态');
+      }
+    };
+    
+    window.addEventListener('ai-message-queue', handleAIMessageQueue as EventListener);
+    
+    return () => {
+      window.removeEventListener('ai-message-queue', handleAIMessageQueue as EventListener);
+    };
+  }, [pendingAIMessages.length, isStreaming]);
+
+  // 🆕 消息队列处理器：每1秒从队列中取出一条AI消息显示
+  useEffect(() => {
+    if (pendingAIMessages.length === 0) {
+      // 队列为空，清理定时器
+      if (messageQueueProcessorRef.current) {
+        clearTimeout(messageQueueProcessorRef.current);
+        messageQueueProcessorRef.current = null;
+      }
+      
+      // 队列清空后，5秒后解锁isStreaming（如果没有新消息）
+      if (streamingTimeoutRef.current) {
+        clearTimeout(streamingTimeoutRef.current);
+      }
+      streamingTimeoutRef.current = setTimeout(() => {
+        console.log('[队列处理] ⏱️ AI流式响应超时完成', {
+          conversationId: selectedConversationId,
+          timeout: '5s',
+        });
+        setIsStreaming(false);
+        setReplyingAIName(null);
+      }, 5000);
+      
+      return;
+    }
+    
+    // 队列不为空，启动处理器
+    console.log('[队列处理] 🚀 启动消息队列处理器', {
+      queueLength: pendingAIMessages.length,
+      conversationId: selectedConversationId,
+    });
+    
+    // 设置1秒定时器
+    messageQueueProcessorRef.current = setTimeout(() => {
+      // 从队列中取出第一条消息
+      const [firstMessage, ...remainingMessages] = pendingAIMessages;
+      
+      console.log('[队列处理] 📤 显示队列中的消息', {
+        messageId: firstMessage.id,
+        content: firstMessage.content?.substring(0, 30),
+        remainingCount: remainingMessages.length,
+      });
+      
+      // 添加到React Query缓存（模拟WebSocket收到消息的效果）
+      queryClient.setQueryData(
+        ["/api/messages", selectedConversationId, messageLimit],
+        (old: Message[] = []) => {
+          // 检查消息是否已存在
+          if (old.some(m => m.id === firstMessage.id)) {
+            console.log('[队列处理] ⏭️ 消息已存在，跳过', { messageId: firstMessage.id });
+            return old;
+          }
+          
+          // 添加到顶部（因为backend返回DESC）
+          const newMessages = [firstMessage, ...old];
+          console.log('[队列处理] ✅ 消息已添加到缓存', {
+            messageId: firstMessage.id,
+            newCacheLength: newMessages.length,
+          });
+          return newMessages;
+        }
+      );
+      
+      // 从队列中移除
+      setPendingAIMessages(remainingMessages);
+      
+      // 更新AI消息计数
+      setAiMessageCount(prev => prev + 1);
+      
+      // 更新正在回复的AI名字（群聊）
+      if (selectedConversation?.isGroup && firstMessage.personaName) {
+        setReplyingAIName(firstMessage.personaName);
+      }
+    }, 1000); // 🎯 1秒间隔
+    
+    // 清理函数
+    return () => {
+      if (messageQueueProcessorRef.current) {
+        clearTimeout(messageQueueProcessorRef.current);
+        messageQueueProcessorRef.current = null;
+      }
+    };
+  }, [pendingAIMessages, selectedConversationId, messageLimit, selectedConversation?.isGroup]);
 
   // Manage AI streaming state based on new AI messages
   useEffect(() => {

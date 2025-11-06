@@ -119,6 +119,22 @@ export function useGlobalWebSocket() {
                   }
                 }
                 
+                // 🆕 如果是AI消息且用户正在查看该对话，则通过自定义事件传递（用于消息队列）
+                if (message.senderType === 'ai' && isInThisChat) {
+                  console.log('[WebSocket] 📨 AI消息在当前对话中，触发队列事件', {
+                    messageId: message.id,
+                    content: message.content?.substring(0, 30),
+                  });
+                  
+                  // 触发自定义事件，让chat.tsx将消息加入队列
+                  window.dispatchEvent(new CustomEvent('ai-message-queue', {
+                    detail: { message }
+                  }));
+                  
+                  // 不直接添加到缓存，返回原数据
+                  return oldData;
+                }
+                
                 console.log('[WebSocket] ➕ 添加新消息到缓存', { messageId: message.id });
                 // Backend returns DESC (newest first), prepend to maintain DESC order
                 const newData = [message, ...oldData];
