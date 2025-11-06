@@ -1,10 +1,11 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import path from "path";
+import session from "express-session";
+import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent } from "./websocket";
 import { 
@@ -18,6 +19,47 @@ import {
   updateUserProfileSchema,
   insertMemorySchema
 } from "@shared/schema";
+
+// ========== Session配置 ==========
+const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
+const pgStore = connectPg(session);
+export const sessionStore = new pgStore({
+  conString: process.env.DATABASE_URL,
+  createTableIfMissing: false,
+  ttl: sessionTtl,
+  tableName: "sessions",
+});
+
+export function getSession() {
+  return session({
+    secret: process.env.SESSION_SECRET!,
+    store: sessionStore,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: true,
+      maxAge: sessionTtl,
+    },
+  });
+}
+
+// ========== 认证中间件 ==========
+export const isAuthenticated: RequestHandler = async (req: any, res, next) => {
+  if (!req.session?.user?.id) {
+    return res.status(401).json({ message: "未登录" });
+  }
+  
+  // 从数据库加载用户信息
+  const user = await storage.getUser(req.session.user.id);
+  if (!user) {
+    return res.status(401).json({ message: "用户不存在" });
+  }
+  
+  // 将用户信息附加到req对象上，供后续中间件使用
+  req.user = user;
+  next();
+};
 
 // Configure multer for file uploads
 const uploadStorage = multer.diskStorage({
@@ -55,21 +97,172 @@ const messageLimiter = rateLimit({
   // Use user ID from session for rate limiting
   keyGenerator: (req, res) => {
     // Use authenticated user ID if available
-    const userId = (req as any).user?.claims?.sub;
+    const userId = (req as any).session?.user?.id;
     return userId || 'anonymous';
   },
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Setup authentication
-  await setupAuth(app);
+  // Setup session middleware
+  app.set("trust proxy", 1);
+  app.use(getSession());
+
+  // ========== 新的邮箱验证码认证系统 ==========
+  
+  // 注册 - 发送验证码
+  app.post('/api/auth/register', async (req: any, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      // 验证输入
+      if (!email || !password) {
+        return res.status(400).json({ message: "邮箱和密码不能为空" });
+      }
+      
+      if (password.length < 6) {
+        return res.status(400).json({ message: "密码长度至少为6位" });
+      }
+      
+      // 检查邮箱是否已存在
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser && existingUser.emailVerified) {
+        // 如果用户已验证，拒绝注册
+        return res.status(400).json({ message: "该邮箱已被注册" });
+      }
+      
+      // 如果用户未验证，允许重新发送验证码（覆盖之前的验证码和密码）
+      // 生成验证码
+      const { generateVerificationCode, getVerificationCodeExpiry } = await import('./auth');
+      const code = generateVerificationCode();
+      const expiresAt = getVerificationCodeExpiry();
+      
+      // 临时保存验证码和密码到数据库（创建或更新未验证用户）
+      const { hashPassword } = await import('./auth');
+      const passwordHash = await hashPassword(password);
+      
+      await storage.createUnverifiedUser(email, passwordHash, code, expiresAt);
+      
+      // 发送验证码邮件
+      const { sendVerificationEmail } = await import('./emailService');
+      await sendVerificationEmail(email, code);
+      
+      const message = existingUser 
+        ? "验证码已重新发送到您的邮箱" 
+        : "验证码已发送到您的邮箱";
+      
+      res.json({ message });
+    } catch (error: any) {
+      console.error("❌ [Register] 注册失败:", error);
+      res.status(500).json({ message: error.message || "注册失败" });
+    }
+  });
+  
+  // 验证码验证 - 完成注册
+  app.post('/api/auth/verify', async (req: any, res) => {
+    try {
+      const { email, code } = req.body;
+      
+      if (!email || !code) {
+        return res.status(400).json({ message: "邮箱和验证码不能为空" });
+      }
+      
+      // 获取未验证用户
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ message: "用户不存在" });
+      }
+      
+      if (user.emailVerified) {
+        return res.status(400).json({ message: "该邮箱已验证" });
+      }
+      
+      // 验证验证码
+      const { isVerificationCodeValid } = await import('./auth');
+      if (!isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt)) {
+        return res.status(400).json({ message: "验证码无效或已过期" });
+      }
+      
+      // 标记为已验证
+      await storage.verifyUser(email);
+      
+      // 创建session
+      const verifiedUser = await storage.getUserByEmail(email);
+      req.session.user = { id: verifiedUser!.id };
+      
+      res.json({ 
+        message: "注册成功",
+        user: verifiedUser
+      });
+    } catch (error: any) {
+      console.error("❌ [Verify] 验证失败:", error);
+      res.status(500).json({ message: error.message || "验证失败" });
+    }
+  });
+  
+  // 登录
+  app.post('/api/auth/login', async (req: any, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ message: "邮箱和密码不能为空" });
+      }
+      
+      // 查找用户
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(401).json({ message: "邮箱或密码错误" });
+      }
+      
+      if (!user.emailVerified) {
+        return res.status(401).json({ message: "请先验证邮箱" });
+      }
+      
+      if (!user.passwordHash) {
+        return res.status(401).json({ message: "密码未设置" });
+      }
+      
+      // 验证密码
+      const { verifyPassword } = await import('./auth');
+      const isValid = await verifyPassword(password, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ message: "邮箱或密码错误" });
+      }
+      
+      // 创建session
+      req.session.user = { id: user.id };
+      
+      res.json({ 
+        message: "登录成功",
+        user
+      });
+    } catch (error: any) {
+      console.error("❌ [Login] 登录失败:", error);
+      res.status(500).json({ message: error.message || "登录失败" });
+    }
+  });
+  
+  // 登出
+  app.post('/api/auth/logout', async (req: any, res) => {
+    try {
+      req.session.destroy((err: any) => {
+        if (err) {
+          console.error("❌ [Logout] 登出失败:", err);
+          return res.status(500).json({ message: "登出失败" });
+        }
+        res.json({ message: "登出成功" });
+      });
+    } catch (error: any) {
+      console.error("❌ [Logout] 登出失败:", error);
+      res.status(500).json({ message: error.message || "登出失败" });
+    }
+  });
 
   // Auth route - get current user
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      // req.user已经由isAuthenticated中间件加载
+      res.json(req.user);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -79,7 +272,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user profile route
   app.patch('/api/user/profile', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Validate request body
       const validatedData = updateUserProfileSchema.parse(req.body);
@@ -120,7 +313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Personas routes (protected)
   app.get('/api/personas', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const personas = await storage.getPersonasByUser(userId);
       res.json(personas);
     } catch (error) {
@@ -131,7 +324,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/personas/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const personaId = req.params.id;
       const persona = await storage.getPersona(personaId);
       
@@ -154,7 +347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Assistant: Generate persona configuration
   app.post('/api/ai/generate-persona', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { name, description } = req.body;
       
       if (!name || typeof name !== 'string') {
@@ -176,7 +369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/personas', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Validate using Zod schema
       const validatedData = insertAiPersonaSchema.parse({
@@ -197,7 +390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/personas/:personaId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaId } = req.params;
       
       // Verify ownership
@@ -225,7 +418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/personas/:personaId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaId } = req.params;
       
       // Verify ownership
@@ -248,7 +441,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Conversations routes (protected)
   app.get('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const conversations = await storage.getConversationsByUser(userId);
       
       // Batch fetch all participants and personas first
@@ -307,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/conversations', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaIds, ...conversationData } = req.body;
       
       // Validate personaIds format before processing
@@ -386,7 +579,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/conversations/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       
       // Verify ownership
@@ -409,7 +602,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update conversation (for avatar, title, etc.)
   app.patch('/api/conversations/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       const { avatarUrl, title } = req.body;
       
@@ -443,7 +636,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Participant management
   app.post('/api/conversations/:conversationId/participants', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       const { personaId } = req.body;
       
@@ -491,7 +684,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get single conversation details
   app.get('/api/conversations/:conversationId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       
       // Get conversation
@@ -527,7 +720,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/conversations/:conversationId/participants', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       
       // Verify ownership
@@ -549,7 +742,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete('/api/conversations/:conversationId/participants/:personaId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, personaId } = req.params;
       
       // Verify conversation ownership
@@ -587,7 +780,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Messages routes (protected)
   app.get('/api/conversations/:conversationId/messages', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
@@ -611,7 +804,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/messages', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.body;
       
       // Verify user owns this conversation
@@ -667,7 +860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mark all messages in a conversation as read
   app.post('/api/conversations/:conversationId/read', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId } = req.params;
       
       // Verify user owns this conversation
@@ -690,7 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI persona selection for group chats
   app.post('/api/ai/select-persona', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, userMessage } = req.body;
       
       // Verify conversation ownership
@@ -718,7 +911,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI generation routes
   app.post('/api/ai/generate', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, personaId, content } = req.body;
       
       // Verify conversation ownership
@@ -854,7 +1047,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/ai/generate-stream', isAuthenticated, messageLimiter, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { conversationId, personaId, content } = req.body;
       
       // Verify conversation ownership
@@ -1004,7 +1197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all memories for a specific persona
   app.get('/api/memories/persona/:personaId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaId } = req.params;
       
       // Verify persona ownership
@@ -1027,7 +1220,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new memory
   app.post('/api/memories', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaId, key, value, context, importance } = req.body;
       
       // Verify persona ownership
@@ -1063,7 +1256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update a memory
   app.patch('/api/memories/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { id } = req.params;
       const { key, value, context, importance } = req.body;
       
@@ -1101,7 +1294,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete a memory
   app.delete('/api/memories/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { id } = req.params;
       
       // Verify memory ownership
@@ -1157,7 +1350,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a new moment
   app.post('/api/moments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Validate using Zod schema
       const validatedData = insertMomentSchema.parse({
@@ -1196,7 +1389,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete a moment
   app.delete('/api/moments/:momentId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { momentId } = req.params;
       
       // Verify ownership
@@ -1223,7 +1416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Toggle like on a moment
   app.post('/api/moments/:momentId/like', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { momentId } = req.params;
       
       // Verify moment exists (anyone can like any moment)
@@ -1266,7 +1459,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create a comment on a moment
   app.post('/api/moments/:momentId/comments', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { momentId } = req.params;
       const { content, parentCommentId } = req.body;
       
@@ -1364,7 +1557,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Mark moment comments as read
   app.post('/api/moments/:momentId/comments/mark-read', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { momentId } = req.params;
       
       // Verify moment exists and user is the author
@@ -1388,7 +1581,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete a comment
   app.delete('/api/moments/comments/:commentId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { commentId } = req.params;
       
       // Note: We should verify comment ownership here, but we'll need to fetch it first
@@ -1405,7 +1598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trigger AI to post a moment
   app.post('/api/ai/trigger-moment/:personaId', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { personaId } = req.params;
       
       // Verify persona belongs to user
@@ -1434,7 +1627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Check AI service availability
   app.get('/api/ai/status', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       
       // Check Replit AI Integrations environment variables (preferred method)
       const hasGeminiIntegration = !!(
@@ -1483,7 +1676,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Settings routes (protected)
   app.get('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const settings = await storage.getAiSettings(userId);
       res.json(settings);
     } catch (error) {
@@ -1494,7 +1687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { provider, model, customApiKey, ragEnabled, searchEnabled, language } = req.body;
       
       // Try to update existing settings

@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { parse } from 'cookie';
 import { IncomingMessage } from 'http';
-import { sessionStore } from './replitAuth';
+import { sessionStore } from './routes';
 import { storage } from './storage';
 
 interface AuthenticatedWebSocket extends WebSocket {
@@ -55,14 +55,14 @@ export function setupWebSocket(server: Server) {
         });
       });
 
-      if (!sessionData || !sessionData.passport || !sessionData.passport.user) {
+      if (!sessionData || !sessionData.user || !sessionData.user.id) {
         console.log('Invalid session or user not authenticated');
         ws.close(1008, 'Authentication required');
         return;
       }
 
       // Get userId from session
-      const userId = sessionData.passport.user.claims.sub;
+      const userId = sessionData.user.id;
       ws.userId = userId;
 
       console.log(`WebSocket authenticated for user: ${userId}`);

@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
 import Moments from "@/pages/moments";
@@ -134,6 +135,8 @@ function Router() {
   if (!isAuthenticated) {
     return (
       <Switch>
+        <Route path="/register" component={Register} />
+        <Route path="/login" component={Login} />
         <Route path="/" component={Login} />
         <Route component={Login} />
       </Switch>

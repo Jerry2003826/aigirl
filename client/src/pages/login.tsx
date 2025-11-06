@@ -1,10 +1,76 @@
-import { Heart, Mail } from "lucide-react";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { SiGoogle, SiGithub } from "react-icons/si";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { Heart, Mail, Lock, UserPlus } from "lucide-react";
+
+const loginSchema = z.object({
+  email: z.string().email("请输入有效的邮箱地址"),
+  password: z.string().min(6, "密码长度至少为6位"),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function Login() {
-  const handleLogin = () => {
-    window.location.href = '/api/login';
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      email: "",
+      password: "",
+    },
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: async (data: LoginFormValues) => {
+      const response = await apiRequest("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      return response;
+    },
+    onSuccess: () => {
+      toast({
+        title: "登录成功",
+        description: "欢迎回来！",
+      });
+      // Reload to trigger app re-initialization with authenticated user
+      window.location.href = "/";
+    },
+    onError: (error: any) => {
+      toast({
+        title: "登录失败",
+        description: error.message || "邮箱或密码错误",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = async (data: LoginFormValues) => {
+    setIsLoading(true);
+    try {
+      await loginMutation.mutateAsync(data);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -20,72 +86,98 @@ export default function Login() {
 
           {/* Title */}
           <h1 className="text-2xl font-bold text-center text-white mb-2">
-            AI女友聊天
+            AI伴侣聊天
           </h1>
           <p className="text-center text-gray-400 mb-8 text-sm">
-            登录或注册开始与AI女友的温馨对话
+            登录到您的账户
           </p>
 
-          {/* Main Login Button */}
-          <div className="w-full h-12 bg-gradient-to-r from-pink-500 to-pink-600 rounded-lg shadow-lg shadow-pink-500/30 mb-4 p-[2px]">
-            <Button
-              onClick={handleLogin}
-              className="w-full h-full bg-pink-500 text-white font-medium border-0"
-              data-testid="button-login"
-            >
-              使用 Replit 登录
-            </Button>
-          </div>
+          {/* 登录表单 */}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-300">邮箱</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <Input
+                          {...field}
+                          type="email"
+                          placeholder="请输入邮箱"
+                          className="pl-10 bg-gray-800 border-gray-700 text-white"
+                          data-testid="input-email"
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Email Login Button */}
-          <Button
-            onClick={handleLogin}
-            variant="outline"
-            className="w-full mb-6 border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
-            data-testid="button-email-login"
-          >
-            <Mail className="w-5 h-5 mr-2" />
-            使用邮箱密码登录
-          </Button>
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-gray-300">密码</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                        <Input
+                          {...field}
+                          type="password"
+                          placeholder="请输入密码"
+                          className="pl-10 bg-gray-800 border-gray-700 text-white"
+                          data-testid="input-password"
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-700"></div>
+              <Button
+                type="submit"
+                className="w-full bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 text-white font-medium"
+                disabled={isLoading}
+                data-testid="button-login"
+              >
+                {isLoading ? "登录中..." : "登录"}
+              </Button>
+            </form>
+          </Form>
+
+          {/* 注册链接 */}
+          <div className="mt-6">
+            <div className="relative mb-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-700"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-gray-900 text-gray-400">
+                  还没有账户？
+                </span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-gray-900 text-gray-400">
-                或使用其它账号登录
-              </span>
-            </div>
-          </div>
-
-          {/* Social Login Icons */}
-          <div className="flex justify-center gap-4 mb-8">
+            
             <Button
-              size="icon"
               variant="outline"
-              onClick={handleLogin}
-              className="rounded-full border-gray-700 bg-gray-800"
-              aria-label="Login with Google"
-              data-testid="button-login-google"
+              className="w-full border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
+              onClick={() => setLocation("/register")}
+              data-testid="link-register"
             >
-              <SiGoogle className="w-5 h-5" />
-            </Button>
-            <Button
-              size="icon"
-              variant="outline"
-              onClick={handleLogin}
-              className="rounded-full border-gray-700 bg-gray-800"
-              aria-label="Login with GitHub"
-              data-testid="button-login-github"
-            >
-              <SiGithub className="w-5 h-5" />
+              <UserPlus className="w-4 h-4 mr-2" />
+              创建新账户
             </Button>
           </div>
 
           {/* Footer Text */}
-          <div className="text-center space-y-1">
+          <div className="text-center space-y-1 mt-6">
             <p className="text-xs text-gray-500">
               数据将安全存储在云端
             </p>
@@ -93,20 +185,6 @@ export default function Login() {
               支持多设备同步
             </p>
           </div>
-        </div>
-
-        {/* Additional Info */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-400">
-            通过登录，您同意我们的
-            <button className="text-pink-400 hover-elevate ml-1" data-testid="link-terms">
-              服务条款
-            </button>
-            {" "}和{" "}
-            <button className="text-pink-400 hover-elevate" data-testid="link-privacy">
-              隐私政策
-            </button>
-          </p>
         </div>
       </div>
     </div>

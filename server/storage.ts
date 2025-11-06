@@ -36,6 +36,8 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserProfile(userId: string, profile: UpdateUserProfile): Promise<User | undefined>;
+  createUnverifiedUser(email: string, passwordHash: string, verificationCode: string, expiresAt: Date): Promise<User>;
+  verifyUser(email: string): Promise<User | undefined>;
   
   // AI Persona operations
   getPersona(id: string): Promise<AiPersona | undefined>;
@@ -610,6 +612,53 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(users.id, userId))
+      .returning();
+    return result[0];
+  }
+
+  async createUnverifiedUser(email: string, passwordHash: string, verificationCode: string, expiresAt: Date): Promise<User> {
+    // First check if user already exists
+    const existing = await this.getUserByEmail(email);
+    if (existing) {
+      // Update existing unverified user with new verification code
+      const result = await db
+        .update(users)
+        .set({
+          passwordHash,
+          verificationCode,
+          verificationCodeExpiresAt: expiresAt,
+          emailVerified: false,
+          updatedAt: new Date(),
+        })
+        .where(eq(users.email, email))
+        .returning();
+      return result[0];
+    } else {
+      // Create new unverified user
+      const result = await db
+        .insert(users)
+        .values({
+          email,
+          passwordHash,
+          verificationCode,
+          verificationCodeExpiresAt: expiresAt,
+          emailVerified: false,
+        })
+        .returning();
+      return result[0];
+    }
+  }
+
+  async verifyUser(email: string): Promise<User | undefined> {
+    const result = await db
+      .update(users)
+      .set({
+        emailVerified: true,
+        verificationCode: null,
+        verificationCodeExpiresAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.email, email))
       .returning();
     return result[0];
   }
