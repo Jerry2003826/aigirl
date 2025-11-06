@@ -58,6 +58,7 @@ export default function Register() {
     },
     onSuccess: (_, variables) => {
       setEmail(variables.email);
+      verifyForm.reset({ code: "" }); // Reset verify form when switching to verify step
       setStep('verify');
       toast({
         title: "验证码已发送",
@@ -229,7 +230,10 @@ export default function Register() {
                   type="button"
                   variant="ghost"
                   className="w-full text-gray-400 hover:text-white"
-                  onClick={() => setStep('register')}
+                  onClick={() => {
+                    verifyForm.reset({ code: "" }); // Reset verify form when going back
+                    setStep('register');
+                  }}
                   data-testid="button-back"
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
