@@ -1499,18 +1499,8 @@ export async function triggerAIReplyToComment(
         return;
       }
 
-      // Randomly select 1 persona to reply (50% chance)
-      const randomValue = Math.random();
-      console.log(`[AI评论回复] 随机概率检查`, {
-        randomValue,
-        threshold: 0.5,
-        willReply: randomValue <= 0.5,
-      });
-      
-      if (randomValue > 0.5) {
-        console.log(`[AI评论回复] ❌ 未触发50%概率，不回复`);
-        return; // Don't always reply
-      }
+      // Always reply (100% probability) - changed from 50% per user request
+      console.log(`[AI评论回复] ✅ 100%概率回复模式已启用`);
 
       const selectedPersona = personas[Math.floor(Math.random() * personas.length)];
       console.log(`[AI评论回复] ✅ 选中AI女友回复`, {

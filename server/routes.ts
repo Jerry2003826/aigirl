@@ -1276,7 +1276,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Moment not found" });
       }
       
-      // Check nesting level limit (max 2 levels)
+      // Log nesting level for debugging (no limit enforced - supports arbitrary depth)
       if (parentCommentId) {
         let nestingLevel = 1;
         let currentComment = await storage.getMomentCommentById(parentCommentId);
@@ -1286,9 +1286,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           currentComment = await storage.getMomentCommentById(currentComment.parentCommentId);
         }
         
-        if (nestingLevel >= 2) {
-          return res.status(400).json({ message: "评论嵌套层级不能超过2层" });
-        }
+        console.log(`[评论嵌套] 当前嵌套层级`, {
+          parentCommentId,
+          nestingLevel,
+          supportsArbitraryDepth: true,
+        });
+        
+        // No limit enforced - supports arbitrary-depth comment threading as per replit.md
       }
       
       // Server-side author derivation - prevent spoofing
