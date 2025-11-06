@@ -1585,10 +1585,19 @@ async function generateCommentReply(
   userId: string,
   originalComment: string
 ): Promise<string> {
+  console.log(`[生成评论回复] 🚀 开始生成`, {
+    personaId,
+    userId,
+    originalComment: originalComment?.substring(0, 50),
+  });
+  
   const persona = await storage.getPersona(personaId);
   if (!persona) {
+    console.error(`[生成评论回复] ❌ Persona ${personaId} not found`);
     throw new Error("Persona not found");
   }
+  
+  console.log(`[生成评论回复] 🎭 Persona: ${persona.name}`);
 
   // Get user's AI settings
   const aiSettings = await storage.getAiSettings(userId);
@@ -1598,28 +1607,116 @@ async function generateCommentReply(
   const model = getModelName(aiSettings);
   const language = aiSettings?.language || "zh-CN";
   
-  const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
+  console.log(`[生成评论回复] 🔧 Provider: ${aiSettings?.provider || 'gemini'}, Model: ${model}, Language: ${language}`);
   
-  const userPrompt = language === "en-US"
-    ? `Someone commented: "${originalComment}"\n\nPlease write a brief, natural reply (1 sentence). Stay in character.`
-    : `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
+  const systemPrompt = await buildSystemPrompt(persona, userId, false, language);
+  console.log(`[生成评论回复] 📋 System prompt built: ${systemPrompt.length} chars`);
+  
+  // Try up to 3 times with progressively stricter prompts
+  const MAX_ATTEMPTS = 3;
+  let lastError: any = null;
+  
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      console.log(`[生成评论回复] 🔄 Attempt ${attempt}/${MAX_ATTEMPTS}`);
+      
+      let userPrompt;
+      if (language === "en-US") {
+        if (attempt === 1) {
+          userPrompt = `Someone commented: "${originalComment}"\n\nPlease write a brief, natural reply (1 sentence). Stay in character.`;
+        } else if (attempt === 2) {
+          userPrompt = `Someone commented: "${originalComment}"\n\nIMPORTANT: Write a SPECIFIC, meaningful reply that engages with their comment. Reference details from what they said. Be authentic and in character. NO generic reactions like "haha", "nice", "agree".`;
+        } else {
+          userPrompt = `Someone commented: "${originalComment}"\n\nSTRICT REQUIREMENTS:\n1. Write a genuine, thoughtful reply that directly responds to their comment\n2. Show your personality (${persona.personality})\n3. FORBIDDEN: Generic reactions like "haha", "nice", "cool", "agree"\n4. If you can't think of something meaningful, ask a follow-up question or share a related thought`;
+        }
+      } else {
+        if (attempt === 1) {
+          userPrompt = `有人评论说："${originalComment}"\n\n请写一条简短、自然的回复（1句话），保持你的性格特点，用中文回复。`;
+        } else if (attempt === 2) {
+          userPrompt = `有人评论说："${originalComment}"\n\n重要提示：请写一个有针对性的、有意义的回复，要与对方的评论内容相呼应。引用他们说的具体内容，表现你的真实性格。禁止使用"哈哈"、"赞"、"同意"等通用反应。`;
+        } else {
+          userPrompt = `有人评论说："${originalComment}"\n\n严格要求：\n1. 写一个真诚、有思想的回复，直接回应他们的评论内容\n2. 展现你的性格特点（${persona.personality}）\n3. 禁止使用：哈哈、赞、不错、同意等通用反应\n4. 如果想不出有意义的回复，可以问个相关问题或分享相关想法`;
+        }
+      }
+      
+      console.log(`[生成评论回复] 📤 Sending to AI (attempt ${attempt})`);
 
-  try {
-    const reply = await provider.generateResponse({
-      model,
-      systemPrompt,
-      messages: [
-        { role: "user", content: userPrompt },
-      ],
-      maxTokens: 2000, // Increased to 2000 to provide ample generation space
-    });
+      const reply = await provider.generateResponse({
+        model,
+        systemPrompt,
+        messages: [
+          { role: "user", content: userPrompt },
+        ],
+        maxTokens: 2000, // Increased to 2000 to provide ample generation space
+      });
 
-    return reply.trim();
-  } catch (error) {
-    console.error("Error generating comment reply:", error);
-    const reactions = ["哈哈", "是的", "说得对", "同意", "👍"];
-    return reactions[Math.floor(Math.random() * reactions.length)];
+      const trimmedReply = reply.trim();
+      console.log(`[生成评论回复] 📥 AI response: "${trimmedReply}"`);
+      
+      // Validate reply quality (reuse moment comment validation logic)
+      const validation = validateCommentQuality(trimmedReply, originalComment, persona.name);
+      
+      if (validation.isValid) {
+        console.log(`[生成评论回复] ✅ Quality validation passed!`);
+        console.log(`[生成评论回复] 🎉 Final reply: "${trimmedReply}"`);
+        return trimmedReply;
+      } else {
+        console.warn(`[生成评论回复] ⚠️ Quality validation failed: ${validation.reason}`);
+        console.warn(`[生成评论回复] Rejected reply: "${trimmedReply}"`);
+        
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`[生成评论回复] 🔄 Retrying with stricter prompt...`);
+          continue;
+        } else {
+          console.error(`[生成评论回复] ❌ All ${MAX_ATTEMPTS} attempts failed quality validation`);
+          throw new Error(`回复质量验证失败（${validation.reason}），已尝试${MAX_ATTEMPTS}次`);
+        }
+      }
+      
+    } catch (error: any) {
+      lastError = error;
+      console.error(`[生成评论回复] ❌ Attempt ${attempt} error:`, error?.message || error);
+      
+      // Check if error is due to missing/invalid API key
+      const errorMessage = (error?.message || error?.toString() || '').toLowerCase();
+      const errorCode = (error?.code || error?.status || '').toString().toLowerCase();
+      
+      const authKeywords = [
+        'api key', 'api密钥', 'apikey',
+        '未配置', 'not configured', 'misconfigured',
+        'invalid_argument', 'permission_denied',
+        'authentication', 'authorization', 'unauthorized',
+        '401', '403', 'forbidden',
+        'invalid api', 'invalid key',
+        'missing api', 'missing key',
+        'please pass a valid'
+      ];
+      
+      const isAuthError = authKeywords.some(keyword => 
+        errorMessage.includes(keyword) || errorCode.includes(keyword)
+      );
+      
+      if (isAuthError) {
+        // Authentication error - don't retry, throw immediately
+        console.error(`[生成评论回复] 🚫 API key/auth error - aborting all attempts`);
+        console.error(`[生成评论回复] User ${userId} needs to configure valid API key in settings`);
+        throw new Error('API密钥未配置或无效，无法生成AI回复');
+      }
+      
+      // For other errors, continue to next attempt if available
+      if (attempt < MAX_ATTEMPTS) {
+        console.log(`[生成评论回复] ⏭️ Non-auth error, will retry...`);
+        continue;
+      }
+    }
   }
+  
+  // All attempts exhausted
+  console.error(`[生成评论回复] 💥 All ${MAX_ATTEMPTS} attempts failed`);
+  console.error(`[生成评论回复] Last error:`, lastError?.message || lastError);
+  
+  // Throw error instead of returning generic reaction
+  throw new Error(`无法生成高质量回复（已尝试${MAX_ATTEMPTS}次）: ${lastError?.message || '未知错误'}`);
 }
 
 /**
