@@ -1316,14 +1316,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ==================== Moments Routes ====================
   
-  // Get all moments (from all users and AI personas) with likes and comments
+  // Get moments for current user (only their own moments and their AI personas' moments)
   app.get('/api/moments', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.id;
       const limit = parseInt(req.query.limit as string) || 50;
       const offset = parseInt(req.query.offset as string) || 0;
       
-      // Get all moments (not filtered by user - this is a social feed)
-      const moments = await storage.getAllMoments(limit, offset);
+      // Get moments only for current user (user-isolated feed)
+      const moments = await storage.getMomentsByUser(userId, limit, offset);
       
       // Fetch likes and comments for each moment
       const momentsWithDetails = await Promise.all(
