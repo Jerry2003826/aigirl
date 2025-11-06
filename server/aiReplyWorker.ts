@@ -1,10 +1,14 @@
 import { storage } from './storage';
-import { generateAIResponse, ImageData, extractAndStoreMemories } from './aiService';
+import { generateAIResponse, ImageData, extractAndStoreMemories, selectMultipleRespondingPersonas } from './aiService';
 import { broadcastNewMessage } from './websocket';
 
 const MAX_RETRIES = 3;
 const POLL_INTERVAL = 3000; // 3 seconds
 const PROCESSING_LOCK = new Set<string>(); // In-memory lock to prevent duplicate processing
+
+// Track conversations where AI interaction is in progress
+// Prevents duplicate AI-to-AI triggers from racing
+export const AI_INTERACTION_LOCK = new Set<string>();
 
 /**
  * Parse data URL to extract mimeType and base64 data
@@ -112,29 +116,36 @@ async function processNextJob() {
       return;
     }
     
-    // Determine which AI persona should respond
-    let respondingPersonaId: string;
+    // Determine which AI persona(s) should respond
+    let respondingPersonaIds: string[];
     
     if (conversation.isGroup) {
-      // For group chats, select persona based on conversation context
-      const participants = await storage.getConversationParticipants(conversation.id);
-      // Strict validation: personaId must be non-empty string
-      const validParticipants = participants.filter(p => 
-        typeof p.personaId === 'string' && p.personaId.trim().length > 0
-      );
-      
-      if (validParticipants.length === 0) {
-        await storage.updateJobStatus(job.id, 'failed', 'No valid personas in group conversation');
-        return;
+      // For group chats, use intelligent multi-AI selection
+      console.log('[AI Worker] Group chat detected, using multi-AI selection');
+      try {
+        respondingPersonaIds = await selectMultipleRespondingPersonas({
+          conversationId: conversation.id,
+          userMessage: userMessage.content || '[User sent an image]',
+        });
+        console.log(`[AI Worker] Selected ${respondingPersonaIds.length} AI(s) to respond`);
+      } catch (selectionError: any) {
+        console.error('[AI Worker] Failed to select multiple personas, falling back to single selection:', selectionError);
+        // Fallback: select one persona randomly
+        const participants = await storage.getConversationParticipants(conversation.id);
+        const validParticipants = participants.filter(p => 
+          typeof p.personaId === 'string' && p.personaId.trim().length > 0
+        );
+        
+        if (validParticipants.length === 0) {
+          await storage.updateJobStatus(job.id, 'failed', 'No valid personas in group conversation');
+          return;
+        }
+        
+        respondingPersonaIds = [validParticipants[Math.floor(Math.random() * validParticipants.length)].personaId];
       }
-      
-      // Simple round-robin or random selection
-      // TODO: Could use aiService.selectPersonaForGroup for smart selection
-      respondingPersonaId = validParticipants[Math.floor(Math.random() * validParticipants.length)].personaId;
     } else {
       // For 1-on-1 chats, use the single participant
       const participants = await storage.getConversationParticipants(conversation.id);
-      // Strict validation: personaId must be non-empty string
       const personaParticipant = participants.find(p => 
         typeof p.personaId === 'string' && p.personaId.trim().length > 0
       );
@@ -144,13 +155,19 @@ async function processNextJob() {
         return;
       }
       
-      respondingPersonaId = personaParticipant.personaId;
+      respondingPersonaIds = [personaParticipant.personaId];
     }
     
-    // Generate AI response
-    console.log(`[AI Worker] Generating AI response from persona ${respondingPersonaId}`);
+    // Guard: Ensure we have at least one persona to respond
+    if (respondingPersonaIds.length === 0) {
+      await storage.updateJobStatus(job.id, 'failed', 'No personas selected to respond');
+      console.error('[AI Worker] No personas selected to respond, failing job');
+      return;
+    }
     
-    // Parse image data if present
+    console.log(`[AI Worker] Selected ${respondingPersonaIds.length} persona(s) to respond`);
+    
+    // Parse image data if present (once, for all AIs)
     let imageData: ImageData | undefined;
     if (userMessage.imageData) {
       imageData = parseDataUrl(userMessage.imageData);
@@ -159,109 +176,136 @@ async function processNextJob() {
       }
     }
     
-    // Generate AI response with enhanced error logging
-    let aiResponse: string;
-    try {
-      console.log(`[AI Worker] Calling generateAIResponse with:`, {
-        conversationId: conversation.id,
-        personaId: respondingPersonaId,
-        userMessagePreview: (userMessage.content || '[User sent an image]').substring(0, 50),
-        hasImage: !!imageData
-      });
-      
-      aiResponse = await generateAIResponse({
-        conversationId: conversation.id,
-        personaId: respondingPersonaId,
-        userMessage: userMessage.content || '[User sent an image]',
-        imageData,
-      });
-      
-      console.log(`[AI Worker] AI response generated successfully, length: ${aiResponse.length} chars`);
-    } catch (aiError: any) {
-      console.error(`[AI Worker] ❌ FAILED to generate AI response:`, {
-        errorMessage: aiError.message,
-        errorStack: aiError.stack,
-        conversationId: conversation.id,
-        personaId: respondingPersonaId,
-        jobId: job.id
-      });
-      
-      // Provide more specific error message for job status
-      const errorDetail = aiError.message || 'Unknown AI generation error';
-      await storage.updateJobStatus(job.id, 'failed', `AI generation failed: ${errorDetail}`);
-      return;
-    }
+    // Generate AI responses from all selected personas
+    console.log(`[AI Worker] Generating responses from ${respondingPersonaIds.length} persona(s)`);
+    const allAiMessages = [];
     
-    // Get persona info for message broadcast
-    const persona = await storage.getPersona(respondingPersonaId);
-    if (!persona) {
-      await storage.updateJobStatus(job.id, 'failed', 'Persona not found');
-      return;
-    }
-    
-    // Split AI response by backslash (\) only - this is the intentional delimiter
-    // Do NOT split by forward slash (/) as that would break URLs and other content
-    const messageParts = aiResponse
-      .split('\\')  // Split by backslash only
-      .map(part => part.trim())  // Trim whitespace
-      .filter(part => part.length > 0);  // Remove empty parts
-    
-    // Save and broadcast AI messages with 2-3 second random delay between each
-    const aiMessages = [];
-    if (messageParts.length === 0) {
-      // No parts after splitting - check if original response is empty
-      const trimmedResponse = aiResponse.trim();
-      if (trimmedResponse.length > 0) {
-        // Save original response only if it's not empty
-        const aiMessage = await storage.createMessage({
+    for (let personaIndex = 0; personaIndex < respondingPersonaIds.length; personaIndex++) {
+      const respondingPersonaId = respondingPersonaIds[personaIndex];
+      
+      // Add delay between different AI responses (except for the first one)
+      if (personaIndex > 0) {
+        // Wait 2-3 seconds before next AI starts responding
+        await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+      }
+      
+      console.log(`[AI Worker] [${personaIndex + 1}/${respondingPersonaIds.length}] Generating response from persona ${respondingPersonaId}`);
+      
+      // Generate AI response with enhanced error logging
+      let aiResponse: string;
+      try {
+        console.log(`[AI Worker] Calling generateAIResponse with:`, {
           conversationId: conversation.id,
-          senderId: respondingPersonaId,
-          senderType: "ai",
-          content: aiResponse,
-          isRead: false,
-          status: "sent",
+          personaId: respondingPersonaId,
+          userMessagePreview: (userMessage.content || '[User sent an image]').substring(0, 50),
+          hasImage: !!imageData
         });
         
-        // Add persona info for broadcast
-        const messageWithPersona = {
-          ...aiMessage,
-          personaName: persona.name,
-          personaAvatar: persona.avatarUrl
-        };
+        aiResponse = await generateAIResponse({
+          conversationId: conversation.id,
+          personaId: respondingPersonaId,
+          userMessage: userMessage.content || '[User sent an image]',
+          imageData,
+        });
         
-        aiMessages.push(aiMessage);
-        broadcastNewMessage(conversation.id, messageWithPersona);
+        console.log(`[AI Worker] AI response generated successfully, length: ${aiResponse.length} chars`);
+      } catch (aiError: any) {
+        console.error(`[AI Worker] ❌ FAILED to generate AI response from persona ${respondingPersonaId}:`, {
+          errorMessage: aiError.message,
+          errorStack: aiError.stack,
+          conversationId: conversation.id,
+          personaId: respondingPersonaId,
+          jobId: job.id
+        });
+        
+        // Continue to next persona instead of failing the entire job
+        continue;
       }
-    } else {
-      // Save and broadcast each part with 2-3 second random delay
-      for (let i = 0; i < messageParts.length; i++) {
-        if (i > 0) {
-          // Wait 2-3 seconds randomly before saving and sending next message
-          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+      
+      // Get persona info for message broadcast
+      const persona = await storage.getPersona(respondingPersonaId);
+      if (!persona) {
+        console.error(`[AI Worker] Persona ${respondingPersonaId} not found, skipping`);
+        continue;
+      }
+      
+      // Split AI response by backslash (\) only - this is the intentional delimiter
+      const messageParts = aiResponse
+        .split('\\')  // Split by backslash only
+        .map(part => part.trim())  // Trim whitespace
+        .filter(part => part.length > 0);  // Remove empty parts
+      
+      // Save and broadcast AI messages with 2-3 second random delay between each part
+      if (messageParts.length === 0) {
+        // No parts after splitting - check if original response is empty
+        const trimmedResponse = aiResponse.trim();
+        if (trimmedResponse.length > 0) {
+          // Save original response only if it's not empty
+          const aiMessage = await storage.createMessage({
+            conversationId: conversation.id,
+            senderId: respondingPersonaId,
+            senderType: "ai",
+            content: aiResponse,
+            isRead: false,
+            status: "sent",
+          });
+          
+          // Add persona info for broadcast
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
+          allAiMessages.push(aiMessage);
+          broadcastNewMessage(conversation.id, messageWithPersona);
         }
-        
-        const aiMessage = await storage.createMessage({
-          conversationId: conversation.id,
-          senderId: respondingPersonaId,
-          senderType: "ai",
-          content: messageParts[i],
-          isRead: false,
-          status: "sent",
-        });
-        
-        // Add persona info for broadcast
-        const messageWithPersona = {
-          ...aiMessage,
-          personaName: persona.name,
-          personaAvatar: persona.avatarUrl
-        };
-        
-        aiMessages.push(aiMessage);
-        broadcastNewMessage(conversation.id, messageWithPersona);
+      } else {
+        // Save and broadcast each part with 2-3 second random delay
+        for (let i = 0; i < messageParts.length; i++) {
+          if (i > 0) {
+            // Wait 2-3 seconds randomly before saving and sending next message part
+            await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+          }
+          
+          const aiMessage = await storage.createMessage({
+            conversationId: conversation.id,
+            senderId: respondingPersonaId,
+            senderType: "ai",
+            content: messageParts[i],
+            isRead: false,
+            status: "sent",
+          });
+          
+          // Add persona info for broadcast
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
+          allAiMessages.push(aiMessage);
+          broadcastNewMessage(conversation.id, messageWithPersona);
+        }
       }
+      
+      console.log(`[AI Worker] [${personaIndex + 1}/${respondingPersonaIds.length}] Successfully generated messages from ${persona.name}`);
     }
     
-    console.log(`[AI Worker] Successfully generated ${aiMessages.length} AI messages`);
+    console.log(`[AI Worker] Successfully generated ${allAiMessages.length} AI messages from ${respondingPersonaIds.length} persona(s)`);
+    
+    // Trigger AI-to-AI interaction (async, don't wait)
+    if (conversation.isGroup && allAiMessages.length > 0) {
+      // Get the last AI who responded to potentially trigger interaction
+      const lastRespondingPersonaId = respondingPersonaIds[respondingPersonaIds.length - 1];
+      
+      // Don't await - let it run in background
+      import('./aiService').then(({ triggerAIInteraction }) => {
+        triggerAIInteraction(conversation.id, lastRespondingPersonaId).catch(err => {
+          console.error('[AI Worker] AI interaction trigger failed:', err);
+        });
+      });
+    }
     
     // Check if we should trigger memory extraction (every 10 messages)
     // Check if we crossed a multiple of 10 during this turn
@@ -271,21 +315,31 @@ async function processNextJob() {
     // Detect if we crossed a multiple of 10 (e.g., from 8 to 11 crosses 10)
     const crossedMultipleOf10 = Math.floor(messageCountAfter / 10) > Math.floor(messageCountBefore / 10);
     
-    if (crossedMultipleOf10) {
+    if (crossedMultipleOf10 && allAiMessages.length > 0) {
       console.log(`[AI Worker] Crossed multiple of 10 (${messageCountBefore} -> ${messageCountAfter}), triggering memory extraction`);
       
-      // Extract and store memories from this conversation turn
-      try {
-        await extractAndStoreMemories(
-          conversation.id,
-          respondingPersonaId,
-          userMessage.content || '[User sent an image]',
-          aiResponse
-        );
-        console.log(`[AI Worker] Memory extraction completed for conversation ${conversation.id}`);
-      } catch (error) {
-        console.error(`[AI Worker] Memory extraction failed:`, error);
-        // Don't fail the job if memory extraction fails
+      // Extract memories from the first (primary) AI's responses only
+      // This ensures we only extract from the most relevant AI
+      const primaryPersonaId = respondingPersonaIds[0];
+      const primaryPersonaMessages = allAiMessages.filter(msg => msg.senderId === primaryPersonaId);
+      
+      if (primaryPersonaMessages.length > 0) {
+        // Combine all messages from primary persona
+        const combinedResponse = primaryPersonaMessages.map(m => m.content).join(' ');
+        
+        // Extract and store memories from this conversation turn
+        try {
+          await extractAndStoreMemories(
+            conversation.id,
+            primaryPersonaId,
+            userMessage.content || '[User sent an image]',
+            combinedResponse
+          );
+          console.log(`[AI Worker] Memory extraction completed for conversation ${conversation.id}`);
+        } catch (error) {
+          console.error(`[AI Worker] Memory extraction failed:`, error);
+          // Don't fail the job if memory extraction fails
+        }
       }
     } else {
       console.log(`[AI Worker] No extraction needed (${messageCountBefore} -> ${messageCountAfter}, next extraction at ${Math.ceil(messageCountAfter / 10) * 10})`);

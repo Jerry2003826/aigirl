@@ -175,7 +175,8 @@ async function buildSystemPrompt(
   persona: AiPersona,
   userId: string,
   ragEnabled: boolean = false,
-  language: string = "zh-CN"
+  language: string = "zh-CN",
+  conversationId?: string
 ): Promise<string> {
   let systemPrompt = persona.systemPrompt;
   console.log(`[Build System Prompt] Starting for persona ${persona.id} (${persona.name})`);
@@ -186,6 +187,52 @@ async function buildSystemPrompt(
   // Add backstory if available
   if (persona.backstory) {
     systemPrompt += `\n\n你的背景故事：${persona.backstory}`;
+  }
+  
+  // Add group chat context if applicable
+  if (conversationId) {
+    const conversation = await storage.getConversation(conversationId);
+    if (conversation && conversation.isGroup) {
+      console.log(`[Build System Prompt] Adding group chat context for conversation ${conversationId}`);
+      
+      // Get all participants in the group
+      const participants = await storage.getConversationParticipants(conversationId);
+      const otherPersonas = await Promise.all(
+        participants
+          .filter(p => p.personaId !== persona.id)
+          .map(p => storage.getPersona(p.personaId))
+      );
+      
+      const validOtherPersonas = otherPersonas.filter(p => p !== null) as AiPersona[];
+      
+      if (validOtherPersonas.length > 0) {
+        if (language === "en-US") {
+          systemPrompt += `\n\nGROUP CHAT MODE:
+You are in a group chat with other AI companions. The group members are:
+${validOtherPersonas.map(p => `- ${p.name}: ${p.personality}`).join('\n')}
+
+When the user sends a message:
+- You might be selected to respond (based on relevance)
+- Other AIs may also respond to the same message
+- You can interact with other AIs naturally
+- Keep your unique personality while being collaborative`;
+        } else {
+          systemPrompt += `\n\n群聊模式：
+你正在一个群聊中，群里还有其他AI女友。群成员包括：
+${validOtherPersonas.map(p => `- ${p.name}：${p.personality}`).join('\n')}
+
+当用户发消息时：
+- 你可能会被选中回复（基于相关性）
+- 其他AI也可能同时回复同一条消息
+- 你可以自然地与其他AI互动
+- 保持你的独特个性，同时友好协作`;
+        }
+        
+        console.log(`[Build System Prompt] Added ${validOtherPersonas.length} group members to context`);
+      } else {
+        console.log(`[Build System Prompt] Group chat but no other members found`);
+      }
+    }
   }
   
   // If RAG is NOT enabled, add memories directly to system prompt (legacy behavior)
@@ -327,7 +374,7 @@ export async function generateAIResponse(
   const memoryTokenBudget = 33000;        // Adjusted for RAG memories
   
   // Build system prompt with personality (and memories if RAG is disabled)
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language, conversationId);
   const systemPromptTokens = estimateTokens(systemPrompt);
   console.log(`[Token Budget] System prompt: ~${systemPromptTokens} tokens`);
   
@@ -425,7 +472,7 @@ export async function generateAIResponseStream(
   const memoryTokenBudget = 33000;        // Adjusted for RAG memories
   
   // Build system prompt with personality (and memories if RAG is disabled)
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language);
+  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language, conversationId);
   const systemPromptTokens = estimateTokens(systemPrompt);
   console.log(`[Token Budget] System prompt: ~${systemPromptTokens} tokens`);
   
@@ -596,6 +643,377 @@ ${Object.entries(responseCounts).map(([id, count]) => {
     const leastActivePersona = Object.entries(responseCounts)
       .sort((a, b) => a[1] - b[1])[0];
     return leastActivePersona[0];
+  }
+}
+
+/**
+ * Intelligently select multiple personas to respond in a group chat
+ * Strategy:
+ * 1. First AI: Guaranteed response (intelligently selected)
+ * 2. Other AIs: AI judges suitability + 30-50% probability
+ * 3. Maximum 3 AIs total respond
+ * 4. Minimum 1 AI always responds
+ */
+export async function selectMultipleRespondingPersonas(
+  options: SelectRespondingPersonaOptions
+): Promise<string[]> {
+  const { conversationId, userMessage } = options;
+  
+  console.log('[Multi-AI Selection] Starting selection process');
+  
+  // Get conversation and participants
+  const conversation = await storage.getConversation(conversationId);
+  if (!conversation) {
+    throw new Error("Conversation not found");
+  }
+  
+  const participants = await storage.getConversationParticipants(conversationId);
+  if (participants.length === 0) {
+    throw new Error("No personas in conversation");
+  }
+  
+  // If only one persona, return that one
+  if (participants.length === 1) {
+    console.log('[Multi-AI Selection] Only one persona, returning it');
+    return [participants[0].personaId];
+  }
+  
+  const personas = await Promise.all(
+    participants.map(p => storage.getPersona(p.personaId))
+  );
+  const validPersonas = personas.filter((p): p is AiPersona => p !== null);
+  
+  // Guard: If no valid personas found, fail early
+  if (validPersonas.length === 0) {
+    console.error('[Multi-AI Selection] No valid personas found in conversation');
+    throw new Error("No valid personas found in conversation");
+  }
+  
+  // Get AI settings for making AI calls
+  const aiSettings = await storage.getAiSettings(conversation.userId);
+  const provider = getAIProvider(aiSettings);
+  const model = getModelName(aiSettings);
+  
+  // STEP 1: Select primary responder (guaranteed to respond)
+  console.log('[Multi-AI Selection] Step 1: Selecting primary responder');
+  const primaryPersonaId = await selectRespondingPersona(options);
+  
+  // Validate primary persona exists
+  if (!validPersonas.some(p => p.id === primaryPersonaId)) {
+    console.error(`[Multi-AI Selection] Primary persona ${primaryPersonaId} not found in valid personas`);
+    // Fallback: use first valid persona
+    const fallbackPersona = validPersonas[0];
+    console.log(`[Multi-AI Selection] Using fallback: ${fallbackPersona.name}`);
+    return [fallbackPersona.id];
+  }
+  
+  const selectedPersonaIds: string[] = [primaryPersonaId];
+  console.log(`[Multi-AI Selection] Primary responder: ${validPersonas.find(p => p.id === primaryPersonaId)?.name}`);
+  
+  // STEP 2 & 3: Evaluate other AIs for potential responses
+  const otherPersonas = validPersonas.filter(p => p.id !== primaryPersonaId);
+  
+  if (otherPersonas.length === 0) {
+    console.log('[Multi-AI Selection] No other personas to evaluate');
+    return selectedPersonaIds;
+  }
+  
+  console.log(`[Multi-AI Selection] Evaluating ${otherPersonas.length} other personas`);
+  
+  try {
+    // Prepare persona descriptions for AI evaluation
+    const personaDescriptions = otherPersonas
+      .map(p => `ID: ${p.id} | 名字: ${p.name} | 性格: ${p.personality}`)
+      .join('\n');
+    
+    const systemPrompt = `你是群聊协调器，负责判断每个AI是否适合回复用户消息。
+你需要为每个AI返回一个适合度分数（0-100）。
+
+评分标准：
+- 80-100分：非常适合回复（基于性格、专长与消息内容高度匹配）
+- 50-79分：比较适合回复（有一定相关性）
+- 0-49分：不太适合回复（相关性低）
+
+只返回JSON格式，每个AI一行：
+{"personaId": "分数"}
+不要包含任何其他文字。`;
+    
+    const evaluationPrompt = `用户消息："${userMessage}"
+
+需要评估的AI列表：
+${personaDescriptions}
+
+已选中的主回复AI：${validPersonas.find(p => p.id === primaryPersonaId)?.name}
+
+请为每个AI返回适合度分数（JSON格式）：`;
+    
+    const response = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: [{ role: "user", content: evaluationPrompt }],
+      maxTokens: 500,
+    });
+    
+    console.log('[Multi-AI Selection] AI evaluation response:', response);
+    
+    // Parse AI response
+    const scores: Record<string, number> = {};
+    try {
+      // Try to extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        Object.assign(scores, parsed);
+      }
+    } catch (parseError) {
+      console.error('[Multi-AI Selection] Failed to parse AI scores:', parseError);
+    }
+    
+    console.log('[Multi-AI Selection] Parsed scores:', scores);
+    
+    // Filter and apply probability
+    for (const persona of otherPersonas) {
+      const score = scores[persona.id] || 0;
+      
+      // Only consider personas with score >= 50
+      if (score >= 50) {
+        // Apply 30-50% probability (random)
+        const probability = 0.3 + Math.random() * 0.2; // 30-50%
+        const shouldRespond = Math.random() < probability;
+        
+        console.log(`[Multi-AI Selection] ${persona.name}: score=${score}, probability=${(probability * 100).toFixed(0)}%, respond=${shouldRespond}`);
+        
+        if (shouldRespond) {
+          selectedPersonaIds.push(persona.id);
+          
+          // Stop if we reach 3 total AIs
+          if (selectedPersonaIds.length >= 3) {
+            console.log('[Multi-AI Selection] Reached maximum of 3 AIs');
+            break;
+          }
+        }
+      } else {
+        console.log(`[Multi-AI Selection] ${persona.name}: score=${score} (too low, skipped)`);
+      }
+    }
+    
+  } catch (error) {
+    console.error('[Multi-AI Selection] Error in multi-AI selection:', error);
+    // On error, just return the primary responder
+  }
+  
+  console.log(`[Multi-AI Selection] Final selection: ${selectedPersonaIds.length} AIs`, 
+    selectedPersonaIds.map(id => validPersonas.find(p => p.id === id)?.name));
+  
+  return selectedPersonaIds;
+}
+
+/**
+ * Check consecutive AI messages count from the end of conversation
+ * Returns: number of consecutive AI messages (0 if last message is from user)
+ */
+export async function getConsecutiveAIMessageCount(
+  conversationId: string
+): Promise<number> {
+  const recentMessages = await storage.getMessagesByConversation(conversationId, 20, 0);
+  
+  let count = 0;
+  // Count from the most recent message backwards
+  for (const msg of recentMessages) {
+    if (msg.senderType === 'ai') {
+      count++;
+    } else {
+      // Hit a user message, stop counting
+      break;
+    }
+  }
+  
+  return count;
+}
+
+/**
+ * Trigger AI-to-AI interaction if conditions are met
+ * - Only in group chats
+ * - Only if consecutive AI messages < 3
+ * - 20-30% probability
+ * - Select a different AI from the one who just sent
+ */
+export async function triggerAIInteraction(
+  conversationId: string,
+  lastAIPersonaId: string
+): Promise<void> {
+  console.log('[AI Interaction] Checking if AI should interact');
+  
+  // Import lock from aiReplyWorker
+  const { AI_INTERACTION_LOCK } = await import('./aiReplyWorker');
+  
+  // Check lock - prevent concurrent AI interactions for same conversation
+  if (AI_INTERACTION_LOCK.has(conversationId)) {
+    console.log('[AI Interaction] Already processing AI interaction for this conversation, skipping');
+    return;
+  }
+  
+  // Acquire lock
+  AI_INTERACTION_LOCK.add(conversationId);
+  
+  try {
+    // Get conversation
+    const conversation = await storage.getConversation(conversationId);
+    if (!conversation || !conversation.isGroup) {
+      console.log('[AI Interaction] Not a group chat, skipping');
+      return;
+    }
+    
+    // Check consecutive AI count
+    const consecutiveCount = await getConsecutiveAIMessageCount(conversationId);
+    console.log(`[AI Interaction] Consecutive AI messages: ${consecutiveCount}`);
+    
+    if (consecutiveCount >= 3) {
+      console.log('[AI Interaction] Reached limit of 3 consecutive AI messages, blocking');
+      return;
+    }
+    
+    // Apply probability (20-30%)
+    const probability = 0.2 + Math.random() * 0.1; // 20-30%
+    const shouldInteract = Math.random() < probability;
+    
+    console.log(`[AI Interaction] Probability: ${(probability * 100).toFixed(0)}%, Interact: ${shouldInteract}`);
+    
+    if (!shouldInteract) {
+      console.log('[AI Interaction] Probability check failed, not interacting');
+      return;
+    }
+    
+    // Get all participants except the one who just sent
+    const participants = await storage.getConversationParticipants(conversationId);
+    const otherPersonas = participants.filter(p => p.personaId !== lastAIPersonaId);
+    
+    if (otherPersonas.length === 0) {
+      console.log('[AI Interaction] No other personas to interact, skipping');
+      return;
+    }
+    
+    // Get the last AI message to respond to
+    const recentMessages = await storage.getMessagesByConversation(conversationId, 1, 0);
+    if (recentMessages.length === 0) {
+      return;
+    }
+    
+    const lastMessage = recentMessages[0];
+    
+    // Select responding persona intelligently
+    const personas = await Promise.all(
+      otherPersonas.map(p => storage.getPersona(p.personaId))
+    );
+    const validPersonas = personas.filter((p): p is AiPersona => p !== null);
+    
+    if (validPersonas.length === 0) {
+      console.log('[AI Interaction] No valid personas available for interaction');
+      return;
+    }
+    
+    // Use AI to judge who should respond
+    const aiSettings = await storage.getAiSettings(conversation.userId);
+    const provider = getAIProvider(aiSettings);
+    const model = getModelName(aiSettings);
+    
+    const personaDescriptions = validPersonas
+      .map(p => `ID: ${p!.id} | 名字: ${p!.name} | 性格: ${p!.personality}`)
+      .join('\n');
+    
+    const systemPrompt = `你是群聊协调器。判断哪个AI最适合回复刚才的AI消息。返回persona ID或"NONE"（如果都不适合）。`;
+    
+    const selectionPrompt = `刚才的AI消息："${lastMessage.content}"
+
+可以回复的AI列表：
+${personaDescriptions}
+
+如果有合适的AI回复（基于性格和消息内容），返回该AI的ID。如果都不适合，返回"NONE"。只返回ID或NONE，不要其他内容。`;
+    
+    const response = await provider.generateResponse({
+      model,
+      systemPrompt,
+      messages: [{ role: "user", content: selectionPrompt }],
+      maxTokens: 100,
+    });
+    
+    const selectedId = response.trim();
+    
+    if (selectedId === "NONE" || !validPersonas.some(p => p?.id === selectedId)) {
+      console.log('[AI Interaction] No suitable AI selected for interaction');
+      return;
+    }
+    
+    console.log(`[AI Interaction] Selected ${validPersonas.find(p => p?.id === selectedId)?.name} to interact`);
+    
+    // Generate AI response
+    const aiResponse = await generateAIResponse({
+      conversationId,
+      personaId: selectedId,
+      userMessage: lastMessage.content,
+    });
+    
+    // Get persona for broadcast
+    const persona = await storage.getPersona(selectedId);
+    if (!persona) {
+      return;
+    }
+    
+    // Split and send messages
+    const messageParts = aiResponse
+      .split('\\')
+      .map(part => part.trim())
+      .filter(part => part.length > 0);
+    
+    if (messageParts.length === 0 && aiResponse.trim().length > 0) {
+      // Single message
+      const aiMessage = await storage.createMessage({
+        conversationId,
+        senderId: selectedId,
+        senderType: "ai",
+        content: aiResponse,
+        isRead: false,
+        status: "sent",
+      });
+      
+      const { broadcastNewMessage } = await import('./websocket');
+      broadcastNewMessage(conversationId, {
+        ...aiMessage,
+        personaName: persona.name,
+        personaAvatar: persona.avatarUrl
+      });
+    } else {
+      // Multiple parts
+      for (let i = 0; i < messageParts.length; i++) {
+        if (i > 0) {
+          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+        }
+        
+        const aiMessage = await storage.createMessage({
+          conversationId,
+          senderId: selectedId,
+          senderType: "ai",
+          content: messageParts[i],
+          isRead: false,
+          status: "sent",
+        });
+        
+        const { broadcastNewMessage } = await import('./websocket');
+        broadcastNewMessage(conversationId, {
+          ...aiMessage,
+          personaName: persona.name,
+          personaAvatar: persona.avatarUrl
+        });
+      }
+    }
+    
+    console.log('[AI Interaction] AI interaction completed successfully');
+    
+  } catch (error) {
+    console.error('[AI Interaction] Failed:', error);
+  } finally {
+    // Always release lock
+    AI_INTERACTION_LOCK.delete(conversationId);
   }
 }
 
