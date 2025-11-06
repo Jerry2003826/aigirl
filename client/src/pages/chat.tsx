@@ -91,6 +91,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMarkedConversationRef = useRef<string | null>(null);
   const messageQueueProcessorRef = useRef<NodeJS.Timeout | null>(null); // 🆕 队列处理器定时器
+  const markAsReadDebounceRef = useRef<NodeJS.Timeout | null>(null); // 🆕 未读标记防抖定时器
   
   // Use global WebSocket for conversation subscription
   useConversationSubscription(wsRef, selectedConversationId);
@@ -799,6 +800,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   
   // CRITICAL FIX: Mark new AI messages as read when user is viewing the chat
   // This prevents unread count from showing when user exits after receiving AI replies
+  // 🆕 添加防抖：避免AI多条消息逐条到达时重复调用markAsRead
   useEffect(() => {
     if (!selectedConversationId || messages.length === 0) {
       return;
@@ -815,9 +817,28 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         messageContents: unreadAIMessages.map(m => m.content?.substring(0, 20)),
       });
       
-      console.log('[未读标记] ✅ 自动标记为已读（用户正在查看聊天）');
-      markAsReadMutation.mutate(selectedConversationId);
+      // 清除之前的防抖定时器
+      if (markAsReadDebounceRef.current) {
+        console.log('[未读标记] ⏱️ 清除旧的防抖定时器');
+        clearTimeout(markAsReadDebounceRef.current);
+      }
+      
+      // 设置新的防抖定时器：500ms后执行
+      console.log('[未读标记] ⏱️ 设置防抖定时器（500ms）');
+      markAsReadDebounceRef.current = setTimeout(() => {
+        console.log('[未读标记] ✅ 防抖完成，执行标记已读');
+        markAsReadMutation.mutate(selectedConversationId);
+        markAsReadDebounceRef.current = null;
+      }, 500);
     }
+    
+    // Cleanup: 清除定时器
+    return () => {
+      if (markAsReadDebounceRef.current) {
+        clearTimeout(markAsReadDebounceRef.current);
+        markAsReadDebounceRef.current = null;
+      }
+    };
   }, [messages, selectedConversationId]); // Trigger when messages change
 
   // Remove optimistic messages when real messages arrive
