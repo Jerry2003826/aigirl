@@ -439,6 +439,37 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     return message.content.startsWith("data:image") || message.content === "[Image]" || message.content.includes("[Image]");
   };
 
+  // Helper function to render message content with @mention highlighting
+  const renderMessageContent = (content: string, isUserMessage: boolean = false) => {
+    // Match @mentions like "@PersonaName "
+    const mentionRegex = /(@[^\s]+)/g;
+    const parts = content.split(mentionRegex);
+    
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (part.startsWith('@')) {
+            // Highlight @mention with different styles for user/AI bubbles
+            return (
+              <span 
+                key={index} 
+                className={cn(
+                  "px-1 rounded font-semibold",
+                  isUserMessage 
+                    ? "bg-primary-foreground/20" // Lighter background for user bubbles
+                    : "bg-primary/20 text-primary" // Original style for AI bubbles
+                )}
+              >
+                {part}
+              </span>
+            );
+          }
+          return <span key={index}>{part}</span>;
+        })}
+      </>
+    );
+  };
+
   // Filter all messages based on search and type
   const filteredHistoryMessages = allMessages.filter((message) => {
     // Filter by search query
@@ -1214,7 +1245,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                           ) : null}
                           {message.content && message.content !== "[Image]" && (
                             <p className="whitespace-pre-wrap break-words text-base leading-relaxed" data-testid={`text-message-content-${message.id}`}>
-                              {message.content}
+                              {renderMessageContent(message.content, isUser)}
                             </p>
                           )}
                         </div>
