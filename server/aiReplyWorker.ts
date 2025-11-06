@@ -119,43 +119,67 @@ async function processNextJob() {
     // Determine which AI persona(s) should respond
     let respondingPersonaIds: string[];
     
-    if (conversation.isGroup) {
-      // For group chats, use intelligent multi-AI selection
-      console.log('[AI Worker] Group chat detected, using multi-AI selection');
-      try {
-        respondingPersonaIds = await selectMultipleRespondingPersonas({
-          conversationId: conversation.id,
-          userMessage: userMessage.content || '[User sent an image]',
-        });
-        console.log(`[AI Worker] Selected ${respondingPersonaIds.length} AI(s) to respond`);
-      } catch (selectionError: any) {
-        console.error('[AI Worker] Failed to select multiple personas, falling back to single selection:', selectionError);
-        // Fallback: select one persona randomly
+    // Check if this message mentions a specific AI
+    if (userMessage.mentionedPersonaId) {
+      console.log(`[AI Worker] Message mentions specific AI: ${userMessage.mentionedPersonaId}`);
+      
+      // Verify the mentioned persona exists in the conversation
+      const participants = await storage.getConversationParticipants(conversation.id);
+      const mentionedParticipant = participants.find(p => p.personaId === userMessage.mentionedPersonaId);
+      
+      if (mentionedParticipant) {
+        // Only let the mentioned AI respond
+        respondingPersonaIds = [userMessage.mentionedPersonaId];
+        console.log('[AI Worker] Using mentioned AI for response');
+      } else {
+        console.warn(`[AI Worker] Mentioned AI ${userMessage.mentionedPersonaId} not in conversation, falling back to normal selection`);
+        // Mentioned AI not in conversation, fall through to normal selection
+        respondingPersonaIds = [];
+      }
+    } else {
+      respondingPersonaIds = [];
+    }
+    
+    // If no mention or mentioned AI not found, use normal selection logic
+    if (respondingPersonaIds.length === 0) {
+      if (conversation.isGroup) {
+        // For group chats, use intelligent multi-AI selection
+        console.log('[AI Worker] Group chat detected, using multi-AI selection');
+        try {
+          respondingPersonaIds = await selectMultipleRespondingPersonas({
+            conversationId: conversation.id,
+            userMessage: userMessage.content || '[User sent an image]',
+          });
+          console.log(`[AI Worker] Selected ${respondingPersonaIds.length} AI(s) to respond`);
+        } catch (selectionError: any) {
+          console.error('[AI Worker] Failed to select multiple personas, falling back to single selection:', selectionError);
+          // Fallback: select one persona randomly
+          const participants = await storage.getConversationParticipants(conversation.id);
+          const validParticipants = participants.filter(p => 
+            typeof p.personaId === 'string' && p.personaId.trim().length > 0
+          );
+          
+          if (validParticipants.length === 0) {
+            await storage.updateJobStatus(job.id, 'failed', 'No valid personas in group conversation');
+            return;
+          }
+          
+          respondingPersonaIds = [validParticipants[Math.floor(Math.random() * validParticipants.length)].personaId];
+        }
+      } else {
+        // For 1-on-1 chats, use the single participant
         const participants = await storage.getConversationParticipants(conversation.id);
-        const validParticipants = participants.filter(p => 
+        const personaParticipant = participants.find(p => 
           typeof p.personaId === 'string' && p.personaId.trim().length > 0
         );
         
-        if (validParticipants.length === 0) {
-          await storage.updateJobStatus(job.id, 'failed', 'No valid personas in group conversation');
+        if (!personaParticipant || !personaParticipant.personaId) {
+          await storage.updateJobStatus(job.id, 'failed', 'No valid persona in 1-on-1 conversation');
           return;
         }
         
-        respondingPersonaIds = [validParticipants[Math.floor(Math.random() * validParticipants.length)].personaId];
+        respondingPersonaIds = [personaParticipant.personaId];
       }
-    } else {
-      // For 1-on-1 chats, use the single participant
-      const participants = await storage.getConversationParticipants(conversation.id);
-      const personaParticipant = participants.find(p => 
-        typeof p.personaId === 'string' && p.personaId.trim().length > 0
-      );
-      
-      if (!personaParticipant || !personaParticipant.personaId) {
-        await storage.updateJobStatus(job.id, 'failed', 'No valid persona in 1-on-1 conversation');
-        return;
-      }
-      
-      respondingPersonaIds = [personaParticipant.personaId];
     }
     
     // Guard: Ensure we have at least one persona to respond

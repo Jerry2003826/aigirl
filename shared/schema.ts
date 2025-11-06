@@ -86,6 +86,7 @@ export const messages = pgTable(
     content: text("content").notNull(),
     imageData: text("image_data"), // Base64 encoded image data (optional)
     clientMessageId: varchar("client_message_id"), // Client-generated ID for optimistic updates deduplication
+    mentionedPersonaId: varchar("mentioned_persona_id"), // ID of AI that was @mentioned in this message
     isRead: boolean("is_read").default(false).notNull(),
     status: text("status").default("sent").notNull(), // 'sending', 'sent', 'failed'
     createdAt: timestamp("created_at").defaultNow().notNull(),

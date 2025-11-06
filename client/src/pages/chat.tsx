@@ -68,6 +68,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [isStreaming, setIsStreaming] = useState(false); // AI正在分段输出
   const [messageLimit, setMessageLimit] = useState(50);
   const [failedMessages, setFailedMessages] = useState<Map<string, { conversationId: string; content: string; imageData?: string | null }>>(new Map());
+  const [mentionedPersonaId, setMentionedPersonaId] = useState<string | null>(null); // @提及的AI
+  const [showMentionPicker, setShowMentionPicker] = useState(false); // 显示@选择器
+  const [mentionCursorPos, setMentionCursorPos] = useState(0); // @符号的位置
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -459,19 +462,21 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const imageMessagesCount = allMessages.filter(m => isImageMessage(m)).length;
 
   const sendMessageMutation = useMutation({
-    mutationFn: async ({ conversationId, content, imageData, clientMessageId }: { 
+    mutationFn: async ({ conversationId, content, imageData, clientMessageId, mentionedPersonaId }: { 
       conversationId: string; 
       content: string;
       imageData?: string | null;
       clientMessageId: string;
+      mentionedPersonaId?: string;
     }) => {
-      // Send user message (with optional image)
+      // Send user message (with optional image and mention)
       return apiRequest("POST", "/api/messages", {
         conversationId,
         content: content || (imageData ? "[Image]" : ""),
         senderType: "user",
         imageData: imageData || undefined,
         clientMessageId, // Send clientMessageId to server for deduplication
+        mentionedPersonaId: mentionedPersonaId || undefined,
       });
     },
     onSuccess: async (data, { conversationId, content, clientMessageId }) => {
@@ -620,7 +625,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       content: currentInput,
       imageData: currentImage,
       clientMessageId, // Send clientMessageId to server
+      mentionedPersonaId: mentionedPersonaId || undefined,
     });
+    
+    // 清空@状态
+    setMentionedPersonaId(null);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -628,6 +637,48 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       e.preventDefault();
       handleSendMessage();
     }
+  };
+
+  // 处理输入变化，检测@
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    
+    setMessageInput(value);
+    
+    // 检测@符号
+    if (selectedConversationData?.isGroup) {
+      const textBeforeCursor = value.substring(0, cursorPos);
+      const lastAtPos = textBeforeCursor.lastIndexOf('@');
+      
+      if (lastAtPos !== -1 && (lastAtPos === 0 || value[lastAtPos - 1] === ' ')) {
+        // @ 在开头或前面是空格
+        const textAfterAt = textBeforeCursor.substring(lastAtPos + 1);
+        
+        // 如果@ 后面没有空格，显示选择器
+        if (!textAfterAt.includes(' ')) {
+          setShowMentionPicker(true);
+          setMentionCursorPos(lastAtPos);
+        } else {
+          setShowMentionPicker(false);
+        }
+      } else {
+        setShowMentionPicker(false);
+      }
+    }
+  };
+
+  // 选择要@的AI
+  const handleSelectMention = (persona: { id: string; name: string }) => {
+    const beforeAt = messageInput.substring(0, mentionCursorPos);
+    const afterAt = messageInput.substring(mentionCursorPos + 1);
+    // 移除@后的部分文本直到空格
+    const afterAtWithoutSearch = afterAt.replace(/^[^\s]*/, '');
+    
+    const newValue = `${beforeAt}@${persona.name} ${afterAtWithoutSearch}`;
+    setMessageInput(newValue);
+    setMentionedPersonaId(persona.id);
+    setShowMentionPicker(false);
   };
 
   // Auto-scroll to bottom (no animation) for new messages
@@ -1276,16 +1327,38 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                 >
                   <ImagePlus className="h-5 w-5" />
                 </Button>
-                <Textarea
-                  value={messageInput}
-                  onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={handleKeyPress}
-                  placeholder={isLoading ? "AI正在思考..." : isStreaming ? "AI正在回复..." : "输入消息..."}
-                  rows={1}
-                  disabled={isLoading || isStreaming}
-                  className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
-                  data-testid="input-message"
-                />
+                <div className="relative flex-1">
+                  <Textarea
+                    value={messageInput}
+                    onChange={handleInputChange}
+                    onKeyDown={handleKeyPress}
+                    placeholder={isLoading ? "AI正在思考..." : isStreaming ? "AI正在回复..." : "输入消息..."}
+                    rows={1}
+                    disabled={isLoading || isStreaming}
+                    className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
+                    data-testid="input-message"
+                  />
+                  
+                  {/* @提及选择器 */}
+                  {showMentionPicker && selectedConversationData?.personas && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-card border rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                      {selectedConversationData.personas.map((persona) => (
+                        <button
+                          key={persona.id}
+                          onClick={() => handleSelectMention(persona)}
+                          className="w-full px-3 py-2 flex items-center gap-2 hover-elevate active-elevate-2 text-left"
+                          data-testid={`button-mention-${persona.id}`}
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={persona.avatarUrl || undefined} />
+                            <AvatarFallback>{persona.name[0]}</AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">{persona.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <Button
                   onClick={handleSendMessage}
                   disabled={(!messageInput.trim() && !imageData) || isLoading || isStreaming}
