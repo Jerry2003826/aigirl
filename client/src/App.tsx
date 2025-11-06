@@ -11,6 +11,8 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { BottomNavBar } from "@/components/bottom-nav-bar";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
+import ResetPassword from "@/pages/reset-password";
 import Personas from "@/pages/personas";
 import Chat from "@/pages/chat";
 import Moments from "@/pages/moments";
@@ -137,6 +139,8 @@ function Router() {
       <Switch>
         <Route path="/register" component={Register} />
         <Route path="/login" component={Login} />
+        <Route path="/forgot-password" component={ForgotPassword} />
+        <Route path="/reset-password" component={ResetPassword} />
         <Route path="/" component={Login} />
         <Route component={Login} />
       </Switch>

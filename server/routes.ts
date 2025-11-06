@@ -257,6 +257,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message || "登出失败" });
     }
   });
+  
+  // 忘记密码 - 发送重置密码验证码
+  app.post('/api/auth/forgot-password', async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "邮箱不能为空" });
+      }
+      
+      // 检查用户是否存在
+      const user = await storage.getUserByEmail(email);
+      
+      // Security: Always return success to prevent enumeration
+      // Even if user doesn't exist or isn't verified, we pretend to send the email
+      if (!user || !user.emailVerified) {
+        return res.json({ message: "如果该邮箱已注册，重置密码验证码已发送" });
+      }
+      
+      // 生成验证码
+      const { generateVerificationCode, getVerificationCodeExpiry } = await import('./auth');
+      const code = generateVerificationCode();
+      const expiresAt = getVerificationCodeExpiry();
+      
+      // 保存验证码到数据库
+      await storage.updatePasswordResetCode(email, code, expiresAt);
+      
+      // 发送重置密码邮件
+      const { sendPasswordResetEmail } = await import('./emailService');
+      await sendPasswordResetEmail(email, code);
+      
+      res.json({ message: "重置密码验证码已发送到您的邮箱" });
+    } catch (error: any) {
+      console.error("❌ [Forgot Password] 发送重置密码邮件失败:", error);
+      res.status(500).json({ message: error.message || "发送重置密码邮件失败" });
+    }
+  });
+  
+  // 重置密码 - 验证码验证并更新密码
+  app.post('/api/auth/reset-password', async (req: any, res) => {
+    try {
+      const { email, code, newPassword } = req.body;
+      
+      if (!email || !code || !newPassword) {
+        return res.status(400).json({ message: "邮箱、验证码和新密码不能为空" });
+      }
+      
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "新密码长度至少为6位" });
+      }
+      
+      // 获取用户
+      const user = await storage.getUserByEmail(email);
+      
+      // Security: Always return the same error message to prevent enumeration
+      // We cannot distinguish between "user doesn't exist", "user not verified", or "invalid code"
+      if (!user || !user.emailVerified) {
+        console.log(`[Security] Reset password attempt for non-existent/unverified user: ${email}`);
+        return res.status(400).json({ message: "验证码无效或已过期" });
+      }
+      
+      // 验证验证码
+      const { isVerificationCodeValid } = await import('./auth');
+      if (!isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt)) {
+        console.log(`[Security] Invalid verification code for user: ${email}`);
+        return res.status(400).json({ message: "验证码无效或已过期" });
+      }
+      
+      // 更新密码
+      const { hashPassword } = await import('./auth');
+      const passwordHash = await hashPassword(newPassword);
+      
+      await storage.updateUserPassword(email, passwordHash);
+      
+      console.log(`[Auth] Password reset successful for user: ${email}`);
+      res.json({ message: "密码重置成功，请使用新密码登录" });
+    } catch (error: any) {
+      console.error("❌ [Reset Password] 重置密码失败:", error);
+      res.status(500).json({ message: error.message || "重置密码失败" });
+    }
+  });
 
   // Auth route - get current user
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
