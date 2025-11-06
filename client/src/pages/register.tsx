@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, Mail, Lock, KeyRound, ArrowLeft } from "lucide-react";
+import { Heart, Mail, Lock, KeyRound, ArrowLeft, RefreshCw } from "lucide-react";
 
 const registerSchema = z.object({
   email: z.string().email("请输入有效的邮箱地址"),
@@ -35,6 +35,8 @@ export default function Register() {
   const { toast } = useToast();
   const [step, setStep] = useState<'register' | 'verify'>('register');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   const registerForm = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -51,6 +53,16 @@ export default function Register() {
     },
   });
 
+  // 倒计时效果
+  useEffect(() => {
+    if (resendCountdown > 0) {
+      const timer = setTimeout(() => {
+        setResendCountdown(resendCountdown - 1);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [resendCountdown]);
+
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterFormValues) => {
       const response = await apiRequest("POST", "/api/auth/register", data);
@@ -58,6 +70,8 @@ export default function Register() {
     },
     onSuccess: (_, variables) => {
       setEmail(variables.email);
+      setPassword(variables.password);
+      setResendCountdown(60); // 60秒倒计时
       verifyForm.reset({ code: "" }); // Reset verify form when switching to verify step
       setStep('verify');
       toast({
@@ -69,6 +83,31 @@ export default function Register() {
       toast({
         title: "注册失败",
         description: error.message || "发送验证码失败",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/auth/register", {
+        email,
+        password,
+      });
+      return response;
+    },
+    onSuccess: () => {
+      setResendCountdown(60); // 重置倒计时
+      verifyForm.reset({ code: "" }); // 清空验证码输入框
+      toast({
+        title: "验证码已重新发送",
+        description: "请查收邮件并输入新的验证码",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "发送失败",
+        description: error.message || "重新发送验证码失败",
         variant: "destructive",
       });
     },
@@ -229,19 +268,44 @@ export default function Register() {
                   {verifyMutation.isPending ? "验证中..." : "验证并注册"}
                 </Button>
 
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full text-gray-400 hover:text-white"
-                  onClick={() => {
-                    verifyForm.reset({ code: "" }); // Reset verify form when going back
-                    setStep('register');
-                  }}
-                  data-testid="button-back"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  返回修改邮箱
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 border-gray-700 bg-gray-800 text-gray-300 hover:bg-gray-700"
+                    onClick={() => resendMutation.mutate()}
+                    disabled={resendCountdown > 0 || resendMutation.isPending}
+                    data-testid="button-resend"
+                  >
+                    {resendMutation.isPending ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                        发送中...
+                      </>
+                    ) : resendCountdown > 0 ? (
+                      `${resendCountdown}秒后可重发`
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        重新发送
+                      </>
+                    )}
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="flex-1 text-gray-400 hover:text-white"
+                    onClick={() => {
+                      verifyForm.reset({ code: "" }); // Reset verify form when going back
+                      setStep('register');
+                    }}
+                    data-testid="button-back"
+                  >
+                    <ArrowLeft className="w-4 h-4 mr-2" />
+                    返回修改
+                  </Button>
+                </div>
               </form>
             </Form>
           )}
