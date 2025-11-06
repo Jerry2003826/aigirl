@@ -543,6 +543,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       lastMarkedConversationRef.current = selectedConversationId;
     }
   }, [selectedConversationId]); // CRITICAL: Only depend on conversation change, NOT messages
+
+  // Remove optimistic messages when real messages arrive
+  useEffect(() => {
+    if (rawMessages.length > 0 && optimisticMessages.length > 0) {
+      // Remove optimistic messages that match real user messages
+      setOptimisticMessages(prev => 
+        prev.filter(opt => 
+          !rawMessages.some(real => 
+            real.content === opt.content && real.senderType === 'user'
+          )
+        )
+      );
+    }
+  }, [rawMessages]); // 修复：只依赖rawMessages，避免无限循环
   
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
