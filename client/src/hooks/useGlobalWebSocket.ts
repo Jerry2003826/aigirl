@@ -41,10 +41,11 @@ export function useGlobalWebSocket() {
             });
             
             // Check if user is currently viewing this conversation
+            // Use window.__currentConversationId set by chat.tsx
             const currentPath = window.location.pathname;
-            const params = new URLSearchParams(window.location.search);
-            const currentConversationId = params.get('conversationId');
-            const isInThisChat = currentPath === '/chat' && currentConversationId === message.conversationId;
+            // @ts-ignore - Read from window object
+            const currentConversationId = window.__currentConversationId;
+            const isInThisChat = (currentPath === '/chat' || currentPath === '/') && currentConversationId === message.conversationId;
             
             console.log('[WebSocket] 🔍 开始更新缓存', {
               conversationId: message.conversationId,
