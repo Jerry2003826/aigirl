@@ -1252,14 +1252,23 @@ AI：${aiResponse}
       return;
     }
     
+    // Clean markdown code blocks from AI response (e.g., ```json ... ```)
+    let cleanedContent = content;
+    const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+    if (codeBlockMatch) {
+      cleanedContent = codeBlockMatch[1].trim();
+      console.log(`[记忆提取服务] 检测到markdown代码块，已清理`);
+    }
+    
     // Parse the JSON response
     let memories: Array<{ key: string; value: string; context?: string; importance?: number }> = [];
     try {
-      memories = JSON.parse(content);
+      memories = JSON.parse(cleanedContent);
       console.log(`[记忆提取服务] 成功解析JSON，提取到 ${memories.length} 条记忆`);
     } catch (parseError) {
       console.error("[记忆提取服务] ❌ JSON解析失败:", parseError);
       console.error("[记忆提取服务] 原始内容:", content);
+      console.error("[记忆提取服务] 清理后内容:", cleanedContent);
       return;
     }
     
