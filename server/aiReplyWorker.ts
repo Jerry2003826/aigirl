@@ -107,7 +107,9 @@ async function processNextJob() {
     }
     
     // Record messageCount before creating AI messages (for extraction trigger)
-    const messageCountBefore = conversation.messageCount || 0;
+    // CRITICAL: Subtract 1 to exclude the current user message that was just added
+    // This ensures we correctly detect when crossing multiples of 5
+    const messageCountBefore = (conversation.messageCount || 0) - 1;
     
     // Get user message
     const userMessage = await storage.getMessage(job.userMessageId);
@@ -331,16 +333,19 @@ async function processNextJob() {
       });
     }
     
-    // Check if we should trigger memory extraction (every 10 messages)
-    // Check if we crossed a multiple of 10 during this turn
+    // Check if we should trigger memory extraction (every 5 messages)
+    // Improved logic: Extract memories more frequently for better context retention
     const updatedConversation = await storage.getConversation(conversation.id);
     const messageCountAfter = updatedConversation?.messageCount || 0;
     
-    // Detect if we crossed a multiple of 10 (e.g., from 8 to 11 crosses 10)
-    const crossedMultipleOf10 = Math.floor(messageCountAfter / 10) > Math.floor(messageCountBefore / 10);
+    // Detect if we crossed a multiple of 5 (e.g., from 3 to 6 crosses 5)
+    const crossedMultipleOf5 = Math.floor(messageCountAfter / 5) > Math.floor(messageCountBefore / 5);
     
-    if (crossedMultipleOf10 && allAiMessages.length > 0) {
-      console.log(`[AI Worker] Crossed multiple of 10 (${messageCountBefore} -> ${messageCountAfter}), triggering memory extraction`);
+    console.log(`[记忆提取] 检查触发条件: messageCountBefore=${messageCountBefore}, messageCountAfter=${messageCountAfter}`);
+    console.log(`[记忆提取] Math.floor(${messageCountAfter}/5)=${Math.floor(messageCountAfter / 5)} > Math.floor(${messageCountBefore}/5)=${Math.floor(messageCountBefore / 5)} = ${crossedMultipleOf5}`);
+    
+    if (crossedMultipleOf5 && allAiMessages.length > 0) {
+      console.log(`[记忆提取] ✅ 触发条件满足！消息数从 ${messageCountBefore} 增加到 ${messageCountAfter}，跨越了5的倍数`);
       
       // Extract memories from the first (primary) AI's responses only
       // This ensures we only extract from the most relevant AI
@@ -351,6 +356,12 @@ async function processNextJob() {
         // Combine all messages from primary persona
         const combinedResponse = primaryPersonaMessages.map(m => m.content).join(' ');
         
+        console.log(`[记忆提取] 开始提取记忆...`);
+        console.log(`[记忆提取] - 对话ID: ${conversation.id}`);
+        console.log(`[记忆提取] - AI角色: ${primaryPersonaId}`);
+        console.log(`[记忆提取] - 用户消息: ${userMessage.content?.substring(0, 50) || '[图片]'}...`);
+        console.log(`[记忆提取] - AI回复: ${combinedResponse.substring(0, 50)}...`);
+        
         // Extract and store memories from this conversation turn
         try {
           await extractAndStoreMemories(
@@ -359,14 +370,15 @@ async function processNextJob() {
             userMessage.content || '[User sent an image]',
             combinedResponse
           );
-          console.log(`[AI Worker] Memory extraction completed for conversation ${conversation.id}`);
+          console.log(`[记忆提取] ✅ 记忆提取成功完成！`);
         } catch (error) {
-          console.error(`[AI Worker] Memory extraction failed:`, error);
+          console.error(`[记忆提取] ❌ 记忆提取失败:`, error);
           // Don't fail the job if memory extraction fails
         }
       }
     } else {
-      console.log(`[AI Worker] No extraction needed (${messageCountBefore} -> ${messageCountAfter}, next extraction at ${Math.ceil(messageCountAfter / 10) * 10})`);
+      const nextTrigger = Math.ceil(messageCountAfter / 5) * 5;
+      console.log(`[记忆提取] ⏭️  暂不提取 (当前${messageCountAfter}条消息，下次提取在${nextTrigger}条时)`);
     }
     
     // Mark job as completed

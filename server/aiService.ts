@@ -1149,6 +1149,7 @@ AI：${aiResponse}
   }
 ]`;
 
+    console.log(`[记忆提取服务] 调用AI进行记忆提取...`);
     const response = await provider.generateResponse({
       model,
       systemPrompt,
@@ -1162,7 +1163,11 @@ AI：${aiResponse}
     });
     
     const content = response.trim();
+    console.log(`[记忆提取服务] AI响应长度: ${content.length}字符`);
+    console.log(`[记忆提取服务] AI响应内容: ${content.substring(0, 200)}...`);
+    
     if (!content) {
+      console.log(`[记忆提取服务] AI返回空响应，无记忆提取`);
       return;
     }
     
@@ -1170,14 +1175,21 @@ AI：${aiResponse}
     let memories: Array<{ key: string; value: string; context?: string; importance?: number }> = [];
     try {
       memories = JSON.parse(content);
+      console.log(`[记忆提取服务] 成功解析JSON，提取到 ${memories.length} 条记忆`);
     } catch (parseError) {
-      console.error("Failed to parse memory extraction response:", parseError);
+      console.error("[记忆提取服务] ❌ JSON解析失败:", parseError);
+      console.error("[记忆提取服务] 原始内容:", content);
       return;
     }
     
     // Store each extracted memory with improved deduplication
+    console.log(`[记忆提取服务] 开始存储记忆...`);
+    let storedCount = 0;
+    let skippedCount = 0;
+    
     for (const memory of memories) {
       if (!memory.key || !memory.value) {
+        console.log(`[记忆提取服务] ⚠️ 跳过无效记忆（缺少key或value）`);
         continue;
       }
       
@@ -1211,10 +1223,17 @@ AI：${aiResponse}
           context: memory.context || null,
           importance, // Use AI-determined importance
         });
-        console.log(`Stored memory for persona ${personaId} from conversation ${conversationId}: ${normalizedKey} = ${memory.value} (importance: ${importance})`);
+        storedCount++;
+        console.log(`[记忆提取服务] ✅ 存储记忆 #${storedCount}: ${normalizedKey} = ${memory.value} (重要性: ${importance})`);
       } else {
-        console.log(`Skipped duplicate memory: ${normalizedKey} (similar to existing: ${duplicate.key})`);
+        skippedCount++;
+        console.log(`[记忆提取服务] ⏭️ 跳过重复记忆: ${normalizedKey} (与已有记忆 "${duplicate.key}" 相似)`);
       }
+    }
+    
+    console.log(`[记忆提取服务] 记忆存储完成: 新增${storedCount}条，跳过${skippedCount}条重复`);
+    if (storedCount === 0 && memories.length > 0) {
+      console.log(`[记忆提取服务] ⚠️ 注意：AI提取了${memories.length}条记忆，但都是重复的，未新增任何记忆`);
     }
   } catch (error) {
     console.error("Error extracting memories:", error);
