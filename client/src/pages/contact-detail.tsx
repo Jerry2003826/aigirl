@@ -313,22 +313,52 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
       return;
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("/api/upload", {
+      // Step 1: Get presigned upload URL
+      const uploadRes = await fetch("/api/objects/upload", {
         method: "POST",
-        body: formData,
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error("上传失败");
+      if (!uploadRes.ok) throw new Error("获取上传链接失败");
 
-      const data = await res.json();
-      personaForm.setValue("avatarUrl", data.url);
-      setAvatarPreview(data.url);
+      const { uploadURL } = await uploadRes.json();
+
+      // Step 2: Upload file to object storage
+      const uploadFileRes = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadFileRes.ok) throw new Error("上传文件失败");
+
+      // Step 3: Set ACL policy for avatar
+      const aclRes = await fetch("/api/avatars", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({ avatarURL: uploadURL }),
+      });
+
+      if (!aclRes.ok) throw new Error("设置权限失败");
+
+      const { objectPath } = await aclRes.json();
+
+      // Step 4: Update form with new avatar path
+      personaForm.setValue("avatarUrl", objectPath);
+      setAvatarPreview(objectPath);
+
+      toast({
+        title: "成功",
+        description: "头像上传成功",
+      });
     } catch (error) {
+      console.error("Avatar upload error:", error);
       toast({
         title: "错误",
         description: "上传头像失败",
