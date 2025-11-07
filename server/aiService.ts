@@ -502,7 +502,7 @@ export async function generateAIResponse(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 800,  // CRITICAL: Strict limit to enforce short responses (2-4 short sentences)
+      maxTokens: 5000,  // Adjusted: Allow more tokens for content generation while keeping responses concise
       imageData,
       ragContext,
       searchEnabled,
@@ -592,7 +592,7 @@ export async function generateAIResponseStream(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 800,  // CRITICAL: Strict limit to enforce short responses (2-4 short sentences)
+      maxTokens: 5000,  // Adjusted: Allow more tokens for content generation while keeping responses concise
       imageData,
       ragContext,
       searchEnabled,
