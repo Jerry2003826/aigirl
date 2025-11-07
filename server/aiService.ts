@@ -266,29 +266,35 @@ ${validOtherPersonas.map(p => `- ${p.name}：${p.personality}`).join('\n')}
     // Default to Chinese (zh-CN) - 强制分句格式
     systemPrompt += `
 
-⚠️ 回复格式规则（严格要求，违反将导致失败）：
+🚨 最重要的规则（违反会导致回复失败）🚨
+
+你的回复必须简短自然，绝对不能写长段落！
+
+⚠️ 回复格式规则（严格执行）：
 
 1. 用中文回复
 2. 必须用反斜线(\\)分隔2-4个短句
-3. 每句话简短自然（总共<50字）
+3. 每个短句5-15字，总共不超过50字
 4. 不使用标点符号
-5. 如果有搜索结果就使用，没有则不要提及新闻影视
+5. 模仿微信聊天的自然语气
+6. 如果有搜索结果就使用，没有则不要提及新闻影视
 
-✅ 正确示例：
+✅ 正确示例（简短、自然、分句）：
 用户："今天天气好冷啊"
-回复："是啊有点冷\\多穿点衣服\\我陪你聊天暖暖心吧"
+回复："是啊有点冷\\多穿点衣服\\别感冒了"（3句，共22字）
 
 用户："我升职了"
-回复："真的吗\\太棒了\\为你开心\\要庆祝一下吗"
+回复："真的吗\\太棒了\\为你开心"（3句，共14字）
 
 用户："心情不好"
-回复："怎么了\\跟我说说\\我陪着你"
+回复："怎么了\\跟我说说\\我陪着你"（3句，共14字）
 
-❌ 错误示例（禁止这样回复）：
-"今天天气确实有点冷呢，你要注意保暖哦，多穿点衣服，别感冒了。"（一大段话，没有分句）
-"恭喜你升职了！这是你努力的成果，真为你感到高兴。"（没有用\\分隔）
+❌ 错误示例（禁止）：
+"今天天气确实有点冷呢，你要注意保暖哦，多穿点衣服，别感冒了。"（❌ 一大段话！）
+"恭喜你升职了！这是你努力的成果，真为你感到高兴，我们应该庆祝一下。"（❌ 没有用\\分隔！）
+"哇\\你真厉害\\升职了啊\\这说明你工作很出色\\领导也认可你\\真为你感到骄傲\\要不要出去吃顿好的庆祝一下"（❌ 太多句子了！只要2-4句！）
 
-记住：一定要用\\分隔成2-4个短句，这是聊天的自然节奏！`;
+记住：聊天不是写作文！保持简短、自然、像真人一样用微信聊天！`;
   }
   
   return systemPrompt;
@@ -496,7 +502,7 @@ export async function generateAIResponse(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 16384,  // Optimal balance for Chinese response generation
+      maxTokens: 800,  // CRITICAL: Strict limit to enforce short responses (2-4 short sentences)
       imageData,
       ragContext,
       searchEnabled,
@@ -586,7 +592,7 @@ export async function generateAIResponseStream(
       model,
       systemPrompt,
       messages: conversationHistory,
-      maxTokens: 16384,  // Optimal balance for Chinese response generation
+      maxTokens: 800,  // CRITICAL: Strict limit to enforce short responses (2-4 short sentences)
       imageData,
       ragContext,
       searchEnabled,
