@@ -1161,6 +1161,20 @@ function areValuesSimilar(value1: string, value2: string): boolean {
 }
 
 /**
+ * Calculate optimal memory extraction count based on conversation length
+ * Strategy: Scale from 5 to 12 items per extraction run
+ */
+function getMemoryExtractionLimit(messageCount: number): number {
+  if (messageCount <= 20) {
+    return 5;  // Short conversations: 5 memories
+  } else if (messageCount <= 50) {
+    return 8;  // Medium conversations: 8 memories
+  } else {
+    return 12; // Long conversations: 12 memories
+  }
+}
+
+/**
  * Extract and store user memories from conversation
  */
 export async function extractAndStoreMemories(
@@ -1177,19 +1191,29 @@ export async function extractAndStoreMemories(
       return;
     }
     
-    // Get recent conversation context for better memory extraction
-    const recentMessages = await storage.getMessagesByConversation(conversationId, 5, 0);
+    // Get all messages to calculate conversation length
+    const allMessages = await storage.getMessagesByConversation(conversationId, 1000, 0);
+    const totalMessageCount = allMessages.length;
+    
+    // Calculate optimal memory extraction limit based on conversation length
+    const memoryLimit = getMemoryExtractionLimit(totalMessageCount);
+    
+    // Get more context for longer conversations (up to 30 recent messages)
+    const contextLimit = Math.min(30, Math.max(10, Math.floor(totalMessageCount / 2)));
+    const recentMessages = await storage.getMessagesByConversation(conversationId, contextLimit, 0);
     const contextMessages = recentMessages
       .reverse()
       .map(m => `${m.senderType === "user" ? "User" : "AI"}: ${m.content}`)
       .join("\n");
+    
+    console.log(`[记忆提取服务] 📊 对话统计: 总消息数=${totalMessageCount}, 上下文消息数=${contextLimit}, 提取上限=${memoryLimit}条`);
     
     // Get user's AI settings to use their custom API key
     const aiSettings = await storage.getAiSettings(conversation.userId);
     const provider = getAIProvider(aiSettings);
     const model = getModelName(aiSettings);
     
-    const systemPrompt = "你是一个记忆提取系统。从对话中提取重要的用户信息，并格式化为JSON。只返回有效的JSON，不要返回其他任何文本。";
+    const systemPrompt = "你是一个高效的记忆提取系统。从对话中提取重要的用户信息，并格式化为JSON。只返回有效的JSON，不要返回其他任何文本。";
     
     const extractionPrompt = `分析以下对话，提取关于用户的重要信息，以便在未来对话中记住。包括：
 - 个人信息（姓名、年龄、地点、职业等）
@@ -1199,9 +1223,14 @@ export async function extractAndStoreMemories(
 - 人际关系和家庭
 - 爱好和活动
 
-只提取用户明确陈述的信息，不要做假设或推断。
+**重要规则：**
+1. 只提取用户明确陈述的信息，不要做假设或推断
+2. **最多提取${memoryLimit}条最重要的记忆**（根据对话长度动态调整）
+3. 优先提取高重要性（7-10分）的信息
+4. 去除重复或相似的记忆，只保留最新、最完整的版本
+5. 每条记忆的value要简洁明了，避免冗长描述
 
-最近的对话上下文：
+最近的对话上下文（${contextLimit}条消息）：
 ${contextMessages}
 
 最新的对话：
@@ -1210,14 +1239,15 @@ AI：${aiResponse}
 
 请返回一个JSON数组，包含记忆对象。每个记忆应该有：
 - key：简短的类别或标识符（例如："职业"、"最喜欢的食物"、"宠物名字"）
-- value：要记住的具体信息
+- value：要记住的具体信息（简洁明了）
 - context：可选的附加上下文，说明这些信息是何时/如何提到的
-- importance：重要程度（1-10）
+- importance：重要程度（1-10），优先标记高重要性
   - 1-3：次要信息（临时兴趣、一次性提及）
   - 4-6：中等重要（一般偏好、日常活动）
   - 7-9：重要信息（核心身份、重要关系、长期目标）
   - 10：关键信息（姓名、重大生活事件）
 
+**注意：最多返回${memoryLimit}条记忆！优先选择最重要、最有价值的信息。**
 如果没有需要提取的新记忆，返回空数组[]。
 
 示例响应：
@@ -1270,7 +1300,16 @@ AI：${aiResponse}
     let memories: Array<{ key: string; value: string; context?: string; importance?: number }> = [];
     try {
       memories = JSON.parse(cleanedContent);
-      console.log(`[记忆提取服务] 成功解析JSON，提取到 ${memories.length} 条记忆`);
+      console.log(`[记忆提取服务] ✅ 成功解析JSON，AI提取了 ${memories.length} 条记忆（上限: ${memoryLimit}条）`);
+      
+      // Log token usage estimate (approximate: 1 Chinese char ≈ 2 tokens)
+      const estimatedTokens = content.length * 2;
+      console.log(`[记忆提取服务] 📊 估计token使用: ~${estimatedTokens} tokens (预算: 10000 tokens)`);
+      
+      // Warn if AI exceeded the limit
+      if (memories.length > memoryLimit) {
+        console.log(`[记忆提取服务] ⚠️ 警告：AI提取了${memories.length}条记忆，超过建议上限${memoryLimit}条`);
+      }
     } catch (parseError) {
       console.error("[记忆提取服务] ❌ JSON解析失败:", parseError);
       console.error("[记忆提取服务] 原始内容:", content);
@@ -1327,9 +1366,22 @@ AI：${aiResponse}
       }
     }
     
-    console.log(`[记忆提取服务] 记忆存储完成: 新增${storedCount}条，跳过${skippedCount}条重复`);
+    // Calculate importance distribution
+    const importanceDistribution = memories.reduce((acc, m) => {
+      const imp = m.importance || 5;
+      if (imp >= 8) acc.high++;
+      else if (imp >= 4) acc.medium++;
+      else acc.low++;
+      return acc;
+    }, { high: 0, medium: 0, low: 0 });
+    
+    console.log(`[记忆提取服务] 📋 记忆存储完成: 新增${storedCount}条，跳过${skippedCount}条重复`);
+    console.log(`[记忆提取服务] 📊 重要性分布: 高(8-10)=${importanceDistribution.high}条, 中(4-7)=${importanceDistribution.medium}条, 低(1-3)=${importanceDistribution.low}条`);
+    
     if (storedCount === 0 && memories.length > 0) {
       console.log(`[记忆提取服务] ⚠️ 注意：AI提取了${memories.length}条记忆，但都是重复的，未新增任何记忆`);
+    } else if (storedCount > 0) {
+      console.log(`[记忆提取服务] 🎉 成功存储${storedCount}条新记忆！对话长度=${totalMessageCount}条消息，提取上限=${memoryLimit}条`);
     }
   } catch (error) {
     console.error("Error extracting memories:", error);
