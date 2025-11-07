@@ -152,20 +152,23 @@ export function useGlobalWebSocket() {
                   }
                 }
                 
-                // 🆕 如果是AI消息且用户正在查看该对话，则通过自定义事件传递（用于消息队列）
+                // 🆕 CRITICAL FIX: Always add AI messages to cache to prevent message loss
+                // If user is viewing this chat, also trigger queue event for smooth animation
                 if (message.senderType === 'ai' && isInThisChat) {
                   console.log('[WebSocket] 📨 AI消息在当前对话中，触发队列事件', {
                     messageId: message.id,
                     content: message.content?.substring(0, 30),
                   });
                   
-                  // 触发自定义事件，让chat.tsx将消息加入队列
+                  // Trigger custom event for queue system (optional enhancement)
+                  // The queue system will check if message already exists before adding
                   window.dispatchEvent(new CustomEvent('ai-message-queue', {
                     detail: { message }
                   }));
                   
-                  // 不直接添加到缓存，返回原数据
-                  return oldData;
+                  // IMPORTANT: Still add to cache as fallback
+                  // This ensures messages are never lost even if queue system fails
+                  console.log('[WebSocket] ➕ 同时添加AI消息到缓存（防止丢失）', { messageId: message.id });
                 }
                 
                 console.log('[WebSocket] ➕ 添加新消息到缓存', { messageId: message.id });

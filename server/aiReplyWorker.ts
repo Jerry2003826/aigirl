@@ -292,10 +292,11 @@ async function processNextJob() {
       // Offline users will get all messages at once when they refresh
       console.log(`[AI Worker] Broadcasting ${savedMessages.length} messages with delays`);
       for (let i = 0; i < savedMessages.length; i++) {
-        if (i > 0) {
-          // Wait 2-3 seconds randomly before broadcasting next message
-          await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-        }
+        // CRITICAL FIX: Add delay for ALL messages (including the first one)
+        // This ensures consistent 2-3 second intervals between messages
+        const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
+        console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
         
         const { message, persona } = savedMessages[i];
         const messageWithPersona = {
@@ -304,6 +305,11 @@ async function processNextJob() {
           personaAvatar: persona.avatarUrl
         };
         
+        console.log(`[AI Worker] Broadcasting message ${i + 1}/${savedMessages.length}:`, {
+          messageId: message.id,
+          content: message.content?.substring(0, 30),
+          delay: `${Math.round(delayMs)}ms`,
+        });
         broadcastNewMessage(conversation.id, messageWithPersona);
       }
       
