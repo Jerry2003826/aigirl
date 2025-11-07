@@ -8,6 +8,8 @@ import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent } from "./websocket";
+import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
+import { ObjectPermission } from "./objectAcl";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -375,19 +377,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // File upload route
-  app.post('/api/upload', isAuthenticated, upload.single('file'), async (req: any, res) => {
+  // Object Storage: Get presigned upload URL
+  app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "没有上传文件" });
-      }
-
-      // Return the URL path to the uploaded file
-      const fileUrl = `/uploads/${req.file.filename}`;
-      res.json({ url: fileUrl });
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
     } catch (error: any) {
-      console.error("Error uploading file:", error);
-      res.status(500).json({ message: error.message || "上传文件失败" });
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: error.message || "获取上传链接失败" });
+    }
+  });
+
+  // Object Storage: Set avatar ACL and return normalized path
+  app.put('/api/avatars', isAuthenticated, async (req: any, res) => {
+    if (!req.body.avatarURL) {
+      return res.status(400).json({ error: "avatarURL is required" });
+    }
+
+    const userId = req.user.id;
+
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+        req.body.avatarURL,
+        {
+          owner: userId,
+          visibility: "public", // Avatars are public for all users to see
+        },
+      );
+
+      res.status(200).json({
+        objectPath: objectPath,
+      });
+    } catch (error) {
+      console.error("Error setting avatar ACL:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  // Object Storage: Download/serve objects
+  app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
+    const userId = req.user.id;
+    const objectStorageService = new ObjectStorageService();
+    try {
+      const objectFile = await objectStorageService.getObjectEntityFile(
+        req.path,
+      );
+      const canAccess = await objectStorageService.canAccessObjectEntity({
+        objectFile,
+        userId: userId,
+        requestedPermission: ObjectPermission.READ,
+      });
+      if (!canAccess) {
+        return res.sendStatus(401);
+      }
+      objectStorageService.downloadObject(objectFile, res);
+    } catch (error) {
+      console.error("Error checking object access:", error);
+      if (error instanceof ObjectNotFoundError) {
+        return res.sendStatus(404);
+      }
+      return res.sendStatus(500);
     }
   });
 
