@@ -46,8 +46,12 @@ export class GeminiProvider implements AIProvider {
       console.log("✅ Using user's custom Google AI API key");
     } else {
       // NO FALLBACK - User must provide their own API key
-      console.error("❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.");
-      console.error("   Go to Settings → AI Configuration → Enter your Google AI API key");
+      console.error(
+        "❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.",
+      );
+      console.error(
+        "   Go to Settings → AI Configuration → Enter your Google AI API key",
+      );
       this.isConfigured = false;
       return;
     }
@@ -74,7 +78,15 @@ export class GeminiProvider implements AIProvider {
       throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
+    const {
+      model,
+      systemPrompt,
+      messages,
+      maxTokens = 8192,
+      imageData,
+      ragContext,
+      searchEnabled,
+    } = params;
 
     // Build contents array for Gemini (convert conversation history)
     const contents = [];
@@ -90,29 +102,36 @@ export class GeminiProvider implements AIProvider {
 
     // CRITICAL FIX: Gemini API requires the last message to be from 'user'
     // Remove any trailing 'model' messages
-    while (contents.length > 0 && contents[contents.length - 1].role === "model") {
+    while (
+      contents.length > 0 &&
+      contents[contents.length - 1].role === "model"
+    ) {
       contents.pop();
     }
 
     // Ensure at least one user message remains after pruning
-    if (contents.length === 0 || contents[contents.length - 1].role !== "user") {
+    if (
+      contents.length === 0 ||
+      contents[contents.length - 1].role !== "user"
+    ) {
       // No valid user message found - this can happen if conversation starts with persona
       // Fall back to using the triggering message text
-      const lastUserContent = messages.filter(m => m.role === "user").pop();
+      const lastUserContent = messages.filter((m) => m.role === "user").pop();
       if (!lastUserContent) {
         throw new Error("No user messages in conversation history");
       }
-      
+
       // Handle image messages or empty content - use placeholder
-      const textContent = lastUserContent.content && lastUserContent.content.trim().length > 0
-        ? lastUserContent.content
-        : "[User sent an image]";
-      
+      const textContent =
+        lastUserContent.content && lastUserContent.content.trim().length > 0
+          ? lastUserContent.content
+          : "[User sent an image]";
+
       // Reset contents to just the last user message
       contents.length = 0;
       contents.push({
         role: "user",
-        parts: [{ text: textContent }]
+        parts: [{ text: textContent }],
       });
     }
 
@@ -151,19 +170,21 @@ ${originalText}`;
 
     // Add Google Search tool if enabled
     if (searchEnabled) {
-      config.tools = [{
-        googleSearch: {}, // Enable Google Search grounding
-      }];
+      config.tools = [
+        {
+          googleSearch: {}, // Enable Google Search grounding
+        },
+      ];
     }
 
     try {
-      console.log('[Gemini API] Calling generateContent with:', {
+      console.log("[Gemini API] Calling generateContent with:", {
         model: model || "gemini-2.5-pro",
         contentsLength: contents.length,
         systemPromptLength: systemPrompt.length,
         maxTokens,
       });
-      
+
       const response = await this.client.models.generateContent({
         model: model || "gemini-2.5-pro", // Default to gemini-2.5-pro
         contents,
@@ -171,18 +192,30 @@ ${originalText}`;
       });
 
       // Log full response for debugging
-      console.log('[Gemini API] Response object keys:', Object.keys(response));
-      console.log('[Gemini API] response.text value:', JSON.stringify(response.text));
-      console.log('[Gemini API] response.text length:', response.text?.length || 0);
-      
+      console.log("[Gemini API] Response object keys:", Object.keys(response));
+      console.log(
+        "[Gemini API] response.text value:",
+        JSON.stringify(response.text),
+      );
+      console.log(
+        "[Gemini API] response.text length:",
+        response.text?.length || 0,
+      );
+
       // Check if response has candidates
       if (response.candidates && response.candidates.length > 0) {
-        console.log('[Gemini API] candidates[0]:', JSON.stringify(response.candidates[0], null, 2));
+        console.log(
+          "[Gemini API] candidates[0]:",
+          JSON.stringify(response.candidates[0], null, 2),
+        );
       }
 
       const text = response.text || "";
-      console.log('[Gemini API] Final returned text:', text ? `"${text}" (${text.length} chars)` : '(empty)');
-      
+      console.log(
+        "[Gemini API] Final returned text:",
+        text ? `"${text}" (${text.length} chars)` : "(empty)",
+      );
+
       return text;
     } catch (error: any) {
       console.error("Gemini API error:", error);
@@ -196,12 +229,22 @@ ${originalText}`;
     }
   }
 
-  async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
+  async generateResponseStream(
+    params: GenerateParams,
+  ): Promise<AsyncIterable<any>> {
     if (!this.isConfigured || !this.client) {
       throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData, ragContext, searchEnabled } = params;
+    const {
+      model,
+      systemPrompt,
+      messages,
+      maxTokens = 8192,
+      imageData,
+      ragContext,
+      searchEnabled,
+    } = params;
 
     // Build contents array
     const contents = [];
@@ -249,9 +292,11 @@ ${originalText}`;
 
     // Add Google Search tool if enabled
     if (searchEnabled) {
-      config.tools = [{
-        googleSearch: {}, // Enable Google Search grounding
-      }];
+      config.tools = [
+        {
+          googleSearch: {}, // Enable Google Search grounding
+        },
+      ];
     }
 
     try {
@@ -281,26 +326,36 @@ ${originalText}`;
       // Gemini Embeddings API expects 'contents' array with Content objects
       const result = await this.client.models.embedContent({
         model: "text-embedding-004",
-        contents: [{
-          role: "user",
-          parts: [{ text }]
-        }]
+        contents: [
+          {
+            role: "user",
+            parts: [{ text }],
+          },
+        ],
       });
 
       // Extract values from first embedding in the embeddings array
       if (!result.embeddings || result.embeddings.length === 0) {
-        console.warn("[Gemini Embeddings] No embeddings returned for text:", text.substring(0, 50));
+        console.warn(
+          "[Gemini Embeddings] No embeddings returned for text:",
+          text.substring(0, 50),
+        );
         throw new Error("No embeddings returned from API");
       }
-      
+
       const embedding = result.embeddings[0]?.values || [];
-      
+
       if (embedding.length === 0) {
-        console.warn("[Gemini Embeddings] Empty embedding values for text:", text.substring(0, 50));
+        console.warn(
+          "[Gemini Embeddings] Empty embedding values for text:",
+          text.substring(0, 50),
+        );
         throw new Error("Empty embedding values returned from API");
       }
-      
-      console.log(`[Gemini Embeddings] Successfully generated embedding with ${embedding.length} dimensions`);
+
+      console.log(
+        `[Gemini Embeddings] Successfully generated embedding with ${embedding.length} dimensions`,
+      );
       return embedding;
     } catch (error: any) {
       console.error("[Gemini Embeddings] Error:", error?.message || error);
@@ -318,7 +373,7 @@ ${originalText}`;
 
     try {
       const embeddings = await Promise.all(
-        texts.map(text => this.embedText(text))
+        texts.map((text) => this.embedText(text)),
       );
       return embeddings;
     } catch (error: any) {
@@ -373,8 +428,12 @@ export class OpenAIProvider implements AIProvider {
       console.log("✅ Using user's custom OpenAI API key");
     } else {
       // NO FALLBACK - User must provide their own API key
-      console.error("❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.");
-      console.error("   Go to Settings → AI Configuration → Enter your OpenAI API key");
+      console.error(
+        "❌ CRITICAL: No custom API key provided. User MUST configure their own API key in settings.",
+      );
+      console.error(
+        "   Go to Settings → AI Configuration → Enter your OpenAI API key",
+      );
       this.isConfigured = false;
       return;
     }
@@ -398,7 +457,13 @@ export class OpenAIProvider implements AIProvider {
       throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
+    const {
+      model,
+      systemPrompt,
+      messages,
+      maxTokens = 8192,
+      imageData,
+    } = params;
 
     // Build OpenAI messages
     const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -411,8 +476,9 @@ export class OpenAIProvider implements AIProvider {
     // Add conversation history
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      const isLastUserMessage = i === messages.length - 1 && msg.role === "user";
-      
+      const isLastUserMessage =
+        i === messages.length - 1 && msg.role === "user";
+
       if (imageData && isLastUserMessage) {
         // Attach image only to the last user message
         openaiMessages.push({
@@ -449,12 +515,20 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  async generateResponseStream(params: GenerateParams): Promise<AsyncIterable<any>> {
+  async generateResponseStream(
+    params: GenerateParams,
+  ): Promise<AsyncIterable<any>> {
     if (!this.isConfigured || !this.client) {
       throw new Error("AI服务未配置。请前往设置页面配置您的API密钥。");
     }
 
-    const { model, systemPrompt, messages, maxTokens = 8192, imageData } = params;
+    const {
+      model,
+      systemPrompt,
+      messages,
+      maxTokens = 8192,
+      imageData,
+    } = params;
 
     // Build OpenAI messages
     const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
@@ -466,8 +540,9 @@ export class OpenAIProvider implements AIProvider {
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      const isLastUserMessage = i === messages.length - 1 && msg.role === "user";
-      
+      const isLastUserMessage =
+        i === messages.length - 1 && msg.role === "user";
+
       if (imageData && isLastUserMessage) {
         // Attach image only to the last user message
         openaiMessages.push({
