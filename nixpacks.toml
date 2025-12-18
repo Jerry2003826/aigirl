@@ -1,7 +1,7 @@
 [phases.setup]
-# Railway/Nixpacks 默认会调用 npm ci；在此强制使用 npm install 以避免锁文件校验错误
+# Railway/Nixpacks 默认会调用 npm ci；这里改为 npm install，并保留 optional 依赖（如 rollup 平台二进制）
 install = [
-  "npm install --omit=optional --ignore-scripts=false"
+  "npm install --ignore-scripts=false"
 ]
 
 [phases.build]
