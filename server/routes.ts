@@ -7,9 +7,12 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
-import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent } from "./websocket";
+import { minimaxTtsToBuffer } from "./voice/minimaxTts";
+import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent, broadcastToUserEvent } from "./websocket";
+import { loadAndApplyConfig } from "./config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
+import { S3StorageService } from "./storage/s3";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -32,7 +35,34 @@ export const sessionStore = new pgStore({
   tableName: "sessions",
 });
 
+function readBoolEnv(key: string, defaultValue: boolean): boolean {
+  const v = (process.env[key] || "").toLowerCase().trim();
+  if (!v) return defaultValue;
+  if (["1", "true", "yes", "y", "on"].includes(v)) return true;
+  if (["0", "false", "no", "n", "off"].includes(v)) return false;
+  return defaultValue;
+}
+
+function readStringEnv(key: string): string | undefined {
+  const v = process.env[key];
+  if (!v) return undefined;
+  const trimmed = v.trim();
+  return trimmed.length ? trimmed : undefined;
+}
+
+function readSameSiteEnv(): "lax" | "strict" | "none" {
+  const v = (process.env.COOKIE_SAMESITE || "").toLowerCase().trim();
+  if (v === "strict") return "strict";
+  if (v === "none") return "none";
+  return "lax";
+}
+
 export function getSession() {
+  const isProd = process.env.NODE_ENV === "production";
+  const secure = readBoolEnv("COOKIE_SECURE", isProd);
+  const sameSite = readSameSiteEnv();
+  const domain = readStringEnv("COOKIE_DOMAIN");
+
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -40,7 +70,9 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure,
+      sameSite,
+      ...(domain ? { domain } : {}),
       maxAge: sessionTtl,
     },
   });
@@ -106,10 +138,12 @@ const messageLimiter = rateLimit({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup session middleware
-  app.set("trust proxy", 1);
+  const trustProxy = parseInt(process.env.TRUST_PROXY || "1", 10);
+  app.set("trust proxy", Number.isFinite(trustProxy) ? trustProxy : 1);
   app.use(getSession());
 
   // ========== 新的邮箱验证码认证系统 ==========
+  const isDevEnv = (process.env.NODE_ENV || "development") === "development";
   
   // 注册 - 发送验证码
   app.post('/api/auth/register', async (req: any, res) => {
@@ -146,7 +180,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // 发送验证码邮件
       const { sendVerificationEmail } = await import('./emailService');
-      await sendVerificationEmail(email, code);
+      try {
+        await sendVerificationEmail(email, code);
+      } catch (emailErr: any) {
+        // Dev-friendly: allow local testing even if email provider/network is unavailable
+        if (isDevEnv) {
+          console.warn("⚠️ [Register] 开发环境发送邮件失败，已返回devCode用于本机测试：", emailErr?.message || emailErr);
+          const message = existingUser
+            ? "验证码发送失败（开发环境），请使用返回的 devCode 继续验证"
+            : "验证码发送失败（开发环境），请使用返回的 devCode 继续验证";
+          return res.json({ message, devCode: code });
+        }
+        throw emailErr;
+      }
       
       const message = existingUser 
         ? "验证码已重新发送到您的邮箱" 
@@ -288,7 +334,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // 发送重置密码邮件
       const { sendPasswordResetEmail } = await import('./emailService');
-      await sendPasswordResetEmail(email, code);
+      try {
+        await sendPasswordResetEmail(email, code);
+      } catch (emailErr: any) {
+        if (isDevEnv) {
+          console.warn("⚠️ [Forgot Password] 开发环境发送邮件失败，已返回devCode用于本机测试：", emailErr?.message || emailErr);
+          return res.json({ message: "发送失败（开发环境），请使用返回的 devCode 继续重置", devCode: code });
+        }
+        throw emailErr;
+      }
       
       res.json({ message: "重置密码验证码已发送到您的邮箱" });
     } catch (error: any) {
@@ -377,68 +431,171 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Object Storage: Get presigned upload URL
+  // Object Storage: Get presigned upload URL (S3-compatible)
   app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {
-    try {
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
-    } catch (error: any) {
-      console.error("Error getting upload URL:", error);
-      res.status(500).json({ message: error.message || "获取上传链接失败" });
+    const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
+    
+    if (storageMode === "s3") {
+      try {
+        // Load S3 config from environment (set by config loader)
+        const s3Config = {
+          endpoint: process.env.S3_ENDPOINT!,
+          region: process.env.S3_REGION!,
+          bucket: process.env.S3_BUCKET!,
+          accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+          publicBaseUrl: process.env.S3_PUBLIC_BASE_URL,
+          forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+        };
+
+        // Validate required fields
+        if (!s3Config.endpoint || !s3Config.region || !s3Config.bucket || 
+            !s3Config.accessKeyId || !s3Config.secretAccessKey) {
+          return res.status(500).json({ 
+            message: "S3配置不完整。请在 config/app.config.json 中设置 s3.* 字段。" 
+          });
+        }
+
+        const s3Service = new S3StorageService(s3Config);
+        const contentType = req.body.contentType || "image/jpeg";
+        const result = await s3Service.getPresignedUploadUrl(contentType);
+        
+        res.json({
+          uploadUrl: result.uploadUrl,
+          objectKey: result.objectKey,
+          publicUrl: result.publicUrl,
+        });
+      } catch (error: any) {
+        console.error("Error getting S3 presigned URL:", error);
+        res.status(500).json({ message: error.message || "获取上传链接失败" });
+      }
+    } else if (storageMode === "replit") {
+      // Legacy Replit object storage (for backward compatibility)
+      try {
+        const objectStorageService = new ObjectStorageService();
+        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+        res.json({ uploadURL });
+      } catch (error: any) {
+        console.error("Error getting upload URL:", error);
+        res.status(500).json({ message: error.message || "获取上传链接失败" });
+      }
+    } else {
+      // Disabled or unknown mode
+      return res.status(501).json({ 
+        message: "对象存储未启用。请在 config/app.config.json 中设置 objectStorage.mode 为 's3' 或使用本地上传方案。" 
+      });
     }
   });
 
-  // Object Storage: Set avatar ACL and return normalized path
+  // Avatar upload: For S3, we just return the public URL directly
+  // For Replit, we normalize the path (legacy support)
   app.put('/api/avatars', isAuthenticated, async (req: any, res) => {
     if (!req.body.avatarURL) {
       return res.status(400).json({ error: "avatarURL is required" });
     }
 
+    const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
     const userId = req.user.id;
 
-    try {
-      const objectStorageService = new ObjectStorageService();
-      const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-        req.body.avatarURL,
-        {
-          owner: userId,
-          visibility: "public", // Avatars are public for all users to see
-        },
-      );
-
+    if (storageMode === "s3") {
+      // For S3, avatarURL should already be the public URL from upload
+      // Just return it as-is (or validate it's a valid S3 URL)
       res.status(200).json({
-        objectPath: objectPath,
+        objectPath: req.body.avatarURL,
+        publicUrl: req.body.avatarURL,
       });
-    } catch (error) {
-      console.error("Error setting avatar ACL:", error);
-      res.status(500).json({ error: "Internal server error" });
+    } else if (storageMode === "replit") {
+      // Legacy Replit object storage
+      try {
+        const objectStorageService = new ObjectStorageService();
+        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
+          req.body.avatarURL,
+          {
+            owner: userId,
+            visibility: "public",
+          },
+        );
+        res.status(200).json({
+          objectPath: objectPath,
+        });
+      } catch (error) {
+        console.error("Error setting avatar ACL:", error);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    } else {
+      // For local uploads or disabled storage, just return the URL as-is
+      // (assuming it's a relative path like /uploads/...)
+      res.status(200).json({
+        objectPath: req.body.avatarURL,
+        publicUrl: req.body.avatarURL,
+      });
     }
   });
 
   // Object Storage: Download/serve objects
+  // For S3: redirect to public URL or generate presigned download URL
+  // For Replit: serve via sidecar (legacy)
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
-    const userId = req.user.id;
-    const objectStorageService = new ObjectStorageService();
-    try {
-      const objectFile = await objectStorageService.getObjectEntityFile(
-        req.path,
-      );
-      const canAccess = await objectStorageService.canAccessObjectEntity({
-        objectFile,
-        userId: userId,
-        requestedPermission: ObjectPermission.READ,
-      });
-      if (!canAccess) {
-        return res.sendStatus(401);
+    const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
+    
+    if (storageMode === "s3") {
+      // For S3, objects should be accessed via public URL directly
+      // This endpoint can redirect or generate presigned URL for private buckets
+      const objectKey = req.params.objectPath;
+      
+      try {
+        const s3Config = {
+          endpoint: process.env.S3_ENDPOINT!,
+          region: process.env.S3_REGION!,
+          bucket: process.env.S3_BUCKET!,
+          accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+          secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+          publicBaseUrl: process.env.S3_PUBLIC_BASE_URL,
+          forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+        };
+        
+        const s3Service = new S3StorageService(s3Config);
+        
+        // If bucket is public, redirect to public URL
+        // Otherwise, generate presigned download URL
+        if (s3Config.publicBaseUrl || process.env.S3_PUBLIC_BUCKET === "true") {
+          const publicUrl = s3Service.getPublicUrl(objectKey);
+          return res.redirect(302, publicUrl);
+        } else {
+          const downloadUrl = await s3Service.getPresignedDownloadUrl(objectKey);
+          return res.redirect(302, downloadUrl);
+        }
+      } catch (error: any) {
+        console.error("Error generating S3 download URL:", error);
+        return res.status(500).json({ message: "获取文件链接失败" });
       }
-      objectStorageService.downloadObject(objectFile, res);
-    } catch (error) {
-      console.error("Error checking object access:", error);
-      if (error instanceof ObjectNotFoundError) {
-        return res.sendStatus(404);
+    } else if (storageMode === "replit") {
+      // Legacy Replit object storage
+      const userId = req.user.id;
+      const objectStorageService = new ObjectStorageService();
+      try {
+        const objectFile = await objectStorageService.getObjectEntityFile(
+          req.path,
+        );
+        const canAccess = await objectStorageService.canAccessObjectEntity({
+          objectFile,
+          userId: userId,
+          requestedPermission: ObjectPermission.READ,
+        });
+        if (!canAccess) {
+          return res.sendStatus(401);
+        }
+        objectStorageService.downloadObject(objectFile, res);
+      } catch (error) {
+        console.error("Error checking object access:", error);
+        if (error instanceof ObjectNotFoundError) {
+          return res.sendStatus(404);
+        }
+        return res.sendStatus(500);
       }
-      return res.sendStatus(500);
+    } else {
+      // Disabled or unknown mode
+      return res.status(404).json({ message: "对象存储未启用" });
     }
   });
 
@@ -696,7 +853,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast group creation if this is a group conversation
       if (conversation.isGroup) {
-        broadcastGroupEvent('created', conversation);
+        broadcastGroupEvent(userId, 'created', conversation);
       }
       
       res.json(conversation);
@@ -724,6 +881,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.deleteConversation(conversationId);
+      // Multi-device sync: notify all devices for this user
+      broadcastToUserEvent(userId, 'conversation_deleted', { conversationId });
       res.json({ success: true });
     } catch (error) {
       console.error("Error deleting conversation:", error);
@@ -755,7 +914,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast update if this is a group conversation
       if (conversation.isGroup) {
-        broadcastGroupEvent('updated', updated);
+        broadcastGroupEvent(userId, 'updated', updated);
       }
       
       res.json(updated);
@@ -800,7 +959,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast participant added event if this is a group
       if (conversation.isGroup) {
-        broadcastGroupEvent('participant_added', { conversationId, personaId, participant });
+        broadcastGroupEvent(userId, 'participant_added', { conversationId, personaId, participant });
       }
       
       res.json(participant);
@@ -899,7 +1058,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Broadcast participant removed event if this is a group
       if (conversation.isGroup) {
-        broadcastGroupEvent('participant_removed', { conversationId, personaId });
+        broadcastGroupEvent(userId, 'participant_removed', { conversationId, personaId });
       }
       
       res.json({ success: true });
@@ -1005,6 +1164,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       await storage.markConversationMessagesAsRead(conversationId);
+      // Multi-device sync: notify all devices for this user
+      broadcastToUserEvent(userId, 'conversation_read', { conversationId });
       res.json({ success: true });
     } catch (error) {
       console.error("Error marking messages as read:", error);
@@ -1174,6 +1335,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
         errorType: "UNKNOWN_ERROR",
         canRetry: true
       });
+    }
+  });
+
+  // MiniMax Speech-2.6-Turbo TTS (returns binary audio)
+  app.post("/api/voice/tts", isAuthenticated, messageLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const userSettings = await storage.getAiSettings(userId);
+      const { text, voiceId, format } = req.body || {};
+      const { audio, contentType } = await minimaxTtsToBuffer({
+        text,
+        voiceId,
+        format,
+        apiKey: userSettings?.minimaxApiKey || undefined,
+      });
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).send(audio);
+    } catch (error: any) {
+      console.error("[/api/voice/tts] error:", error);
+      return res.status(400).json({ message: error?.message || "TTS failed" });
+    }
+  });
+
+  // WebRTC configuration (STUN/TURN + MiniMax streaming URLs)
+  app.get("/api/webrtc/config", isAuthenticated, async (_req: any, res) => {
+    try {
+      const cfg = loadAndApplyConfig();
+      const webrtcConfig = {
+        stunServers: cfg.webrtc?.stunServers || [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+        ],
+        turnServers: cfg.webrtc?.turnServers || [],
+        minimax: {
+          streamAsrUrl: cfg.minimax?.streamAsrUrl || process.env.MINIMAX_STREAM_ASR_URL || "wss://api.minimax.io/ws/v1/asr",
+          streamTtsUrl: cfg.minimax?.streamTtsUrl || process.env.MINIMAX_STREAM_TTS_URL || "wss://api.minimax.io/ws/v1/t2a_v2",
+        },
+      };
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json(webrtcConfig);
+    } catch (error: any) {
+      console.error("[/api/webrtc/config] error:", error);
+      res.status(500).json({ message: error?.message || "Failed to load WebRTC config" });
     }
   });
 
@@ -1495,8 +1700,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const moment = await storage.createMoment(validatedData);
       
-      // Broadcast moment creation to all users
-      broadcastMomentEvent('created', moment);
+      // Broadcast moment creation to all devices of this user (user-isolated)
+      broadcastMomentEvent(userId, 'created', moment);
       
       // Trigger AI comments (async, non-blocking)
       triggerAICommentsOnMoment(
@@ -1536,8 +1741,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteMoment(momentId);
       
-      // Broadcast moment deletion to all users
-      broadcastMomentEvent('deleted', { id: momentId });
+      // Broadcast moment deletion to all devices of this user
+      broadcastMomentEvent(userId, 'deleted', { id: momentId });
       
       res.json({ success: true });
     } catch (error) {
@@ -1560,8 +1765,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const liked = await storage.toggleMomentLike(momentId, userId, 'user');
       
-      // Broadcast like/unlike event
-      broadcastMomentEvent('liked', { momentId, userId, liked });
+      // Broadcast like/unlike event to all devices of the moment owner (user-isolated)
+      broadcastMomentEvent(moment.userId, 'liked', { momentId, userId, liked });
       
       res.json({ liked });
     } catch (error) {
@@ -1632,8 +1837,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const comment = await storage.createMomentComment(validatedData);
       
-      // Broadcast comment creation to all users
-      broadcastMomentEvent('commented', { momentId, comment });
+      // Broadcast comment creation to all devices of the moment owner (user-isolated)
+      broadcastMomentEvent(moment.userId, 'commented', { momentId, comment });
       
       // Trigger AI reply in two scenarios:
       // 1. User directly comments on AI's moment (top-level comment)
@@ -1812,8 +2017,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const settings = await storage.getAiSettings(userId);
       res.json(settings);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching AI settings:", error);
+      if (error?.code === "42703") {
+        return res.status(500).json({
+          message:
+            "数据库未迁移：缺少 ai_settings.minimax_api_key 字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再刷新页面。",
+        });
+      }
       res.status(500).json({ message: "Failed to fetch AI settings" });
     }
   });
@@ -1821,13 +2032,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { provider, model, customApiKey, ragEnabled, searchEnabled, language } = req.body;
+      const { provider, model, customApiKey, minimaxApiKey, ragEnabled, searchEnabled, language } = req.body;
       
       // Try to update existing settings
       let settings = await storage.updateAiSettings(userId, {
         provider,
         model,
         customApiKey,
+        minimaxApiKey,
         ragEnabled,
         searchEnabled,
         language,
@@ -1840,6 +2052,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           provider: provider || "google",
           model: model || "gemini-2.5-pro",
           customApiKey: customApiKey || null,
+          minimaxApiKey: minimaxApiKey || null,
           ragEnabled: ragEnabled || false,
           searchEnabled: searchEnabled || false,
           language: language || "zh-CN",
@@ -1847,8 +2060,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(settings);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating AI settings:", error);
+      if (error?.code === "42703") {
+        return res.status(500).json({
+          message:
+            "数据库未迁移：缺少 ai_settings.minimax_api_key 字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再保存设置。",
+        });
+      }
       res.status(500).json({ message: "Failed to update AI settings" });
     }
   });

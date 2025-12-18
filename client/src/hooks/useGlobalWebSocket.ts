@@ -15,7 +15,15 @@ export function useGlobalWebSocket() {
 
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    // Device identity (for multi-device sync registry)
+    const deviceType = 'web';
+    const deviceIdKey = 'ai_companion_device_id';
+    const existingDeviceId = window.localStorage.getItem(deviceIdKey);
+    const deviceId = existingDeviceId || `${deviceType}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`;
+    if (!existingDeviceId) {
+      window.localStorage.setItem(deviceIdKey, deviceId);
+    }
+    const wsUrl = `${protocol}//${window.location.host}/ws?deviceType=${encodeURIComponent(deviceType)}&deviceId=${encodeURIComponent(deviceId)}`;
     let shouldReconnect = true;  // Flag to control reconnection
     
     function startHeartbeat(ws: WebSocket) {
@@ -62,6 +70,14 @@ export function useGlobalWebSocket() {
             return;
           }
           
+          // Initial sync hint from server
+          if (data.type === 'sync_state') {
+            console.log('[WebSocket] 🔄 收到sync_state，刷新关键缓存');
+            queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/moments"] });
+            return;
+          }
+
           if (data.type === 'new_message' && data.payload) {
             const message = data.payload as Message;
             console.log('[WebSocket] 📨 收到new_message事件', {
@@ -326,6 +342,27 @@ export function useGlobalWebSocket() {
             }
             // Also invalidate conversations list
             queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
+          }
+
+          // Control signals (multi-device sync)
+          else if (data.type === 'conversation_read' && data.payload?.conversationId) {
+            const { conversationId } = data.payload;
+            console.log('[WebSocket] ✅ 对话已读同步', { conversationId });
+            queryClient.setQueryData(
+              ["/api/conversations"],
+              (old: any[] = []) => old.map(c => c.id === conversationId ? { ...c, unreadCount: 0 } : c)
+            );
+          }
+          else if (data.type === 'conversation_deleted' && data.payload?.conversationId) {
+            const { conversationId } = data.payload;
+            console.log('[WebSocket] 🗑️ 对话删除同步', { conversationId });
+            queryClient.setQueryData(
+              ["/api/conversations"],
+              (old: any[] = []) => old.filter(c => c.id !== conversationId)
+            );
+            // Also clear message caches for this conversation
+            queryClient.removeQueries({ queryKey: ["/api/messages", conversationId] });
+            queryClient.removeQueries({ queryKey: ["/api/messages/all", conversationId] });
           }
         } catch (error) {
           console.error('[WebSocket] ❌ 消息解析错误', { error });

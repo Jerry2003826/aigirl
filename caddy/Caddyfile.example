@@ -1,0 +1,43 @@
+# Caddy configuration for WhatsApp-style deployment
+# Frontend static files + Backend API/WebSocket on same domain
+
+your-domain.com {
+    # Enable HTTPS automatically (Caddy handles Let's Encrypt)
+    # Or use HTTP for local development:
+    # http://localhost
+
+    # Frontend static files (built with `npm run build`)
+    root * /path/to/your/project/dist-web
+    file_server
+
+    # API routes -> Backend Express server
+    handle /api/* {
+        reverse_proxy http://127.0.0.1:5000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # WebSocket endpoint -> Backend Express server
+    handle /ws {
+        reverse_proxy http://127.0.0.1:5000 {
+            header_up Connection {>Connection}
+            header_up Upgrade {>Upgrade}
+        }
+    }
+
+    # Local uploads (if using local disk storage)
+    handle /uploads/* {
+        root * /path/to/your/project/public
+        file_server
+        header Cache-Control "public, max-age=2592000"
+    }
+
+    # SPA routing: fallback to index.html for all other routes
+    handle {
+        try_files {path} {path}/ /index.html
+        file_server
+    }
+}
+

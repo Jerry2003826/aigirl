@@ -1,9 +1,9 @@
 import { Resend } from 'resend';
 
-// 临时硬编码用于测试
-const apiKey = 'REMOVED_BY_L5'; // process.env.RESEND_API_KEY;
-
-console.log('[Email] RESEND_API_KEY 前缀:', apiKey?.slice(0, 10)); // 调试用，看是不是 re_test_ 之类
+// NOTE: 按你的要求恢复“硬编码 key”为默认回退方案（优先使用环境变量）。
+// 生产环境仍建议用 RESEND_API_KEY 覆盖，避免泄露密钥。
+const apiKey = process.env.RESEND_API_KEY || 'REMOVED_BY_L5';
+const from = process.env.RESEND_FROM || 'AI伴侣 <noreply@ai-girlchat.com>';
 
 const resend = new Resend(apiKey);
 
@@ -12,7 +12,7 @@ export async function sendVerificationEmail(email: string, code: string): Promis
     console.log('[Email] 准备发送到:', email);
 
     const { data, error } = await resend.emails.send({
-      from: 'AI伴侣 <noreply@ai-girlchat.com>', // 已绑定域名
+      from,
       to: [email],
       subject: '验证您的邮箱 - AI伴侣',
       html: `
@@ -45,7 +45,7 @@ export async function sendPasswordResetEmail(email: string, code: string): Promi
     console.log('[Email] 准备发送重置密码邮件到:', email);
 
     const { data, error } = await resend.emails.send({
-      from: 'AI伴侣 <noreply@ai-girlchat.com>',
+      from,
       to: [email],
       subject: '重置您的密码 - AI伴侣',
       html: `

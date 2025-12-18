@@ -203,6 +203,7 @@ export const aiSettings = pgTable(
     provider: text("provider").default("google").notNull(), // 'google', 'openai'
     model: text("model").default("gemini-2.5-pro").notNull(), // Model name
     customApiKey: text("custom_api_key"), // Optional custom API key for RAG embeddings
+    minimaxApiKey: text("minimax_api_key"), // Optional MiniMax API key for Speech-2.6-Turbo TTS
     ragEnabled: boolean("rag_enabled").default(false).notNull(), // Enable RAG features
     searchEnabled: boolean("search_enabled").default(true).notNull(), // Enable web search
     language: text("language").default("zh").notNull(), // UI language: 'zh' or 'en'
