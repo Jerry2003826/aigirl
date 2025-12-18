@@ -73,11 +73,14 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    // Production: optionally serve static (for backward compatibility)
-    // But recommended: use reverse proxy to serve dist-web/ separately
-    // Uncomment the line below only if you want Express to serve static files
-    // serveStatic(app);
-    console.log("[Production] Frontend should be served by reverse proxy. Backend only handles /api/* and /ws");
+    // Production: serve built frontend via the same Railway service by default.
+    // Disable by setting SERVE_STATIC=false if you use a separate static host.
+    if (process.env.SERVE_STATIC !== "false") {
+      serveStatic(app);
+      console.log("[Production] Serving built frontend from dist-web/");
+    } else {
+      console.log("[Production] SERVE_STATIC=false, skipping static file serving.");
+    }
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
