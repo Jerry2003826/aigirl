@@ -41,9 +41,10 @@ const conversationConnections = new Map<string, Set<AuthenticatedWebSocket>>();
  * Setup WebSocket server with authentication
  */
 export function setupWebSocket(server: Server) {
-  const wss = new WebSocketServer({ 
+  const wss = new WebSocketServer({
     server,
     path: '/ws',
+    perMessageDeflate: false, // avoid RSV1/compression issues behind proxies
   });
 
   wss.on('connection', async (ws: AuthenticatedWebSocket, req: IncomingMessage) => {

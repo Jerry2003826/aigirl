@@ -48,6 +48,7 @@ export function setupVoiceWebSocket(server: Server) {
   const wss = new WebSocketServer({
     server,
     path: "/ws/voice-ai",
+    perMessageDeflate: false, // avoid RSV1/compression issues behind proxies
   });
 
   wss.on("connection", async (ws: VoiceWsClient, req) => {
