@@ -4,13 +4,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon } from "lucide-react";
+import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon, Phone, Mic, MicOff, Volume2, VolumeX, Video, VideoOff } from "lucide-react";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useConversationSubscription } from "@/hooks/useGlobalWebSocket";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
+import { WebRTCCall, CallState, WebRTCConfig } from "@/lib/webrtc";
+import { MiniMaxStream } from "@/lib/minimax-stream";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +29,17 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+// Voice debug globals to detect stale bundle / expose logs
+declare global {
+  interface Window {
+    __voiceDebugLogs?: string[];
+    __voiceDebugPush?: (line: string) => void;
+  }
+}
+if (typeof window !== "undefined") {
+  window.__voiceDebugLogs = window.__voiceDebugLogs || [];
+}
 
 type Conversation = {
   id: string;
@@ -84,6 +97,22 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [editingTitle, setEditingTitle] = useState("");
   const [replyingAIName, setReplyingAIName] = useState<string | null>(null); // 追踪正在回复的AI名字（仅群聊）
   const [pendingAIMessages, setPendingAIMessages] = useState<Message[]>([]); // 🆕 待显示的AI消息队列（用于平滑显示）
+  const [voiceCallEnabled, setVoiceCallEnabled] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [voiceTranscript, setVoiceTranscript] = useState("");
+  const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [voiceDebugOpen, setVoiceDebugOpen] = useState(true);
+  const [voiceDebugLogs, setVoiceDebugLogs] = useState<string[]>([]);
+  const [callState, setCallState] = useState<CallState>("idle");
+  const [incomingCall, setIncomingCall] = useState<{ callId: string; callerId: string; conversationId: string; withVideo: boolean } | null>(null);
+  const [currentCall, setCurrentCall] = useState<WebRTCCall | null>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [callMuted, setCallMuted] = useState(false);
+  const [callVideoOff, setCallVideoOff] = useState(false);
+  const [webrtcConfig, setWebrtcConfig] = useState<WebRTCConfig | null>(null);
+  const [aiCompanionEnabled, setAiCompanionEnabled] = useState(false);
+  const [minimaxStream, setMinimaxStream] = useState<MiniMaxStream | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollViewportRef = useRef<HTMLDivElement>(null);
   const prevMessagesLengthRef = useRef(0);
@@ -92,6 +121,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const lastMarkedConversationRef = useRef<string | null>(null);
   const messageQueueProcessorRef = useRef<NodeJS.Timeout | null>(null); // 🆕 队列处理器定时器
   const markAsReadDebounceRef = useRef<NodeJS.Timeout | null>(null); // 🆕 未读标记防抖定时器
+  const speechRecognitionRef = useRef<any>(null);
+  const wantsToListenRef = useRef(false);
+  const voiceCallEnabledRef = useRef(false);
+  const sendTextMessageRef = useRef<(text: string) => void>(() => {});
+  const lastSpokenMessageIdRef = useRef<string | null>(null);
+  const ttsQueueRef = useRef<Array<{ id: string; text: string }>>([]);
+  const ttsPlayingRef = useRef(false);
+  const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   
   // Use global WebSocket for conversation subscription
   useConversationSubscription(wsRef, selectedConversationId);
@@ -664,6 +703,525 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     setMentionedPersonaId(null);
   };
 
+  const sendTextMessage = (text: string) => {
+    if (!selectedConversationId) return;
+    const content = (text || "").trim();
+    if (!content) return;
+    if (isLoading || isStreaming) return;
+
+    const clientMessageId = `client-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    const optimisticMessage: Message = {
+      id: clientMessageId,
+      conversationId: selectedConversationId,
+      senderId: null,
+      senderType: "user",
+      content,
+      imageData: null,
+      clientMessageId,
+      isRead: true,
+      status: "sending",
+      createdAt: new Date(),
+    };
+
+    setOptimisticMessages((prev) => [...prev, optimisticMessage]);
+    setIsLoading(true);
+
+    sendMessageMutation.mutate({
+      conversationId: selectedConversationId,
+      content,
+      imageData: null,
+      clientMessageId,
+      mentionedPersonaId: mentionedPersonaId || undefined,
+    });
+
+    setMentionedPersonaId(null);
+  };
+
+  // Voice debug helper
+  const pushVoiceDebug = (msg: string, extra?: any) => {
+    const ts = new Date().toISOString();
+    const line =
+      extra === undefined
+        ? `[${ts}] ${msg}`
+        : `[${ts}] ${msg} ${(() => {
+            try {
+              return JSON.stringify(extra);
+            } catch {
+              return String(extra);
+            }
+          })()}`;
+
+    try {
+      console.log("[VoiceDebug]", line);
+    } catch {}
+
+    setVoiceDebugLogs((prev) => {
+      const next = [...prev, line];
+      return next.length > 200 ? next.slice(next.length - 200) : next;
+    });
+
+    if (typeof window !== "undefined") {
+      window.__voiceDebugLogs = (window.__voiceDebugLogs || []).concat([line]).slice(-200);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.__voiceDebugLogs = window.__voiceDebugLogs || [];
+      window.__voiceDebugPush = (line: string) => pushVoiceDebug(line);
+    }
+    pushVoiceDebug("Chat mounted (voice debug ready)");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    sendTextMessageRef.current = sendTextMessage;
+  }, [sendTextMessage]);
+
+  useEffect(() => {
+    voiceCallEnabledRef.current = voiceCallEnabled;
+  }, [voiceCallEnabled]);
+
+  // Load WebRTC config
+  useEffect(() => {
+    const loadCfg = async () => {
+      try {
+        const r = await fetch("/api/webrtc/config", { credentials: "include" });
+        if (r.ok) {
+          const cfg = await r.json();
+          setWebrtcConfig(cfg);
+        }
+      } catch (e) {
+        console.error("[WebRTC] load config failed", e);
+      }
+    };
+    loadCfg();
+  }, []);
+
+  // WebSocket call events
+  useEffect(() => {
+    if (!wsRef.current || !webrtcConfig) return;
+    const ws = wsRef.current;
+    const handler = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data);
+        switch (data.type) {
+          case "call_invite":
+            setIncomingCall({
+              callId: data.payload.callId,
+              callerId: data.payload.callerId,
+              conversationId: data.payload.conversationId,
+              withVideo: !!data.payload.withVideo,
+            });
+            setCallState("ringing");
+            break;
+          case "call_accepted":
+            setCallState("connecting");
+            break;
+          case "call_rejected":
+            setCallState("ended");
+            setIncomingCall(null);
+            currentCall?.destroy();
+            setCurrentCall(null);
+            break;
+          case "call_offer":
+            currentCall?.handleOffer(data.payload.offer);
+            break;
+          case "call_answer":
+            currentCall?.handleAnswer(data.payload.answer);
+            break;
+          case "call_candidate":
+            currentCall?.handleCandidate(data.payload.candidate);
+            break;
+          case "call_hangup":
+            setCallState("ended");
+            currentCall?.destroy();
+            setCurrentCall(null);
+            setIncomingCall(null);
+            setLocalStream(null);
+            setRemoteStream(null);
+            break;
+        }
+      } catch (e) {
+        console.error("[WebRTC] handle ws message error", e);
+      }
+    };
+    ws.addEventListener("message", handler);
+    return () => ws.removeEventListener("message", handler);
+  }, [wsRef, webrtcConfig, currentCall]);
+
+  // Bind streams to video
+  useEffect(() => {
+    if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+  }, [localStream, remoteStream]);
+
+  const stopTtsPlayback = () => {
+    ttsQueueRef.current = [];
+    ttsPlayingRef.current = false;
+    if (ttsAudioRef.current) {
+      try {
+        ttsAudioRef.current.pause();
+      } catch {}
+      ttsAudioRef.current = null;
+    }
+  };
+
+  const playNextTts = async () => {
+    if (!ttsEnabled || !voiceCallEnabled) return;
+    if (ttsPlayingRef.current) return;
+    const next = ttsQueueRef.current.shift();
+    if (!next) return;
+
+    ttsPlayingRef.current = true;
+    try {
+      const resp = await fetch("/api/voice/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ text: next.text }),
+      });
+
+      if (!resp.ok) {
+        let errText = "TTS failed";
+        try {
+          const j = await resp.json();
+          errText = j?.message || errText;
+        } catch {}
+        throw new Error(errText);
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      ttsAudioRef.current = audio;
+
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        ttsAudioRef.current = null;
+        ttsPlayingRef.current = false;
+        void playNextTts();
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        ttsAudioRef.current = null;
+        ttsPlayingRef.current = false;
+        void playNextTts();
+      };
+
+      await audio.play();
+    } catch (e: any) {
+      ttsPlayingRef.current = false;
+      toast({
+        title: "语音播放失败",
+        description: e?.message || "TTS 播放失败",
+        variant: "destructive",
+      });
+      void playNextTts();
+    }
+  };
+
+  const enqueueTts = (id: string, text: string) => {
+    if (!voiceCallEnabled || !ttsEnabled) return;
+    const t = (text || "").trim();
+    if (!t) return;
+    ttsQueueRef.current.push({ id, text: t });
+    void playNextTts();
+  };
+
+  // Initialize SpeechRecognition ONCE
+  useEffect(() => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      pushVoiceDebug("SpeechRecognition not supported");
+      return;
+    }
+
+    const rec = new SR();
+    rec.lang = "zh-CN";
+    rec.continuous = true;
+    rec.interimResults = true;
+
+    rec.onstart = () => pushVoiceDebug("[rec] onstart");
+    rec.onaudiostart = () => pushVoiceDebug("[rec] onaudiostart");
+    rec.onsoundstart = () => pushVoiceDebug("[rec] onsoundstart");
+    rec.onspeechstart = () => pushVoiceDebug("[rec] onspeechstart");
+    rec.onspeechend = () => pushVoiceDebug("[rec] onspeechend");
+    rec.onsoundend = () => pushVoiceDebug("[rec] onsoundend");
+    rec.onaudioend = () => pushVoiceDebug("[rec] onaudioend");
+
+    rec.onresult = (event: any) => {
+      try {
+        let interim = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const r = event.results[i];
+          const t = r?.[0]?.transcript || "";
+          if (r.isFinal) finalText += t;
+          else interim += t;
+        }
+        const combined = (finalText || interim || "").trim();
+        setVoiceTranscript(combined);
+        pushVoiceDebug("[rec] onresult", { text: combined.slice(0, 80), isFinal: !!finalText });
+        if (finalText && finalText.trim().length > 0) {
+          const text = finalText.trim();
+          pushVoiceDebug("[rec] final -> sendTextMessage", { text: text.slice(0, 80) });
+          sendTextMessageRef.current(text);
+          setVoiceTranscript("");
+        }
+      } catch (e: any) {
+        pushVoiceDebug("[rec] onresult exception", { message: e?.message || String(e) });
+      }
+    };
+
+    rec.onerror = (event: any) => {
+      const err = event?.error || "unknown";
+      pushVoiceDebug("[rec] onerror", { error: err });
+      wantsToListenRef.current = false;
+      setIsListening(false);
+      if (err === "not-allowed" || err === "service-not-allowed") {
+        toast({
+          title: "麦克风权限被拒绝",
+          description: "请在浏览器地址栏的站点设置里允许麦克风，然后刷新页面重试。",
+          variant: "destructive",
+        });
+      } else if (err === "audio-capture") {
+        toast({
+          title: "无法访问麦克风",
+          description: "请检查是否有麦克风设备，或被其它应用占用。",
+          variant: "destructive",
+        });
+      } else if (err === "network") {
+        toast({
+          title: "语音识别网络错误",
+          description: "Web Speech 识别服务不可用，请稍后重试或换浏览器（建议 Edge/Chrome）。",
+          variant: "destructive",
+        });
+      }
+    };
+
+    rec.onend = () => {
+      pushVoiceDebug("[rec] onend", { wants: wantsToListenRef.current, voiceCall: voiceCallEnabledRef.current });
+      setIsListening(false);
+      if (wantsToListenRef.current && voiceCallEnabledRef.current) {
+        try {
+          rec.start();
+          setIsListening(true);
+          pushVoiceDebug("[rec] auto-restart start()");
+        } catch (e: any) {
+          pushVoiceDebug("[rec] auto-restart failed", { message: e?.message || String(e) });
+          wantsToListenRef.current = false;
+        }
+      }
+    };
+
+    speechRecognitionRef.current = rec;
+    pushVoiceDebug("SpeechRecognition ready");
+
+    return () => {
+      try {
+        wantsToListenRef.current = false;
+        try { rec.stop(); } catch {}
+      } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startListening = async () => {
+    pushVoiceDebug("点击：开始说话", { voiceCallEnabled, isListening });
+    const rec = speechRecognitionRef.current;
+    if (!rec) {
+      toast({
+        title: "浏览器不支持语音识别",
+        description: "请使用 Chrome/Edge（桌面端）或开启 Web Speech API 的环境。",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      if (navigator?.mediaDevices?.getUserMedia) {
+        pushVoiceDebug("请求麦克风权限 getUserMedia()");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+        pushVoiceDebug("getUserMedia() 成功");
+      } else {
+        pushVoiceDebug("navigator.mediaDevices.getUserMedia 不可用");
+      }
+      wantsToListenRef.current = true;
+      rec.start();
+      setIsListening(true);
+      pushVoiceDebug("rec.start() 已调用");
+    } catch (e: any) {
+      wantsToListenRef.current = false;
+      setIsListening(false);
+      pushVoiceDebug("rec.start() 失败", { message: e?.message || String(e), name: e?.name });
+      toast({
+        title: "开始识别失败",
+        description: e?.message || "语音识别启动失败",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const stopListening = () => {
+    pushVoiceDebug("点击：停止说话", { voiceCallEnabled, isListening });
+    const rec = speechRecognitionRef.current;
+    if (!rec) return;
+    wantsToListenRef.current = false;
+    try {
+      rec.stop();
+    } catch {}
+    setIsListening(false);
+  };
+
+  // Check devices availability
+  const ensureMediaAvailable = async (withVideo: boolean) => {
+    if (!navigator.mediaDevices?.enumerateDevices) return true;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const hasMic = devices.some((d) => d.kind === "audioinput");
+      const hasCam = devices.some((d) => d.kind === "videoinput");
+      if (!hasMic) {
+        toast({ title: "未检测到麦克风", description: "请插入或启用麦克风后重试", variant: "destructive" });
+        return false;
+      }
+      if (withVideo && !hasCam) {
+        toast({ title: "未检测到摄像头", description: "请接入摄像头或切换为语音通话", variant: "destructive" });
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.warn("[WebRTC] enumerateDevices failed", e);
+      return true; // 不阻断，交给 getUserMedia 捕获
+    }
+  };
+
+  const handleGetUserMediaError = (error: any, withVideo: boolean) => {
+    const name = error?.name || "";
+    let message = error?.message || "获取媒体设备失败";
+    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+      message = withVideo ? "未检测到摄像头或麦克风" : "未检测到麦克风";
+    } else if (name === "NotAllowedError" || name === "SecurityError") {
+      message = "已拒绝访问麦克风/摄像头，请在浏览器地址栏允许权限后重试";
+    } else if (name === "NotReadableError") {
+      message = "设备被占用，请关闭占用摄像头/麦克风的应用后重试";
+    }
+    toast({ title: "通话无法启动", description: message, variant: "destructive" });
+    setCallState("idle");
+  };
+
+  // WebRTC call helpers
+  const startCall = async (withVideo = false) => {
+    if (!selectedConversationId || !webrtcConfig || !wsRef.current || !user) {
+      toast({ title: "无法发起通话", description: "缺少必要信息", variant: "destructive" });
+      return;
+    }
+    try {
+      const available = await ensureMediaAvailable(withVideo);
+      if (!available) return;
+
+      const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const calleeId = selectedConversationData?.personas?.[0]?.id || selectedConversationId;
+      const call = new WebRTCCall({
+        callId,
+        conversationId: selectedConversationId,
+        calleeId,
+        withVideo,
+        onStateChange: setCallState,
+        onLocalStream: setLocalStream,
+        onRemoteStream: setRemoteStream,
+        onError: (err) => {
+          setCallState("idle");
+          handleGetUserMediaError(err, withVideo);
+        },
+        ws: wsRef.current,
+        webrtcConfig,
+      });
+      setCurrentCall(call);
+      await call.startCall();
+    } catch (e: any) {
+      handleGetUserMediaError(e, withVideo);
+    }
+  };
+
+  const acceptCall = async () => {
+    if (!incomingCall || !webrtcConfig || !wsRef.current) return;
+    const withVideo = incomingCall.withVideo;
+    const available = await ensureMediaAvailable(withVideo);
+    if (!available) {
+      setIncomingCall(null);
+      setCallState("idle");
+      return;
+    }
+    const call = new WebRTCCall({
+      callId: incomingCall.callId,
+      conversationId: incomingCall.conversationId,
+      calleeId: incomingCall.callerId,
+      withVideo: incomingCall.withVideo,
+      onStateChange: setCallState,
+      onLocalStream: setLocalStream,
+      onRemoteStream: setRemoteStream,
+      onError: (err) => {
+        setCallState("idle");
+        handleGetUserMediaError(err, withVideo);
+      },
+      ws: wsRef.current,
+      webrtcConfig,
+    });
+    setCurrentCall(call);
+    setIncomingCall(null);
+  };
+
+  const rejectCall = () => {
+    if (!incomingCall || !wsRef.current) return;
+    wsRef.current.send(JSON.stringify({ type: "call_reject", payload: { callId: incomingCall.callId } }));
+    setIncomingCall(null);
+    setCallState("idle");
+  };
+
+  const hangupCall = () => {
+    currentCall?.hangup();
+    setCurrentCall(null);
+    setLocalStream(null);
+    setRemoteStream(null);
+    setCallState("idle");
+    if (minimaxStream) {
+      minimaxStream.destroy();
+      setMinimaxStream(null);
+    }
+  };
+
+  const toggleMute = () => {
+    if (currentCall) {
+      const enabled = currentCall.toggleMute();
+      setCallMuted(!enabled);
+    }
+  };
+
+  const toggleVideo = () => {
+    if (currentCall) {
+      const enabled = currentCall.toggleVideo();
+      setCallVideoOff(!enabled);
+    }
+  };
+
+  // Auto TTS for new AI messages when voice call mode is on
+  useEffect(() => {
+    if (!voiceCallEnabled || !ttsEnabled) return;
+    if (!messages || messages.length === 0) return;
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i] as any as Message;
+      if (m.senderType === "ai") {
+        if (lastSpokenMessageIdRef.current === m.id) return;
+        lastSpokenMessageIdRef.current = m.id;
+        enqueueTts(m.id, m.content || "");
+        return;
+      }
+    }
+  }, [messages, voiceCallEnabled, ttsEnabled]);
+
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -1122,6 +1680,54 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
+            {/* Legacy voice call (仅在无 WebRTC 配置时显示，避免双入口) */}
+            {!webrtcConfig && (
+              <Button
+                size="icon"
+                variant={voiceCallEnabled ? "secondary" : "ghost"}
+                className="h-9 w-9 shrink-0"
+                onClick={() => {
+                  const next = !voiceCallEnabled;
+                  setVoiceCallEnabled(next);
+                  if (!next) {
+                    stopListening();
+                    stopTtsPlayback();
+                    setVoiceTranscript("");
+                  }
+                }}
+                title={voiceCallEnabled ? "退出语音通话" : "语音通话"}
+                data-testid="button-voice-call-toggle"
+              >
+                <Phone className="h-5 w-5" />
+              </Button>
+            )}
+
+            {/* WebRTC buttons */}
+            {!["inviting", "ringing", "connecting", "connected"].includes(callState) && selectedConversationId && (
+              <>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => startCall(false)}
+                  title="语音通话(WebRTC)"
+                  data-testid="button-webrtc-voice"
+                >
+                  <Phone className="h-5 w-5" />
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => startCall(true)}
+                  title="视频通话(WebRTC)"
+                  data-testid="button-webrtc-video"
+                >
+                  <Video className="h-5 w-5" />
+                </Button>
+              </>
+            )}
+
             {/* Menu Button */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1188,6 +1794,96 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          {/* Legacy Voice Call Panel（仅无 WebRTC 时展示，避免双入口） */}
+          {!webrtcConfig && voiceCallEnabled && (
+            <div className="border-b bg-sidebar/50 px-4 py-3 flex flex-col gap-2">
+              <div className="flex items-center gap-3">
+              <Button
+                size="sm"
+                variant={isListening ? "secondary" : "default"}
+                onClick={() => (isListening ? stopListening() : startListening())}
+                data-testid="button-voice-listen-toggle"
+              >
+                {isListening ? (
+                  <>
+                    <MicOff className="mr-2 h-4 w-4" />
+                    停止说话
+                  </>
+                ) : (
+                  <>
+                    <Mic className="mr-2 h-4 w-4" />
+                    开始说话
+                  </>
+                )}
+              </Button>
+
+              <Button
+                size="sm"
+                variant={ttsEnabled ? "secondary" : "outline"}
+                onClick={() => {
+                  const next = !ttsEnabled;
+                  setTtsEnabled(next);
+                  if (!next) stopTtsPlayback();
+                }}
+                data-testid="button-tts-toggle"
+              >
+                {ttsEnabled ? (
+                  <>
+                    <Volume2 className="mr-2 h-4 w-4" />
+                    AI 语音开
+                  </>
+                ) : (
+                  <>
+                    <VolumeX className="mr-2 h-4 w-4" />
+                    AI 语音关
+                  </>
+                )}
+              </Button>
+
+              <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate" data-testid="text-voice-transcript">
+                {voiceTranscript ? `识别中：${voiceTranscript}` : (isListening ? "正在听你说…" : "点击“开始说话”用语音聊天")}
+              </div>
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                <button
+                  type="button"
+                  className="underline hover:text-foreground"
+                  onClick={() => setVoiceDebugOpen((v) => !v)}
+                  data-testid="button-voice-debug-toggle"
+                >
+                  {voiceDebugOpen ? "收起调试日志" : "展开调试日志"}
+                </button>
+                <button
+                  type="button"
+                  className="ml-3 underline hover:text-foreground"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(voiceDebugLogs.join("\n"));
+                      toast({ title: "已复制语音调试日志" });
+                    } catch (e: any) {
+                      toast({ title: "复制失败", description: e?.message || "无法写入剪贴板", variant: "destructive" });
+                    }
+                  }}
+                  data-testid="button-voice-debug-copy"
+                >
+                  复制日志
+                </button>
+                <span className="ml-3 opacity-70">（控制台可用 window.__voiceDebugLogs / window.__voiceDebugPush）</span>
+              </div>
+
+              {voiceDebugOpen && (
+                <div className="max-h-40 overflow-auto rounded border bg-background/50 p-2 text-xs font-mono">
+                  {(voiceDebugLogs.length ? voiceDebugLogs : ["(暂无日志：请点击“开始说话”)"]).slice(-60).map((l, idx) => (
+                    <div key={idx} className="whitespace-pre-wrap break-words">
+                      {l}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
             {/* Messages */}
             <div className="flex-1 overflow-hidden relative bg-background">
@@ -1674,6 +2370,63 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Incoming Call Dialog */}
+      <Dialog open={!!incomingCall} onOpenChange={(open) => !open && rejectCall()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>来电</DialogTitle>
+            <DialogDescription>{incomingCall?.withVideo ? "视频通话" : "语音通话"}</DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-4">
+            <Button variant="destructive" className="flex-1" onClick={rejectCall}>
+              拒绝
+            </Button>
+            <Button className="flex-1" onClick={acceptCall}>
+              接听
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Active Call Overlay */}
+      {(callState === "ringing" || callState === "connecting" || callState === "connected") && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center">
+          <div className="relative w-full h-full max-w-5xl max-h-[90vh] flex flex-col">
+            <div className="flex-1 bg-gray-900 rounded-t-lg overflow-hidden relative">
+              <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+              {!remoteStream && (
+                <div className="absolute inset-0 flex items-center justify-center text-white">
+                  <div className="text-center">
+                    <div className="h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center mb-4 mx-auto">
+                      <Phone className="h-8 w-8" />
+                    </div>
+                    <p>{callState === "ringing" ? "等待接听..." : callState === "connecting" ? "连接中..." : "通话中"}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {localStream && (
+              <div className="absolute top-4 right-4 w-32 h-24 bg-gray-800 rounded-lg overflow-hidden">
+                <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+              </div>
+            )}
+
+            <div className="bg-gray-900/90 p-4 rounded-b-lg flex items-center justify-center gap-4">
+              <Button size="icon" variant={callMuted ? "destructive" : "secondary"} onClick={toggleMute}>
+                {callMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+              </Button>
+              <Button size="icon" variant={callVideoOff ? "secondary" : "default"} onClick={toggleVideo}>
+                {callVideoOff ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5" />}
+              </Button>
+              <Button size="icon" variant="destructive" onClick={hangupCall}>
+                <Phone className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

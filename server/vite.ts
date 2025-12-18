@@ -68,12 +68,18 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // In production, frontend is served by reverse proxy (Nginx/Caddy)
+  // This function is kept for backward compatibility but should not be used
+  // in WhatsApp-style deployment (frontend static + backend API/WS separation)
+  const distPath = path.resolve(import.meta.dirname, "..", "dist-web");
 
   if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
+    console.warn(
+      `[serveStatic] Frontend build directory not found: ${distPath}. ` +
+      `In production, use a reverse proxy (Nginx/Caddy) to serve static files. ` +
+      `See DEPLOYMENT.md for configuration examples.`
     );
+    return;
   }
 
   app.use(express.static(distPath));

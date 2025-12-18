@@ -1,0 +1,16 @@
+# 项目默认环境变量文件（可提交）
+# 如需放密钥/个人配置，请复制为 config/env.local（已在 .gitignore），并在其中填写真实值。
+
+# ===== 邮件（Resend）=====
+RESEND_API_KEY=
+RESEND_FROM=AI伴侣 <noreply@ai-girlchat.com>
+RESEND_TEST_TO=delivered@resend.dev
+
+# =====（可选）代理：如果你要求全局走 Clash，把端口改成你 Clash 的 HTTP 代理端口（常见 7890）=====
+# HTTP_PROXY=http://127.0.0.1:7890
+# HTTPS_PROXY=http://127.0.0.1:7890
+
+# =====（可选）数据库：你也可以用环境变量覆盖 config/app.config.json 的 databaseUrl =====
+# DATABASE_URL=postgresql://postgres:121212@127.0.0.1:5432/ai_companion
+
+

@@ -19,6 +19,7 @@ type AiSettings = {
   provider: string;
   model: string;
   customApiKey: string | null;
+  minimaxApiKey: string | null;
   ragEnabled: boolean;
   searchEnabled: boolean;
   language: string | null;
@@ -30,6 +31,7 @@ const settingsFormSchema = z.object({
   provider: z.string().min(1, "Provider is required"),
   model: z.string().min(1, "Model is required"),
   customApiKey: z.string().min(1, "API密钥是必需的，请提供你的Google AI或OpenAI API密钥"),
+  minimaxApiKey: z.string().optional(),
   ragEnabled: z.boolean(),
   searchEnabled: z.boolean(),
   language: z.string().optional(),
@@ -55,6 +57,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
       provider: settings?.provider || "google",
       model: settings?.model || "gemini-2.5-pro",
       customApiKey: settings?.customApiKey || "",
+      minimaxApiKey: settings?.minimaxApiKey || "",
       ragEnabled: settings?.ragEnabled || false,
       searchEnabled: settings?.searchEnabled || false,
       language: settings?.language || "zh-CN",
@@ -63,6 +66,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
       provider: settings.provider,
       model: settings.model,
       customApiKey: settings.customApiKey || "",
+      minimaxApiKey: settings.minimaxApiKey || "",
       ragEnabled: settings.ragEnabled,
       searchEnabled: settings.searchEnabled,
       language: settings.language || "zh-CN",
@@ -187,7 +191,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                     name="customApiKey"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-base font-semibold text-destructive">🔑 API密钥 (必填)</FormLabel>
+                        <FormLabel className="text-base font-semibold text-destructive">🔑 文本模型 API密钥 (必填)</FormLabel>
                         <FormControl>
                           <Input
                             type="password"
@@ -206,6 +210,31 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                             <li>你的密钥将被安全存储，仅用于你的AI请求</li>
                             <li className="text-destructive font-medium">没有API密钥将无法使用任何AI功能</li>
                           </ul>
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="minimaxApiKey"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-base font-semibold">🎙️ MiniMax 语音 API密钥（用于语音通话）</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="password"
+                            placeholder="输入你的 MiniMax API Key（JWT）"
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-minimax-api-key"
+                          />
+                        </FormControl>
+                        <FormDescription className="space-y-1">
+                          <p className="text-sm">
+                            仅用于语音合成（Speech-2.6-Turbo）。不填也能正常文字聊天，但语音通话会提示未配置。
+                          </p>
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

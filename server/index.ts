@@ -1,8 +1,12 @@
+import { loadAndApplyConfig } from "./config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startAIScheduler } from "./aiScheduler";
 import { startAIReplyWorker } from "./aiReplyWorker";
+
+// Load JSON config (config/app.config.json) and apply to process.env
+loadAndApplyConfig();
 
 const app = express();
 
@@ -63,13 +67,17 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // In development: use Vite dev server with HMR
+  // In production: frontend should be served by reverse proxy (Nginx/Caddy)
+  // Backend only serves API and WebSocket, not static files
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // Production: optionally serve static (for backward compatibility)
+    // But recommended: use reverse proxy to serve dist-web/ separately
+    // Uncomment the line below only if you want Express to serve static files
+    // serveStatic(app);
+    console.log("[Production] Frontend should be served by reverse proxy. Backend only handles /api/* and /ws");
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
@@ -77,11 +85,22 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
+
+  // Windows does not support `reusePort`, and binding to 0.0.0.0 can fail depending on environment.
+  // For local dev, prefer localhost; for production behind reverse proxy, host can be 0.0.0.0.
+  const isWindows = process.platform === "win32";
+  const isDev = app.get("env") === "development";
+
+  const listenOptions: any = { port };
+  if (!isWindows && !isDev) {
+    listenOptions.host = "0.0.0.0";
+    listenOptions.reusePort = true;
+  } else if (isDev) {
+    // Let Node pick the default host (usually 127.0.0.1) on Windows/macOS/Linux
+    // so it works out of the box for local testing.
+  }
+
+  server.listen(listenOptions, () => {
     log(`serving on port ${port}`);
     
     // Start AI autonomous moment posting scheduler

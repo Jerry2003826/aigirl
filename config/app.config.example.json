@@ -1,0 +1,67 @@
+{
+  "server": {
+    "port": 5000,
+    "nodeEnv": "production",
+    "trustProxy": 1
+  },
+  "database": {
+    "databaseUrl": "postgresql://USER:PASSWORD@HOST:5432/DBNAME"
+  },
+  "session": {
+    "sessionSecret": "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+    "cookieSecure": true,
+    "cookieSameSite": "lax",
+    "cookieDomain": ""
+  },
+  "email": {
+    "resendApiKey": "re_xxx",
+    "from": "AI伴侣 <noreply@your-domain.com>"
+  },
+  "ai": {
+    "googleAiApiKey": "",
+    "integrations": {
+      "geminiApiKey": "",
+      "geminiBaseUrl": "",
+      "openaiApiKey": "",
+      "openaiBaseUrl": ""
+    }
+  },
+  "objectStorage": {
+    "mode": "disabled",
+    "publicObjectSearchPaths": "",
+    "privateObjectDir": ""
+  },
+  "s3": {
+    "endpoint": "https://s3.amazonaws.com",
+    "region": "us-east-1",
+    "bucket": "your-bucket-name",
+    "accessKeyId": "",
+    "secretAccessKey": "",
+    "publicBaseUrl": "",
+    "forcePathStyle": false,
+    "publicBucket": false
+  },
+  "minimax": {
+    "apiKey": "",
+    "t2aWsUrl": "wss://api.minimax.io/ws/v1/t2a_v2",
+    "t2aHttpUrl": "https://api.minimax.io/v1/t2a_v2",
+    "streamAsrUrl": "wss://api.minimax.io/ws/v1/asr",
+    "streamTtsUrl": "wss://api.minimax.io/ws/v1/t2a_v2",
+    "preferHttp": true,
+    "defaultVoiceId": "male-qn-qingse",
+    "defaultLanguageBoost": "Chinese",
+    "defaultSampleRate": 32000,
+    "defaultBitrate": 128000,
+    "defaultFormat": "mp3",
+    "defaultChannel": 1
+  },
+  "webrtc": {
+    "stunServers": [
+      { "urls": "stun:stun.l.google.com:19302" },
+      { "urls": "stun:stun1.l.google.com:19302" }
+    ],
+    "turnServers": []
+  }
+}
+
+
