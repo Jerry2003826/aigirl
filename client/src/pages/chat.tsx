@@ -1734,52 +1734,45 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
-            {/* Legacy voice call (仅在无 WebRTC 配置时显示，避免双入口) */}
-            {!webrtcConfig && (
+            {/* AI 语音通话入口（替换原电话按钮逻辑） */}
+            {selectedConversationId && selectedConversation.personas?.length ? (
               <Button
                 size="icon"
-                variant={voiceCallEnabled ? "secondary" : "ghost"}
+                variant="ghost"
                 className="h-9 w-9 shrink-0"
-                onClick={() => {
-                  const next = !voiceCallEnabled;
-                  setVoiceCallEnabled(next);
-                  if (!next) {
-                    stopListening();
-                    stopTtsPlayback();
-                    setVoiceTranscript("");
-                  }
-                }}
-                title={voiceCallEnabled ? "退出语音通话" : "语音通话"}
-                data-testid="button-voice-call-toggle"
+                onClick={startAiVoiceSession}
+                title="AI 语音通话"
+                data-testid="button-ai-voice-call"
               >
                 <Phone className="h-5 w-5" />
               </Button>
-            )}
-
-            {/* WebRTC buttons */}
-            {!["inviting", "ringing", "connecting", "connected"].includes(callState) && selectedConversationId && (
-              <>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => startCall(false)}
-                  title="语音通话(WebRTC)"
-                  data-testid="button-webrtc-voice"
-                >
-                  <Phone className="h-5 w-5" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-9 w-9 shrink-0"
-                  onClick={() => startCall(true)}
-                  title="视频通话(WebRTC)"
-                  data-testid="button-webrtc-video"
-                >
-                  <Video className="h-5 w-5" />
-                </Button>
-              </>
+            ) : (
+              // 非 AI 会话仍保留原 WebRTC 按钮
+              !["inviting", "ringing", "connecting", "connected"].includes(callState) &&
+              selectedConversationId && (
+                <>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => startCall(false)}
+                    title="语音通话(WebRTC)"
+                    data-testid="button-webrtc-voice"
+                  >
+                    <Phone className="h-5 w-5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => startCall(true)}
+                    title="视频通话(WebRTC)"
+                    data-testid="button-webrtc-video"
+                  >
+                    <Video className="h-5 w-5" />
+                  </Button>
+                </>
+              )
             )}
 
             {/* Menu Button */}
