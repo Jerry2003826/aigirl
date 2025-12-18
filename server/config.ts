@@ -1,32 +1,12 @@
 import fs from "fs";
 import path from "path";
 import dotenv from "dotenv";
-import { ProxyAgent, setGlobalDispatcher } from "undici";
 
 // Auto-load env file. Prefer config/env.local for this repo (works in environments that block .env edits).
 // Safe if file doesn't exist.
 dotenv.config({ path: path.resolve(process.cwd(), "config", "env.local") });
 dotenv.config({ path: path.resolve(process.cwd(), "config", "env") });
 dotenv.config(); // fallback to default ".env" if present
-
-// Force all Node fetch (undici) traffic through proxy if configured (e.g., Clash).
-// This is required because many libraries do NOT automatically honor system proxy settings on Windows.
-(() => {
-  const proxy =
-    process.env.HTTPS_PROXY ||
-    process.env.HTTP_PROXY ||
-    process.env.https_proxy ||
-    process.env.http_proxy;
-
-  if (!proxy) return;
-
-  try {
-    setGlobalDispatcher(new ProxyAgent(proxy));
-    console.log(`[Proxy] Global proxy enabled for fetch: ${proxy}`);
-  } catch (err) {
-    console.warn("[Proxy] Failed to enable global proxy:", (err as Error).message);
-  }
-})();
 
 type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 type JsonObject = { [key: string]: JsonValue };
