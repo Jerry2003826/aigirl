@@ -8,6 +8,7 @@ import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
 import { minimaxTtsToBuffer } from "./voice/minimaxTts";
+import { setupVoiceWebSocket } from "./voice/voiceWs";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent, broadcastToUserEvent } from "./websocket";
 import { loadAndApplyConfig } from "./config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
@@ -2076,6 +2077,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Setup WebSocket server for real-time messaging
   setupWebSocket(httpServer);
+  setupVoiceWebSocket(httpServer);
   
   return httpServer;
 }
