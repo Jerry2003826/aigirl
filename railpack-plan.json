@@ -1,0 +1,21 @@
+{
+  "planVersion": 1,
+  "phases": [
+    {
+      "name": "install",
+      "cmds": [
+        "npm install --ignore-scripts=false"
+      ]
+    },
+    {
+      "name": "build",
+      "cmds": [
+        "npm run build"
+      ]
+    }
+  ],
+  "deploy": {
+    "cmd": "npm run start"
+  }
+}
+
