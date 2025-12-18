@@ -1,14 +1,15 @@
+# 1. 设置 Node 版本（可选，但推荐）
 [phases.setup]
-# Railway/Nixpacks 默认会调用 npm ci；这里改为 npm install，并保留 optional 依赖（如 rollup 平台二进制）
-install = [
-  "npm install --ignore-scripts=false"
-]
+nixPkgs = ["nodejs"]
 
+# 2. 核心修改：这里必须是 [phases.install]，且使用 cmds
+[phases.install]
+cmds = ["npm install"]
+
+# 3. 构建命令
 [phases.build]
-cmds = [
-  "npm run build"
-]
+cmds = ["npm run build"]
 
+# 4. 启动命令
 [start]
 cmd = "npm run start"
-
