@@ -1734,46 +1734,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
-            {/* AI 语音通话入口（替换原电话按钮逻辑） */}
-            {selectedConversationId && selectedConversation.personas?.length ? (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-9 w-9 shrink-0"
-                onClick={startAiVoiceSession}
-                title="AI 语音通话"
-                data-testid="button-ai-voice-call"
-              >
-                <Phone className="h-5 w-5" />
-              </Button>
-            ) : (
-              // 非 AI 会话仍保留原 WebRTC 按钮
-              !["inviting", "ringing", "connecting", "connected"].includes(callState) &&
-              selectedConversationId && (
-                <>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => startCall(false)}
-                    title="语音通话(WebRTC)"
-                    data-testid="button-webrtc-voice"
-                  >
-                    <Phone className="h-5 w-5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-9 w-9 shrink-0"
-                    onClick={() => startCall(true)}
-                    title="视频通话(WebRTC)"
-                    data-testid="button-webrtc-video"
-                  >
-                    <Video className="h-5 w-5" />
-                  </Button>
-                </>
-              )
-            )}
+            {/* 电话/语音入口暂时隐藏，保持文字聊天 */}
 
             {/* Menu Button */}
             <DropdownMenu>
@@ -2080,37 +2041,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
-            {/* AI 语音通话（针对 AI 角色） */}
-            {selectedConversationId && (
-              <div className="border rounded-lg mb-3 p-3 bg-muted/40">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-sm text-muted-foreground">
-                    AI 语音通话状态：{aiVoiceStatus}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={startAiVoiceSession} disabled={aiVoiceStatus === "connecting" || aiVoiceStatus === "listening"}>
-                      开始
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={stopAiVoiceSession}>
-                      停止
-                    </Button>
-                  </div>
-                </div>
-                <div className="mt-2 grid md:grid-cols-2 gap-2 text-sm">
-                  <div className="p-2 rounded bg-background">
-                    <div className="text-muted-foreground mb-1">我说</div>
-                    <div className="font-medium">{aiUserText || "等待语音..."}</div>
-                  </div>
-                  <div className="p-2 rounded bg-background">
-                    <div className="text-muted-foreground mb-1">AI 回复</div>
-                    <div className="font-medium">{aiReplyText || "等待回应..."}</div>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <AvatarViewer mouthLevel={aiMouthLevel} />
-                </div>
-              </div>
-            )}
+            {/* AI 语音通话入口暂时隐藏，保留文字聊天 */}
 
             {/* Message Input */}
             <div className="border-t bg-background pb-[env(safe-area-inset-bottom)]">
