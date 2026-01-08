@@ -102,90 +102,60 @@ export function useGlobalWebSocket() {
               currentConversationId,
             });
             
-            // CRITICAL: Replace optimistic message by clientMessageId to prevent double-render
-            queryClient.setQueriesData(
-              {
-                predicate: (query) => {
-                  const key = query.queryKey;
-                  // Match: ["/api/messages", conversationId, limit]
-                  return key[0] === "/api/messages" && key[1] === message.conversationId && typeof key[2] === 'number';
-                }
-              },
-              (oldData: Message[] | undefined) => {
-                if (!oldData) {
-                  // 缓存为空，创建新数组
-                  console.log('[WebSocket] 📥 缓存为空，创建新数组并添加消息', { messageId: message.id });
-                  return [message];
-                }
-                
-                console.log('[WebSocket] 📋 当前缓存状态', {
-                  cacheLength: oldData.length,
-                  cachePreview: oldData.slice(0, 3).map(m => ({
-                    id: m.id,
-                    clientMessageId: m.clientMessageId,
-                    senderType: m.senderType,
-                    content: m.content?.substring(0, 20),
-                  })),
-                });
-                
-                // Check if message already exists by ID to prevent duplicates
-                const messageExists = oldData.some(m => m.id === message.id);
-                if (messageExists) {
-                  console.log('[WebSocket] ⏭️ 消息已存在，跳过', { messageId: message.id });
-                  return oldData;
-                }
-                
-                // CRITICAL FIX: If message has clientMessageId, replace optimistic message
-                // This prevents double-render (optimistic + real message)
-                if (message.clientMessageId) {
-                  // Look for optimistic message by ID (optimistic messages use clientMessageId as their ID)
-                  const optimisticIndex = oldData.findIndex(m => 
-                    m.id === message.clientMessageId || m.clientMessageId === message.clientMessageId
-                  );
-                  if (optimisticIndex !== -1) {
-                    console.log('[WebSocket] 🔄 找到乐观消息，执行替换', {
-                      clientMessageId: message.clientMessageId,
-                      optimisticIndex,
-                      oldMessage: {
-                        id: oldData[optimisticIndex].id,
-                        status: oldData[optimisticIndex].status,
-                      },
-                      newMessage: {
-                        id: message.id,
-                        status: message.status,
-                      },
-                    });
-                    // Replace optimistic message with real message (in-place)
-                    const newData = [...oldData];
-                    newData[optimisticIndex] = message;
-                    console.log('[WebSocket] ✅ 替换完成，新缓存长度:', newData.length);
-                    return newData;
-                  } else {
-                    console.log('[WebSocket] ⚠️ 未找到匹配的乐观消息', {
-                      clientMessageId: message.clientMessageId,
-                      existingClientMessageIds: oldData.map(m => m.clientMessageId).filter(Boolean),
-                      existingIds: oldData.map(m => m.id).slice(0, 5),
-                    });
-                  }
-                }
-                
-                // AI消息直接添加到缓存，立即显示
-                // 后端已经按 persona.responseDelay 间隔发送，前端不需要额外队列
-                if (message.senderType === 'ai') {
-                  console.log('[WebSocket] 📨 收到AI消息，立即添加到缓存', {
-                    messageId: message.id,
-                    content: message.content?.substring(0, 30),
-                    isInThisChat,
-                  });
-                }
-                
-                console.log('[WebSocket] ➕ 添加新消息到缓存', { messageId: message.id });
-                // Backend returns DESC (newest first), prepend to maintain DESC order
-                const newData = [message, ...oldData];
-                console.log('[WebSocket] ✅ 添加完成，新缓存长度:', newData.length);
-                return newData;
+            // 直接更新所有匹配的消息缓存
+            // 使用 getQueriesData + setQueryData 确保触发组件更新
+            const allQueries = queryClient.getQueriesData<Message[]>({
+              predicate: (query) => {
+                const key = query.queryKey;
+                return key[0] === "/api/messages" && key[1] === message.conversationId;
               }
-            );
+            });
+            
+            console.log('[WebSocket] 📋 找到匹配的缓存数量:', allQueries.length);
+            
+            for (const [queryKey, oldData] of allQueries) {
+              if (!oldData) {
+                console.log('[WebSocket] 📥 缓存为空，设置新数据', { queryKey });
+                queryClient.setQueryData(queryKey, [message]);
+                continue;
+              }
+              
+              // 检查消息是否已存在
+              if (oldData.some(m => m.id === message.id)) {
+                console.log('[WebSocket] ⏭️ 消息已存在，跳过', { messageId: message.id });
+                continue;
+              }
+              
+              // 检查是否需要替换乐观消息
+              if (message.clientMessageId) {
+                const optimisticIndex = oldData.findIndex(m => 
+                  m.id === message.clientMessageId || m.clientMessageId === message.clientMessageId
+                );
+                if (optimisticIndex !== -1) {
+                  console.log('[WebSocket] 🔄 替换乐观消息', { clientMessageId: message.clientMessageId });
+                  const newData = [...oldData];
+                  newData[optimisticIndex] = message;
+                  queryClient.setQueryData(queryKey, newData);
+                  continue;
+                }
+              }
+              
+              // 添加新消息到缓存头部 (DESC order)
+              console.log('[WebSocket] ➕ 添加消息到缓存', { 
+                messageId: message.id, 
+                senderType: message.senderType,
+                content: message.content?.substring(0, 30) 
+              });
+              queryClient.setQueryData(queryKey, [message, ...oldData]);
+            }
+            
+            // 如果没有找到任何缓存，强制刷新
+            if (allQueries.length === 0 && isInThisChat) {
+              console.log('[WebSocket] ⚠️ 没有找到缓存，强制刷新');
+              queryClient.invalidateQueries({ 
+                queryKey: ["/api/messages", message.conversationId] 
+              });
+            }
             
             // Also update history dialog query if it exists
             queryClient.setQueriesData(
