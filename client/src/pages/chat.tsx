@@ -1722,18 +1722,13 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       const maxDelay = Math.max(0, ...Array.from(personaDelayMapRef.current.values()));
       const settleMs = Math.max(5000, maxDelay + 2000);
 
-      streamingTimeoutRef.current = setTimeout(() => {
+      const tryFinishStreaming = () => {
         // 如果还有“未展示”的AI消息（隐藏或队列里），不要结束
         const pendingHidden = hiddenAiMessageIdsRef.current?.size || 0;
         const pendingQueue = aiPlaybackQueueRef.current.length;
         if (pendingHidden > 0 || pendingQueue > 0) {
-          // 再等等（短检查）
-          streamingTimeoutRef.current = setTimeout(() => {
-            setIsStreaming(false);
-            setReplyingAIName(null);
-            setAwaitingAiSince(null);
-            setAiMessageCount(0);
-          }, Math.max(5000, maxDelay + 2000));
+          // 继续等待队列释放（短检查），直到全部展示完
+          streamingTimeoutRef.current = setTimeout(tryFinishStreaming, 300);
           return;
         }
 
@@ -1741,7 +1736,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         setReplyingAIName(null);
         setAwaitingAiSince(null);
         setAiMessageCount(0);
-      }, settleMs);
+      };
+
+      streamingTimeoutRef.current = setTimeout(tryFinishStreaming, settleMs);
     }
   }, [messages, aiMessageCount, selectedConversation?.isGroup, isStreaming, awaitingAiSince]);
 
