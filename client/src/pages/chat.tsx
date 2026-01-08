@@ -1555,6 +1555,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     aiPlaybackHandledIdsRef.current = new Set();
     aiPlaybackProcessingRef.current = false;
     lastAiRevealAtRef.current = 0;
+    // Keep ref in sync immediately (setState may batch)
+    hiddenAiMessageIdsRef.current = new Set();
     setHiddenAiMessageIds(new Set());
   };
 
@@ -1572,8 +1574,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           break;
         }
 
-        const delaySetting = personaDelayMapRef.current.get(String(item.senderId || "")) ?? 0;
-        const desiredIntervalMs = Math.max(0, delaySetting);
+        // Resolve interval from persona settings.
+        // If settings aren't loaded yet, wait briefly; otherwise fall back to a safe default.
+        const senderKey = String(item.senderId || "");
+        let delaySetting = personaDelayMapRef.current.get(senderKey);
+        if (delaySetting === undefined && senderKey) {
+          const deadline = Date.now() + 800; // wait up to 800ms for persona map to populate
+          while (delaySetting === undefined && Date.now() < deadline) {
+            await new Promise((r) => setTimeout(r, 50));
+            delaySetting = personaDelayMapRef.current.get(senderKey);
+          }
+        }
+        // Only fall back when truly unknown (undefined). If user sets 0, keep 0.
+        const desiredIntervalMs = Math.max(0, delaySetting ?? 1000);
 
         // 计算“最小间隔”节奏：不会比设置更快；如果本来就慢于设置则不额外等待
         const now = Date.now();
