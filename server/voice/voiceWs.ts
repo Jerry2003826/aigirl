@@ -1,7 +1,7 @@
 import { Server } from "http";
 import { parse } from "cookie";
 import { WebSocket, WebSocketServer } from "ws";
-import { sessionStore } from "../routes";
+import { sessionStore } from "../session";
 import { storage } from "../storage";
 import { generateAIResponse } from "../aiService";
 import { minimaxTtsToBuffer } from "./minimaxTts";

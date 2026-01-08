@@ -23,7 +23,8 @@ import {
   aiReplyJobs
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { db } from "./db";
+import { db, pool } from "./db";
+import { INSTANCE_ID } from "./instance";
 import { eq, and, or, desc, asc, count, inArray, sql } from "drizzle-orm";
 
 // Storage interface with all CRUD methods needed for the AI chat app
@@ -867,7 +868,24 @@ export class DatabaseStorage implements IStorage {
         .set({ unreadCount: sql`${conversations.unreadCount} + 1` })
         .where(eq(conversations.id, insertMessage.conversationId));
     }
-    
+
+    // Cross-instance realtime: publish a message-created event via Postgres NOTIFY.
+    // Other server instances will LISTEN and broadcast to their connected WebSocket clients.
+    // This fixes "DB already has messages but frontend doesn't update" in multi-instance deployments.
+    try {
+      const payload = JSON.stringify({
+        instanceId: INSTANCE_ID,
+        conversationId: insertMessage.conversationId,
+        messageId: result[0]?.id,
+      });
+      // Don't block request/worker path on notify.
+      void pool
+        .query("select pg_notify($1, $2)", ["chat_message_created", payload])
+        .catch((err) => console.error("[MessageBus] pg_notify failed:", err));
+    } catch (err) {
+      console.error("[MessageBus] Failed to build notify payload:", err);
+    }
+
     return result[0];
   }
 

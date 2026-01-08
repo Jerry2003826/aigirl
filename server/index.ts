@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startAIScheduler } from "./aiScheduler";
 import { startAIReplyWorker } from "./aiReplyWorker";
+import { startMessageBus } from "./messageBus";
 
 // Load JSON config (config/app.config.json) and apply to process.env
 loadAndApplyConfig();
@@ -106,6 +107,9 @@ app.use((req, res, next) => {
   server.listen(listenOptions, () => {
     log(`serving on port ${port}`);
     
+    // Start cross-instance realtime message bus (Postgres LISTEN/NOTIFY)
+    startMessageBus();
+
     // Start AI autonomous moment posting scheduler
     startAIScheduler();
     

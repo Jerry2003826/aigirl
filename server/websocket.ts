@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Server } from 'http';
 import { parse } from 'cookie';
 import { IncomingMessage } from 'http';
-import { sessionStore } from './routes';
+import { sessionStore } from './session';
 import { storage } from './storage';
 
 interface AuthenticatedWebSocket extends WebSocket {
