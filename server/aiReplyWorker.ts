@@ -261,17 +261,23 @@ async function processNextJob() {
         .map(part => part.trim())  // Trim whitespace
         .filter(part => part.length > 0);  // Remove empty parts
       
-      // STEP 1: Save ALL messages to database first (atomic operation)
-      // This ensures offline users see all messages when they refresh, not just the first one
-      const savedMessages: Array<{message: any, persona: any}> = [];
-      
       if (messageParts.length === 0) {
         // Empty response after filtering - skip
         console.log(`[AI Worker] Empty AI response after filtering, skipping`);
       } else {
-        // Save all message parts to database immediately
-        console.log(`[AI Worker] Saving ${messageParts.length} message part(s) to database`);
+        // Combined STEP 1 & 2: Save and Broadcast messages one by one with delay
+        // This ensures both database consistency and natural conversation flow
+        console.log(`[AI Worker] Processing ${messageParts.length} message part(s)`);
+        
         for (let i = 0; i < messageParts.length; i++) {
+          // CRITICAL: Add delay before creating and broadcasting EACH message
+          // This ensures consistent 2-3 second intervals between messages
+          // We delay BEFORE DB creation so that even if client refetches, they don't see future messages
+          const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
+          console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before processing message ${i + 1}/${messageParts.length}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+
+          // Save message to database
           const aiMessage = await storage.createMessage({
             conversationId: conversation.id,
             senderId: respondingPersonaId,
@@ -282,35 +288,23 @@ async function processNextJob() {
           });
           
           allAiMessages.push(aiMessage);
-          savedMessages.push({ message: aiMessage, persona });
+          
+          const messageWithPersona = {
+            ...aiMessage,
+            personaName: persona.name,
+            personaAvatar: persona.avatarUrl
+          };
+          
+          // Broadcast to WebSocket
+          console.log(`[AI Worker] Broadcasting message ${i + 1}/${messageParts.length}:`, {
+            messageId: aiMessage.id,
+            content: aiMessage.content?.substring(0, 30),
+            delay: `${Math.round(delayMs)}ms`,
+          });
+          broadcastNewMessage(conversation.id, messageWithPersona);
         }
-        console.log(`[AI Worker] Successfully saved ${savedMessages.length} messages to database`);
-      }
-      
-      // STEP 2: Broadcast messages to WebSocket with delay (for online users)
-      // This creates the natural conversation feel for online users
-      // Offline users will get all messages at once when they refresh
-      console.log(`[AI Worker] Broadcasting ${savedMessages.length} messages with delays`);
-      for (let i = 0; i < savedMessages.length; i++) {
-        // CRITICAL FIX: Add delay for ALL messages (including the first one)
-        // This ensures consistent 2-3 second intervals between messages
-        const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
-        console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
         
-        const { message, persona } = savedMessages[i];
-        const messageWithPersona = {
-          ...message,
-          personaName: persona.name,
-          personaAvatar: persona.avatarUrl
-        };
-        
-        console.log(`[AI Worker] Broadcasting message ${i + 1}/${savedMessages.length}:`, {
-          messageId: message.id,
-          content: message.content?.substring(0, 30),
-          delay: `${Math.round(delayMs)}ms`,
-        });
-        broadcastNewMessage(conversation.id, messageWithPersona);
+        console.log(`[AI Worker] Successfully saved and broadcasted ${messageParts.length} messages`);
       }
       
       console.log(`[AI Worker] [${personaIndex + 1}/${respondingPersonaIds.length}] Successfully generated messages from ${persona.name}`);
