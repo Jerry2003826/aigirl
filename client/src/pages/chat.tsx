@@ -571,25 +571,40 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return newMap;
       });
       
-      // CRITICAL: 延迟清理乐观消息，等WebSocket收到真实消息后再清理
-      // 这避免了消息短暂消失的问题
-      // WebSocket会在收到真实消息时通过clientMessageId匹配并替换
+      // 1. 手动更新缓存，确保消息立即显示（不依赖WebSocket）
+      // 这解决了"消息消失"的问题 - 即使WebSocket延迟，用户也能看到已发送的消息
+      queryClient.setQueriesData(
+        {
+          predicate: (query) => 
+            query.queryKey[0] === "/api/messages" && 
+            query.queryKey[1] === conversationId
+        },
+        (old: Message[] | undefined) => {
+          if (!old) return [];
+          // 检查是否已存在
+          if (old.some(m => m.id === data.id)) return old;
+          
+          console.log('[API成功] 📥 手动将新消息写入缓存', { 
+            messageId: data.id, 
+            clientMessageId 
+          });
+          
+          // 添加到头部 (DESC)
+          return [data, ...old];
+        }
+      );
       
-      console.log('[API成功] 🚫 暂不清理乐观消息，等待WebSocket替换');
+      // 2. 立即清理乐观消息，因为真实消息已进入缓存
+      setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
       
-      // 设置一个延迟清理器，防止WebSocket失败时乐观消息永远存在
+      // 3. 设置兜底刷新，防止WebSocket消息丢失导致AI回复刷不出来
+      // 5秒后强制刷新一次消息列表，确保能看到AI的回复
       setTimeout(() => {
-        setOptimisticMessages(prev => {
-          const filtered = prev.filter(m => m.clientMessageId !== clientMessageId);
-          if (filtered.length < prev.length) {
-            console.log('[API成功] 🧹 延迟清理超时的乐观消息', {
-              clientMessageId,
-              removedCount: prev.length - filtered.length,
-            });
-          }
-          return filtered;
+        console.log('[API成功] 🔄 执行兜底刷新，确保获取AI回复');
+        queryClient.invalidateQueries({ 
+          queryKey: ["/api/messages", conversationId] 
         });
-      }, 2000); // 2秒后清理，给WebSocket足够时间
+      }, 5000);
       
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
