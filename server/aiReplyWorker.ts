@@ -265,19 +265,14 @@ async function processNextJob() {
         // Empty response after filtering - skip
         console.log(`[AI Worker] Empty AI response after filtering, skipping`);
       } else {
-        // Combined STEP 1 & 2: Save and Broadcast messages one by one with delay
-        // This ensures both database consistency and natural conversation flow
-        console.log(`[AI Worker] Processing ${messageParts.length} message part(s)`);
+        // STEP 1: Save ALL messages to database FIRST (atomic operation)
+        // This ensures all content is persisted before any broadcast
+        // Users who refresh will see all messages immediately
+        console.log(`[AI Worker] STEP 1: Saving ALL ${messageParts.length} message(s) to database first`);
+        
+        const savedMessages: Array<{message: any, persona: any}> = [];
         
         for (let i = 0; i < messageParts.length; i++) {
-          // CRITICAL: Add delay before creating and broadcasting EACH message
-          // This ensures consistent 2-3 second intervals between messages
-          // We delay BEFORE DB creation so that even if client refetches, they don't see future messages
-          const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
-          console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before processing message ${i + 1}/${messageParts.length}`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-
-          // Save message to database
           const aiMessage = await storage.createMessage({
             conversationId: conversation.id,
             senderId: respondingPersonaId,
@@ -288,23 +283,41 @@ async function processNextJob() {
           });
           
           allAiMessages.push(aiMessage);
+          savedMessages.push({ message: aiMessage, persona });
           
-          const messageWithPersona = {
-            ...aiMessage,
-            personaName: persona.name,
-            personaAvatar: persona.avatarUrl
-          };
-          
-          // Broadcast to WebSocket
-          console.log(`[AI Worker] Broadcasting message ${i + 1}/${messageParts.length}:`, {
+          console.log(`[AI Worker] Saved message ${i + 1}/${messageParts.length} to DB:`, {
             messageId: aiMessage.id,
             content: aiMessage.content?.substring(0, 30),
-            delay: `${Math.round(delayMs)}ms`,
+          });
+        }
+        
+        console.log(`[AI Worker] ✅ All ${savedMessages.length} messages saved to database`);
+        
+        // STEP 2: Broadcast messages with delay (for real-time users)
+        // This creates natural conversation feel while DB already has all content
+        console.log(`[AI Worker] STEP 2: Broadcasting ${savedMessages.length} messages with delays`);
+        
+        for (let i = 0; i < savedMessages.length; i++) {
+          // Add delay BEFORE each broadcast (including first one)
+          const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
+          console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          
+          const { message, persona: msgPersona } = savedMessages[i];
+          const messageWithPersona = {
+            ...message,
+            personaName: msgPersona.name,
+            personaAvatar: msgPersona.avatarUrl
+          };
+          
+          console.log(`[AI Worker] Broadcasting message ${i + 1}/${savedMessages.length}:`, {
+            messageId: message.id,
+            content: message.content?.substring(0, 30),
           });
           broadcastNewMessage(conversation.id, messageWithPersona);
         }
         
-        console.log(`[AI Worker] Successfully saved and broadcasted ${messageParts.length} messages`);
+        console.log(`[AI Worker] ✅ Successfully broadcasted all ${savedMessages.length} messages`);
       }
       
       console.log(`[AI Worker] [${personaIndex + 1}/${respondingPersonaIds.length}] Successfully generated messages from ${persona.name}`);
