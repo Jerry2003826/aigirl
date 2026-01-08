@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Sidebar, SidebarContent, SidebarHeader, SidebarFooter } from "@/components/ui/sidebar";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/theme-provider";
 import { useImmersiveMode } from "@/components/immersive-mode-provider";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -53,6 +53,7 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
   const { theme, toggleTheme } = useTheme();
   const { isImmersive, toggleImmersive } = useImmersiveMode();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // Profile edit state
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
@@ -219,12 +220,38 @@ export function AppSidebar({ selectedConversationId, onConversationSelect, onNew
     updateProfileMutation.mutate(updates);
   };
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries();
-    toast({
-      title: "已刷新",
-      description: "数据已同步",
-    });
+  const handleRefresh = async () => {
+    try {
+      // 精准刷新：会话列表/动态/当前会话消息
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["/api/conversations"] }),
+        queryClient.invalidateQueries({ queryKey: ["/api/moments"] }),
+        selectedConversationId
+          ? queryClient.invalidateQueries({ queryKey: ["/api/messages", selectedConversationId] })
+          : Promise.resolve(),
+      ]);
+
+      // 强制立即拉取一次（避免“只是标记stale但看起来没变化”）
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ["/api/conversations"] }),
+        queryClient.refetchQueries({ queryKey: ["/api/moments"] }),
+        selectedConversationId
+          ? queryClient.refetchQueries({ queryKey: ["/api/messages", selectedConversationId] })
+          : Promise.resolve(),
+      ]);
+
+      toast({
+        title: "已刷新",
+        description: "数据已同步",
+      });
+    } catch (e: any) {
+      console.error("[Refresh] Failed:", e);
+      toast({
+        title: "刷新失败",
+        description: e?.message || "请稍后重试",
+        variant: "destructive",
+      });
+    }
   };
 
   const navItems = [
