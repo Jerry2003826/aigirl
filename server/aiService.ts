@@ -492,10 +492,8 @@ export async function generateAIResponse(
   console.log('RAG Context:', ragContext ? ragContext.substring(0, 100) + '...' : 'None');
   console.log('========================\n');
   
-  // Apply response delay if specified
-  if (persona.responseDelay > 0) {
-    await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
-  }
+  // responseDelay is now handled in aiReplyWorker.ts during message broadcast
+  // Removed delay here to avoid double-waiting
   
   try {
     const response = await provider.generateResponse({
@@ -582,10 +580,8 @@ export async function generateAIResponseStream(
     messageTokenBudget
   );
   
-  // Apply response delay if specified
-  if (persona.responseDelay > 0) {
-    await new Promise(resolve => setTimeout(resolve, persona.responseDelay));
-  }
+  // responseDelay is now handled in aiReplyWorker.ts during message broadcast
+  // Removed delay here to avoid double-waiting
   
   try {
     const stream = await provider.generateResponseStream({

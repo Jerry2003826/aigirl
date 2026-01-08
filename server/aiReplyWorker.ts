@@ -3,7 +3,7 @@ import { generateAIResponse, ImageData, extractAndStoreMemories, selectMultipleR
 import { broadcastNewMessage } from './websocket';
 
 const MAX_RETRIES = 3;
-const POLL_INTERVAL = 3000; // 3 seconds
+const POLL_INTERVAL = 1000; // 1 second - faster response time
 const PROCESSING_LOCK = new Set<string>(); // In-memory lock to prevent duplicate processing
 
 // Track conversations where AI interaction is in progress
@@ -294,17 +294,11 @@ async function processNextJob() {
         console.log(`[AI Worker] ✅ All ${savedMessages.length} messages saved to database`);
         
         // STEP 2: Broadcast messages with delay (for real-time users)
-        // Use persona's responseDelay setting, fallback to 2000ms if not set
-        const baseDelayMs = persona.responseDelay > 0 ? persona.responseDelay : 2000;
-        console.log(`[AI Worker] STEP 2: Broadcasting ${savedMessages.length} messages with ${baseDelayMs}ms delay (from persona settings)`);
+        // First message: immediate, subsequent messages: use persona's responseDelay
+        const baseDelayMs = persona.responseDelay > 0 ? persona.responseDelay : 1500;
+        console.log(`[AI Worker] STEP 2: Broadcasting ${savedMessages.length} messages (first immediate, then ${baseDelayMs}ms delay)`);
         
         for (let i = 0; i < savedMessages.length; i++) {
-          // Add delay BEFORE each broadcast (including first one)
-          // Use persona's responseDelay + small random variance (±500ms)
-          const delayMs = baseDelayMs + (Math.random() - 0.5) * 1000;
-          console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-          
           const { message, persona: msgPersona } = savedMessages[i];
           const messageWithPersona = {
             ...message,
@@ -312,9 +306,18 @@ async function processNextJob() {
             personaAvatar: msgPersona.avatarUrl
           };
           
+          // First message: broadcast immediately
+          // Subsequent messages: add delay before broadcast
+          if (i > 0) {
+            const delayMs = baseDelayMs + (Math.random() - 0.5) * 500; // ±250ms variance
+            console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
+          }
+          
           console.log(`[AI Worker] Broadcasting message ${i + 1}/${savedMessages.length}:`, {
             messageId: message.id,
             content: message.content?.substring(0, 30),
+            immediate: i === 0,
           });
           broadcastNewMessage(conversation.id, messageWithPersona);
         }
