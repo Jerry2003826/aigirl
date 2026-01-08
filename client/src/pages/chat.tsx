@@ -546,9 +546,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       imageData?: string | null;
       clientMessageId: string;
       mentionedPersonaId?: string;
-    }) => {
+    }): Promise<Message> => {
       // Send user message (with optional image and mention)
-      return apiRequest("POST", "/api/messages", {
+      const response = await apiRequest("POST", "/api/messages", {
         conversationId,
         content: content || (imageData ? "[Image]" : ""),
         senderType: "user",
@@ -556,12 +556,15 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         clientMessageId, // Send clientMessageId to server for deduplication
         mentionedPersonaId: mentionedPersonaId || undefined,
       });
+      // CRITICAL: apiRequest returns Response, need to parse JSON
+      return response.json();
     },
-    onSuccess: async (data, { conversationId, content, clientMessageId }) => {
+    onSuccess: async (savedMessage: Message, { conversationId, content, clientMessageId }) => {
       console.log('[API成功] ✅ 消息API调用成功', {
         clientMessageId,
         conversationId,
-        responseData: data,
+        savedMessageId: savedMessage.id,
+        savedMessageContent: savedMessage.content?.substring(0, 30),
       });
       
       // Remove from failed messages if it was a retry
@@ -580,31 +583,42 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             query.queryKey[1] === conversationId
         },
         (old: Message[] | undefined) => {
-          if (!old) return [];
-          // 检查是否已存在
-          if (old.some(m => m.id === data.id)) return old;
+          if (!old) return [savedMessage];
+          // 检查是否已存在（通过ID或clientMessageId）
+          if (old.some(m => m.id === savedMessage.id || m.clientMessageId === clientMessageId)) {
+            console.log('[API成功] ⏭️ 消息已存在于缓存，跳过', { messageId: savedMessage.id });
+            return old;
+          }
           
           console.log('[API成功] 📥 手动将新消息写入缓存', { 
-            messageId: data.id, 
+            messageId: savedMessage.id, 
             clientMessageId 
           });
           
           // 添加到头部 (DESC)
-          return [data, ...old];
+          return [savedMessage, ...old];
         }
       );
       
       // 2. 立即清理乐观消息，因为真实消息已进入缓存
-      setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
+      setOptimisticMessages(prev => {
+        const filtered = prev.filter(m => m.clientMessageId !== clientMessageId);
+        console.log('[API成功] 🧹 清理乐观消息', {
+          clientMessageId,
+          beforeCount: prev.length,
+          afterCount: filtered.length,
+        });
+        return filtered;
+      });
       
       // 3. 设置兜底刷新，防止WebSocket消息丢失导致AI回复刷不出来
-      // 5秒后强制刷新一次消息列表，确保能看到AI的回复
+      // 8秒后强制刷新一次消息列表，确保能看到AI的回复
       setTimeout(() => {
         console.log('[API成功] 🔄 执行兜底刷新，确保获取AI回复');
         queryClient.invalidateQueries({ 
           queryKey: ["/api/messages", conversationId] 
         });
-      }, 5000);
+      }, 8000);
       
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
