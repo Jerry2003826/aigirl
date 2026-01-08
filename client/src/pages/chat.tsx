@@ -1485,14 +1485,22 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Remove optimistic messages when real messages arrive
   useEffect(() => {
     if (rawMessages.length > 0 && optimisticMessages.length > 0) {
-      // Remove optimistic messages that match real user messages
-      setOptimisticMessages(prev => 
-        prev.filter(opt => 
-          !rawMessages.some(real => 
-            real.content === opt.content && real.senderType === 'user'
-          )
-        )
-      );
+      // Remove optimistic messages that have been replaced by real messages
+      // Prefer matching by clientMessageId to avoid false positives on duplicate content
+      setOptimisticMessages(prev => {
+        const realClientIds = new Set(
+          rawMessages.map(r => r.clientMessageId).filter(Boolean)
+        );
+        const filtered = prev.filter(opt => {
+          if (opt.clientMessageId && realClientIds.has(opt.clientMessageId)) {
+            // Found exact clientMessageId match -> remove optimistic
+            return false;
+          }
+          // Fallback (legacy): keep if no exact match found
+          return true;
+        });
+        return filtered;
+      });
     }
   }, [rawMessages]); // 修复：只依赖rawMessages，避免无限循环
   
