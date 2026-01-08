@@ -188,7 +188,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     enabled: !!selectedConversationId,
     staleTime: 0, // 数据立即过期，确保invalidate后会refetch
     refetchOnWindowFocus: false, // 窗口聚焦时不refetch
-    refetchOnReconnect: false, // 重新连接时不refetch
+    refetchOnReconnect: true, // 断线重连后自动补拉消息（WhatsApp风格兜底）
+    // WhatsApp风格兜底：对话打开时短轮询拉取最新消息
+    // 即使WebSocket在某些环境下不稳定，也能保证消息“自动刷新”
+    refetchInterval: selectedConversationId ? 1000 : false,
+    refetchIntervalInBackground: false,
     placeholderData: (previousData) => previousData, // 🔧 保留上一次数据，避免UI闪烁
   });
 
@@ -1538,19 +1542,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // 消息队列系统已移除 - 后端已负责按 persona.responseDelay 间隔发送
   // WebSocket 收到消息后直接添加到缓存并立即显示，无需额外处理
 
-  // 🛡️ WebSocket兜底：等待AI回复时短轮询消息，避免“很久后一次性出现”
-  // 即使在多实例/网络抖动导致 WebSocket 丢包，也能像 WhatsApp 一样尽快拉到新消息
-  useEffect(() => {
-    if (!isStreaming || !selectedConversationId) return;
-
-    const interval = setInterval(() => {
-      queryClient.invalidateQueries({
-        queryKey: ["/api/messages", selectedConversationId],
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isStreaming, selectedConversationId]);
+  // 轮询由 react-query 的 refetchInterval 统一负责
 
   // Manage AI streaming state based on AI messages AFTER the latest user message
   useEffect(() => {
