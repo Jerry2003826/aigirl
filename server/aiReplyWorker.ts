@@ -294,12 +294,14 @@ async function processNextJob() {
         console.log(`[AI Worker] ✅ All ${savedMessages.length} messages saved to database`);
         
         // STEP 2: Broadcast messages with delay (for real-time users)
-        // This creates natural conversation feel while DB already has all content
-        console.log(`[AI Worker] STEP 2: Broadcasting ${savedMessages.length} messages with delays`);
+        // Use persona's responseDelay setting, fallback to 2000ms if not set
+        const baseDelayMs = persona.responseDelay > 0 ? persona.responseDelay : 2000;
+        console.log(`[AI Worker] STEP 2: Broadcasting ${savedMessages.length} messages with ${baseDelayMs}ms delay (from persona settings)`);
         
         for (let i = 0; i < savedMessages.length; i++) {
           // Add delay BEFORE each broadcast (including first one)
-          const delayMs = 2000 + Math.random() * 1000; // 2-3 seconds random
+          // Use persona's responseDelay + small random variance (±500ms)
+          const delayMs = baseDelayMs + (Math.random() - 0.5) * 1000;
           console.log(`[AI Worker] Waiting ${Math.round(delayMs)}ms before broadcasting message ${i + 1}/${savedMessages.length}`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
           

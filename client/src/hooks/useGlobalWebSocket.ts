@@ -113,8 +113,9 @@ export function useGlobalWebSocket() {
               },
               (oldData: Message[] | undefined) => {
                 if (!oldData) {
-                  console.log('[WebSocket] ⚠️ 缓存为空，无法更新');
-                  return oldData;
+                  // 缓存为空，创建新数组
+                  console.log('[WebSocket] 📥 缓存为空，创建新数组并添加消息', { messageId: message.id });
+                  return [message];
                 }
                 
                 console.log('[WebSocket] 📋 当前缓存状态', {
@@ -168,23 +169,14 @@ export function useGlobalWebSocket() {
                   }
                 }
                 
-                // 🆕 CRITICAL FIX: Always add AI messages to cache to prevent message loss
-                // If user is viewing this chat, also trigger queue event for smooth animation
-                if (message.senderType === 'ai' && isInThisChat) {
-                  console.log('[WebSocket] 📨 AI消息在当前对话中，触发队列事件', {
+                // AI消息直接添加到缓存，立即显示
+                // 后端已经按 persona.responseDelay 间隔发送，前端不需要额外队列
+                if (message.senderType === 'ai') {
+                  console.log('[WebSocket] 📨 收到AI消息，立即添加到缓存', {
                     messageId: message.id,
                     content: message.content?.substring(0, 30),
+                    isInThisChat,
                   });
-                  
-                  // Trigger custom event for queue system (optional enhancement)
-                  // The queue system will check if message already exists before adding
-                  window.dispatchEvent(new CustomEvent('ai-message-queue', {
-                    detail: { message }
-                  }));
-                  
-                  // IMPORTANT: Still add to cache as fallback
-                  // This ensures messages are never lost even if queue system fails
-                  console.log('[WebSocket] ➕ 同时添加AI消息到缓存（防止丢失）', { messageId: message.id });
                 }
                 
                 console.log('[WebSocket] ➕ 添加新消息到缓存', { messageId: message.id });

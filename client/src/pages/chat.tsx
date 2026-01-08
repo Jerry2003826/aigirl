@@ -98,7 +98,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
   const [replyingAIName, setReplyingAIName] = useState<string | null>(null); // 追踪正在回复的AI名字（仅群聊）
-  const [pendingAIMessages, setPendingAIMessages] = useState<Message[]>([]); // 🆕 待显示的AI消息队列（用于平滑显示）
+  // pendingAIMessages 队列已移除 - 后端负责按间隔发送，前端直接显示
   const [voiceCallEnabled, setVoiceCallEnabled] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState("");
@@ -126,7 +126,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastMarkedConversationRef = useRef<string | null>(null);
-  const messageQueueProcessorRef = useRef<NodeJS.Timeout | null>(null); // 🆕 队列处理器定时器
+  // messageQueueProcessorRef 已移除 - 不再需要前端队列处理
   const markAsReadDebounceRef = useRef<NodeJS.Timeout | null>(null); // 🆕 未读标记防抖定时器
   const speechRecognitionRef = useRef<any>(null);
   const wantsToListenRef = useRef(false);
@@ -612,13 +612,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       });
       
       // 3. 设置兜底刷新，防止WebSocket消息丢失导致AI回复刷不出来
-      // 8秒后强制刷新一次消息列表，确保能看到AI的回复
+      // 延长到 30 秒，给后端足够时间逐条广播（避免一次性拉取所有消息）
+      // 正常情况下 WebSocket 会实时推送，这只是最后的保障
       setTimeout(() => {
-        console.log('[API成功] 🔄 执行兜底刷新，确保获取AI回复');
+        console.log('[API成功] 🔄 执行兜底刷新（30s后），确保获取AI回复');
         queryClient.invalidateQueries({ 
           queryKey: ["/api/messages", conversationId] 
         });
-      }, 8000);
+      }, 30000);
       
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
@@ -1507,25 +1508,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
 
-  // 🆕 将selectedConversationId存储到window对象，供WebSocket使用
+  // 将selectedConversationId存储到window对象，供WebSocket使用
   useEffect(() => {
     // @ts-ignore - 临时存储在window对象上
     window.__currentConversationId = selectedConversationId;
     
-    // 🆕 对话切换时的安全重置：清空队列和定时器
-    console.log('[队列管理] 🔄 对话切换，重置队列状态', {
+    console.log('[对话切换] 🔄 当前对话ID已更新', {
       newConversationId: selectedConversationId,
-      pendingQueueLength: pendingAIMessages.length,
     });
-    
-    // 清空待处理的消息队列
-    setPendingAIMessages([]);
-    
-    // 清理队列处理器定时器
-    if (messageQueueProcessorRef.current) {
-      clearTimeout(messageQueueProcessorRef.current);
-      messageQueueProcessorRef.current = null;
-    }
     
     // 清理streaming超时定时器
     if (streamingTimeoutRef.current) {
@@ -1539,116 +1529,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     };
   }, [selectedConversationId]);
 
-  // 🆕 监听WebSocket的AI消息队列事件
-  useEffect(() => {
-    const handleAIMessageQueue = (event: CustomEvent) => {
-      const { message } = event.detail as { message: Message };
-      
-      console.log('[队列监听] 📨 收到AI消息，加入显示队列', {
-        messageId: message.id,
-        content: message.content?.substring(0, 30),
-        currentQueueLength: pendingAIMessages.length,
-      });
-      
-      // 加入队列
-      setPendingAIMessages(prev => [...prev, message]);
-      
-      // 设置streaming状态
-      if (!isStreaming) {
-        setIsStreaming(true);
-        console.log('[队列监听] 🔄 启动streaming状态');
-      }
-    };
-    
-    window.addEventListener('ai-message-queue', handleAIMessageQueue as EventListener);
-    
-    return () => {
-      window.removeEventListener('ai-message-queue', handleAIMessageQueue as EventListener);
-    };
-  }, [pendingAIMessages.length, isStreaming]);
-
-  // 🆕 消息队列处理器：每1秒从队列中取出一条AI消息显示
-  useEffect(() => {
-    if (pendingAIMessages.length === 0) {
-      // 队列为空，清理定时器
-      if (messageQueueProcessorRef.current) {
-        clearTimeout(messageQueueProcessorRef.current);
-        messageQueueProcessorRef.current = null;
-      }
-      
-      // 队列清空后，5秒后解锁isStreaming（如果没有新消息）
-      if (streamingTimeoutRef.current) {
-        clearTimeout(streamingTimeoutRef.current);
-      }
-      streamingTimeoutRef.current = setTimeout(() => {
-        console.log('[队列处理] ⏱️ AI流式响应超时完成', {
-          conversationId: selectedConversationId,
-          timeout: '5s',
-        });
-        setIsStreaming(false);
-        setReplyingAIName(null);
-      }, 5000);
-      
-      return;
-    }
-    
-    // 队列不为空，启动处理器
-    console.log('[队列处理] 🚀 启动消息队列处理器', {
-      queueLength: pendingAIMessages.length,
-      conversationId: selectedConversationId,
-    });
-    
-    // 设置1秒定时器
-    messageQueueProcessorRef.current = setTimeout(() => {
-      // 从队列中取出第一条消息
-      const [firstMessage, ...remainingMessages] = pendingAIMessages;
-      
-      console.log('[队列处理] 📤 显示队列中的消息', {
-        messageId: firstMessage.id,
-        content: firstMessage.content?.substring(0, 30),
-        remainingCount: remainingMessages.length,
-      });
-      
-      // 添加到React Query缓存（模拟WebSocket收到消息的效果）
-      queryClient.setQueryData(
-        ["/api/messages", selectedConversationId, messageLimit],
-        (old: Message[] = []) => {
-          // 检查消息是否已存在
-          if (old.some(m => m.id === firstMessage.id)) {
-            console.log('[队列处理] ⏭️ 消息已存在，跳过', { messageId: firstMessage.id });
-            return old;
-          }
-          
-          // 添加到顶部（因为backend返回DESC）
-          const newMessages = [firstMessage, ...old];
-          console.log('[队列处理] ✅ 消息已添加到缓存', {
-            messageId: firstMessage.id,
-            newCacheLength: newMessages.length,
-          });
-          return newMessages;
-        }
-      );
-      
-      // 从队列中移除
-      setPendingAIMessages(remainingMessages);
-      
-      // 更新AI消息计数
-      setAiMessageCount(prev => prev + 1);
-      
-      // 更新正在回复的AI名字（群聊）
-      if (selectedConversation?.isGroup && firstMessage.personaName) {
-        setReplyingAIName(firstMessage.personaName);
-      }
-    }, 1000); // 🎯 1秒间隔
-    
-    // 清理函数
-    return () => {
-      if (messageQueueProcessorRef.current) {
-        clearTimeout(messageQueueProcessorRef.current);
-        messageQueueProcessorRef.current = null;
-      }
-    };
-  }, [pendingAIMessages, selectedConversationId, messageLimit, selectedConversation?.isGroup]);
+  // 消息队列系统已移除 - 后端已负责按 persona.responseDelay 间隔发送
+  // WebSocket 收到消息后直接添加到缓存并立即显示，无需额外处理
 
   // Manage AI streaming state based on new AI messages
   useEffect(() => {
