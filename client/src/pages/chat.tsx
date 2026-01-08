@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Send, MessageCircle, Loader2, ImagePlus, X, MoreVertical, Brain, MessageSquare, UserCircle, Trash2, ArrowLeft, Search, FileText, Image as ImageIcon, Phone, Mic, MicOff, Volume2, VolumeX, Video, VideoOff } from "lucide-react";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useConversationSubscription } from "@/hooks/useGlobalWebSocket";
 import { format } from "date-fns";
@@ -49,7 +49,7 @@ type Conversation = {
   avatarUrl?: string | null;
   isGroup: boolean;
   lastMessageAt: Date | null;
-  personas?: { id: string; name: string; avatarUrl: string | null }[];
+  personas?: { id: string; name: string; avatarUrl: string | null; responseDelay?: number }[];
 };
 
 type Message = {
@@ -95,6 +95,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]); // 乐观更新的用户消息
   const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪本轮AI回复消息数量（用于检测完成）
   const [awaitingAiSince, setAwaitingAiSince] = useState<number | null>(null); // 记录本轮等待AI回复的起点时间戳
+  const [hiddenAiMessageIds, setHiddenAiMessageIds] = useState<Set<string>>(new Set()); // 🆕 强制逐条显示：暂时隐藏的AI消息ID
   const [showMembersDialog, setShowMembersDialog] = useState(false);
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
@@ -139,9 +140,28 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  // ===== 强制逐条显示（WhatsApp式节奏播放）=====
+  const aiPlaybackQueueRef = useRef<Array<{ conversationId: string; messageId: string; senderId: string | null; createdAtMs?: number }>>([]);
+  const aiPlaybackProcessingRef = useRef(false);
+  const aiPlaybackHandledIdsRef = useRef<Set<string>>(new Set()); // 当前轮次已处理过的AI消息ID（防止重复入队）
+  const lastAiRevealAtRef = useRef<number>(0); // 上一次“展示AI消息”的时间戳
+  const selectedConversationIdRef = useRef<string | null>(null);
+  const personaDelayMapRef = useRef<Map<string, number>>(new Map());
+  const hiddenAiMessageIdsRef = useRef<Set<string>>(new Set());
   
   // Use global WebSocket for conversation subscription
   useConversationSubscription(wsRef, selectedConversationId);
+
+  // Keep a ref for current conversationId to avoid stale async timers
+  useEffect(() => {
+    selectedConversationIdRef.current = selectedConversationId;
+  }, [selectedConversationId]);
+
+  // Keep latest hidden set in a ref for timeouts
+  useEffect(() => {
+    hiddenAiMessageIdsRef.current = hiddenAiMessageIds;
+  }, [hiddenAiMessageIds]);
 
   const { data: user } = useQuery<{ id: string; username: string; profileImageUrl: string | null }>({
     queryKey: ["/api/auth/user"],
@@ -254,11 +274,14 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     
     // Step 6: Return as array - already in ASC order (oldest first, newest last)
     const finalMessages = Array.from(messageMap.values());
+
+    // Step 7: 强制逐条显示 - 过滤掉暂时隐藏的AI消息
+    const visibleMessages = finalMessages.filter((m) => !hiddenAiMessageIds.has(m.id));
     
     console.log('[UI渲染] ✅ 消息合并完成', {
-      finalCount: finalMessages.length,
+      finalCount: visibleMessages.length,
       filteredOptimisticCount: filteredOptimistic.length,
-      finalMessagesPreview: finalMessages.slice(-3).map(m => ({
+      finalMessagesPreview: visibleMessages.slice(-3).map(m => ({
         id: m.id,
         clientMessageId: m.clientMessageId,
         senderType: m.senderType,
@@ -267,8 +290,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       })),
     });
     
-    return finalMessages;
-  }, [rawMessages, optimisticMessages, failedMessages]);
+    return visibleMessages;
+  }, [rawMessages, optimisticMessages, failedMessages, hiddenAiMessageIds]);
 
   // Separate query for chat history dialog - fetch ALL messages
   const { data: allMessages = [], isLoading: allMessagesLoading } = useQuery<Message[]>({
@@ -623,6 +646,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       
       console.log('[API成功] 🔄 更新状态：解锁isLoading，启用isStreaming');
       setIsLoading(false); // 用户消息发送成功，结束等待状态
+      // 新一轮AI回复：重置逐条显示队列，避免上一轮残留导致“同时刷出”
+      resetAiPlaybackState();
       // 记录本轮等待AI的起点时间，避免历史AI消息误触发“回复完成”
       const sinceTs = (() => {
         const t = new Date((savedMessage as any).createdAt).getTime();
@@ -1512,6 +1537,69 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // Use independent query data if available, otherwise fall back to conversations list
   const selectedConversation = selectedConversationData || conversations.find(c => c.id === selectedConversationId);
 
+  // Persona delay map (ms) for pacing AI messages (from conversation participants)
+  useEffect(() => {
+    const map = new Map<string, number>();
+    const personas = selectedConversation?.personas || [];
+    for (const p of personas as any[]) {
+      if (p?.id) {
+        const d = Number(p?.responseDelay) || 0;
+        map.set(String(p.id), d);
+      }
+    }
+    personaDelayMapRef.current = map;
+  }, [selectedConversation?.personas]);
+
+  const resetAiPlaybackState = () => {
+    aiPlaybackQueueRef.current = [];
+    aiPlaybackHandledIdsRef.current = new Set();
+    aiPlaybackProcessingRef.current = false;
+    lastAiRevealAtRef.current = 0;
+    setHiddenAiMessageIds(new Set());
+  };
+
+  const kickAiPlaybackQueue = async () => {
+    if (aiPlaybackProcessingRef.current) return;
+    aiPlaybackProcessingRef.current = true;
+
+    try {
+      while (aiPlaybackQueueRef.current.length > 0) {
+        const item = aiPlaybackQueueRef.current.shift();
+        if (!item) break;
+
+        // 如果对话已切换，停止处理（避免跨会话显示）
+        if (selectedConversationIdRef.current !== item.conversationId) {
+          break;
+        }
+
+        const delaySetting = personaDelayMapRef.current.get(String(item.senderId || "")) ?? 0;
+        const desiredIntervalMs = Math.max(0, delaySetting);
+
+        // 计算“最小间隔”节奏：不会比设置更快；如果本来就慢于设置则不额外等待
+        const now = Date.now();
+        const last = lastAiRevealAtRef.current;
+        const elapsed = last ? now - last : Number.POSITIVE_INFINITY;
+        const waitMs = last ? Math.max(0, desiredIntervalMs - elapsed) : 0;
+
+        if (waitMs > 0) {
+          await new Promise((r) => setTimeout(r, waitMs));
+        }
+
+        // 展示：从隐藏集合移除
+        setHiddenAiMessageIds((prev) => {
+          if (!prev.has(item.messageId)) return prev;
+          const next = new Set(prev);
+          next.delete(item.messageId);
+          return next;
+        });
+
+        lastAiRevealAtRef.current = Date.now();
+      }
+    } finally {
+      aiPlaybackProcessingRef.current = false;
+    }
+  };
+
   // 将selectedConversationId存储到window对象，供WebSocket使用
   useEffect(() => {
     // @ts-ignore - 临时存储在window对象上
@@ -1533,6 +1621,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     setAwaitingAiSince(null);
     setAiMessageCount(0);
     setReplyingAIName(null);
+    resetAiPlaybackState();
     
     return () => {
       // @ts-ignore
@@ -1544,6 +1633,60 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // WebSocket 收到消息后直接添加到缓存并立即显示，无需额外处理
 
   // 轮询由 react-query 的 refetchInterval 统一负责
+
+  // ✅ 强制逐条显示：当一次拉到多条AI消息时，先全部“隐藏入队”，再按 responseDelay 逐条释放显示
+  // 使用 useLayoutEffect 避免“先同时出现一帧再隐藏”的闪烁
+  useLayoutEffect(() => {
+    if (!selectedConversationId) return;
+    if (!isStreaming || awaitingAiSince === null) return;
+
+    const convId = selectedConversationId;
+    const sinceTs = awaitingAiSince;
+
+    const newlyArrived: Array<{ id: string; senderId: string | null; createdAtMs: number }> = [];
+
+    for (const m of rawMessages as any[]) {
+      if (!m || m.senderType !== "ai") continue;
+      const id = String(m.id || "");
+      if (!id) continue;
+
+      const createdAtMs = new Date(m.createdAt).getTime();
+      if (!Number.isFinite(createdAtMs) || createdAtMs < sinceTs) continue;
+
+      if (aiPlaybackHandledIdsRef.current.has(id)) continue;
+      aiPlaybackHandledIdsRef.current.add(id);
+
+      newlyArrived.push({ id, senderId: m.senderId ?? null, createdAtMs });
+    }
+
+    if (newlyArrived.length === 0) return;
+
+    // 保证按创建时间顺序入队
+    newlyArrived.sort((a, b) => a.createdAtMs - b.createdAtMs);
+
+    // 1) 先隐藏
+    setHiddenAiMessageIds((prev) => {
+      const next = new Set(prev);
+      for (const x of newlyArrived) next.add(x.id);
+      return next;
+    });
+
+    // 2) 入队（按顺序）
+    aiPlaybackQueueRef.current.push(
+      ...newlyArrived.map((x) => ({
+        conversationId: convId,
+        messageId: x.id,
+        senderId: x.senderId,
+        createdAtMs: x.createdAtMs,
+      }))
+    );
+
+    // 为了安全（万一有乱序），对队列整体再排序一次
+    aiPlaybackQueueRef.current.sort((a: any, b: any) => (a.createdAtMs || 0) - (b.createdAtMs || 0));
+
+    // 3) 启动/继续播放
+    void kickAiPlaybackQueue();
+  }, [rawMessages, isStreaming, awaitingAiSince, selectedConversationId]);
 
   // Manage AI streaming state based on AI messages AFTER the latest user message
   useEffect(() => {
@@ -1574,13 +1717,31 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         clearTimeout(streamingTimeoutRef.current);
       }
 
-      // If no new AI message in 5s, consider this round complete
+      // If no new AI message for a while, consider this round complete.
+      // 关键：responseDelay 可能 > 5s（最大 10s），所以结束窗口要跟随设置
+      const maxDelay = Math.max(0, ...Array.from(personaDelayMapRef.current.values()));
+      const settleMs = Math.max(5000, maxDelay + 2000);
+
       streamingTimeoutRef.current = setTimeout(() => {
+        // 如果还有“未展示”的AI消息（隐藏或队列里），不要结束
+        const pendingHidden = hiddenAiMessageIdsRef.current?.size || 0;
+        const pendingQueue = aiPlaybackQueueRef.current.length;
+        if (pendingHidden > 0 || pendingQueue > 0) {
+          // 再等等（短检查）
+          streamingTimeoutRef.current = setTimeout(() => {
+            setIsStreaming(false);
+            setReplyingAIName(null);
+            setAwaitingAiSince(null);
+            setAiMessageCount(0);
+          }, Math.max(5000, maxDelay + 2000));
+          return;
+        }
+
         setIsStreaming(false);
         setReplyingAIName(null);
         setAwaitingAiSince(null);
         setAiMessageCount(0);
-      }, 5000);
+      }, settleMs);
     }
   }, [messages, aiMessageCount, selectedConversation?.isGroup, isStreaming, awaitingAiSince]);
 

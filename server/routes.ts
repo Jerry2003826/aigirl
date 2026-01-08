@@ -940,7 +940,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         participants.map(async (p) => {
           if (p.personaId) {
             const persona = await storage.getPersona(p.personaId);
-            return persona ? { id: persona.id, name: persona.name, avatarUrl: persona.avatarUrl } : null;
+            return persona
+              ? {
+                  id: persona.id,
+                  name: persona.name,
+                  avatarUrl: persona.avatarUrl,
+                  responseDelay: persona.responseDelay,
+                }
+              : null;
           }
           return null;
         })
