@@ -93,7 +93,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [historyMessageType, setHistoryMessageType] = useState<"all" | "text" | "image">("all");
   const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([]); // 乐观更新的用户消息
-  const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪AI消息数量用于检测分段完成
+  const [aiMessageCount, setAiMessageCount] = useState(0); // 跟踪本轮AI回复消息数量（用于检测完成）
+  const [awaitingAiSince, setAwaitingAiSince] = useState<number | null>(null); // 记录本轮等待AI回复的起点时间戳
   const [showMembersDialog, setShowMembersDialog] = useState(false);
   const [showEditTitleDialog, setShowEditTitleDialog] = useState(false);
   const [editingTitle, setEditingTitle] = useState("");
@@ -611,24 +612,20 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
         return filtered;
       });
       
-      // 3. 设置兜底刷新，防止WebSocket消息丢失导致AI回复刷不出来
-      // 延长到 30 秒，给后端足够时间逐条广播（避免一次性拉取所有消息）
-      // 正常情况下 WebSocket 会实时推送，这只是最后的保障
-      setTimeout(() => {
-        console.log('[API成功] 🔄 执行兜底刷新（30s后），确保获取AI回复');
-        queryClient.invalidateQueries({ 
-          queryKey: ["/api/messages", conversationId] 
-        });
-      }, 30000);
-      
       // IMPORTANT: AI回复现在由后台Worker自动处理
       // POST /api/messages 已自动创建AI reply job，worker会轮询处理
       // 前端只需要设置状态，等待WebSocket广播AI消息
       
       console.log('[API成功] 🔄 更新状态：解锁isLoading，启用isStreaming');
       setIsLoading(false); // 用户消息发送成功，结束等待状态
+      // 记录本轮等待AI的起点时间，避免历史AI消息误触发“回复完成”
+      const sinceTs = (() => {
+        const t = new Date((savedMessage as any).createdAt).getTime();
+        return Number.isFinite(t) ? t : Date.now();
+      })();
+      setAwaitingAiSince(sinceTs);
       setIsStreaming(true); // 等待AI回复（后台worker处理）
-      setAiMessageCount(0); // 重置AI消息计数
+      setAiMessageCount(0); // 重置本轮AI消息计数
       
       // WebSocket会收到AI消息并触发streamingTimeout逻辑
       // 无需手动调用AI接口
@@ -638,6 +635,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       // 发送失败时解锁输入框
       setIsLoading(false);
       setIsStreaming(false);
+      setAwaitingAiSince(null);
+      setAiMessageCount(0);
       
       // Clear optimistic message and store as failed
       setOptimisticMessages(prev => prev.filter(m => m.clientMessageId !== clientMessageId));
@@ -1522,6 +1521,13 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
       clearTimeout(streamingTimeoutRef.current);
       streamingTimeoutRef.current = null;
     }
+
+    // 对话切换时重置“等待AI回复”状态，避免锁住输入框或误判
+    setIsLoading(false);
+    setIsStreaming(false);
+    setAwaitingAiSince(null);
+    setAiMessageCount(0);
+    setReplyingAIName(null);
     
     return () => {
       // @ts-ignore
@@ -1532,33 +1538,58 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   // 消息队列系统已移除 - 后端已负责按 persona.responseDelay 间隔发送
   // WebSocket 收到消息后直接添加到缓存并立即显示，无需额外处理
 
-  // Manage AI streaming state based on new AI messages
+  // 🛡️ WebSocket兜底：等待AI回复时短轮询消息，避免“很久后一次性出现”
+  // 即使在多实例/网络抖动导致 WebSocket 丢包，也能像 WhatsApp 一样尽快拉到新消息
   useEffect(() => {
-    const aiMessages = messages.filter(m => m.senderType === 'ai');
-    if (aiMessages.length > aiMessageCount) {
-      // New AI message detected
-      setAiMessageCount(aiMessages.length);
-      
+    if (!isStreaming || !selectedConversationId) return;
+
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/messages", selectedConversationId],
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isStreaming, selectedConversationId]);
+
+  // Manage AI streaming state based on AI messages AFTER the latest user message
+  useEffect(() => {
+    if (!isStreaming || awaitingAiSince === null) return;
+
+    const aiMessagesAfter = messages.filter((m) => {
+      if (m.senderType !== "ai") return false;
+      const ts = new Date((m as any).createdAt).getTime();
+      return Number.isFinite(ts) && ts >= awaitingAiSince;
+    });
+
+    // 还没收到本轮AI回复
+    if (aiMessagesAfter.length === 0) return;
+
+    if (aiMessagesAfter.length > aiMessageCount) {
+      setAiMessageCount(aiMessagesAfter.length);
+
       // For group chats, update the replying AI name from the latest message
-      if (selectedConversation?.isGroup && aiMessages.length > 0) {
-        const latestAIMessage = aiMessages[aiMessages.length - 1];
+      if (selectedConversation?.isGroup) {
+        const latestAIMessage = aiMessagesAfter[aiMessagesAfter.length - 1];
         if (latestAIMessage.personaName) {
           setReplyingAIName(latestAIMessage.personaName);
         }
       }
-      
+
       // Clear previous timeout
       if (streamingTimeoutRef.current) {
         clearTimeout(streamingTimeoutRef.current);
       }
-      
-      // Set timeout: if no new message in 5s, streaming is complete
+
+      // If no new AI message in 5s, consider this round complete
       streamingTimeoutRef.current = setTimeout(() => {
-        setIsStreaming(false); // Unlock input
-        setReplyingAIName(null); // Clear replying AI name
+        setIsStreaming(false);
+        setReplyingAIName(null);
+        setAwaitingAiSince(null);
+        setAiMessageCount(0);
       }, 5000);
     }
-  }, [messages, aiMessageCount, selectedConversation?.isGroup]);
+  }, [messages, aiMessageCount, selectedConversation?.isGroup, isStreaming, awaitingAiSince]);
 
   return (
     <div className={cn(
