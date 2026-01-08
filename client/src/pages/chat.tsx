@@ -190,8 +190,9 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     refetchOnWindowFocus: false, // 窗口聚焦时不refetch
     refetchOnReconnect: true, // 断线重连后自动补拉消息（WhatsApp风格兜底）
     // WhatsApp风格兜底：对话打开时短轮询拉取最新消息
-    // 即使WebSocket在某些环境下不稳定，也能保证消息“自动刷新”
-    refetchInterval: selectedConversationId ? 1000 : false,
+    // 关键：当AI正在回复时，提高轮询频率，避免“多条消息被同一次轮询一起刷出来”
+    // 平时降低频率，减少请求量
+    refetchInterval: selectedConversationId ? (isStreaming ? 300 : 1500) : false,
     refetchIntervalInBackground: false,
     placeholderData: (previousData) => previousData, // 🔧 保留上一次数据，避免UI闪烁
   });
