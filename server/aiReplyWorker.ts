@@ -106,6 +106,8 @@ async function processNextJob() {
     const imageData = userMessage.imageData ? parseDataUrl(userMessage.imageData) : undefined;
     const allAiMessages: any[] = [];
     
+    let lastErrorMessage: string | null = null;
+
     for (let pIdx = 0; pIdx < respondingPersonaIds.length; pIdx++) {
       const personaId = respondingPersonaIds[pIdx];
       
@@ -124,6 +126,7 @@ async function processNextJob() {
         });
       } catch (err: any) {
         console.error(`[AI Worker] Failed to generate response:`, err.message);
+        lastErrorMessage = err?.message || "AI response failed";
         continue;
       }
       
@@ -167,6 +170,31 @@ async function processNextJob() {
           await new Promise(r => setTimeout(r, delayMs));
         }
       }
+    }
+
+    if (allAiMessages.length === 0) {
+      const personaId = respondingPersonaIds[0];
+      if (personaId) {
+        const persona = await storage.getPersona(personaId);
+        const fallbackContent = lastErrorMessage?.includes("API key")
+          ? "AI 回复失败：请先在设置中配置有效的 API Key。"
+          : "AI 回复失败，请稍后重试或检查模型配置。";
+        const msg = await storage.createMessage({
+          conversationId: conversation.id,
+          senderId: personaId,
+          senderType: "ai",
+          content: fallbackContent,
+          isRead: false,
+          status: "sent",
+        });
+        broadcastNewMessage(conversation.id, {
+          ...msg,
+          personaName: persona?.name,
+          personaAvatar: persona?.avatarUrl,
+        });
+      }
+      await storage.updateJobStatus(job.id, "failed", lastErrorMessage || "No AI response");
+      return;
     }
     
     // Trigger AI-to-AI interaction (background)
