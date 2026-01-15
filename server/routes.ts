@@ -1,6 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
@@ -95,7 +95,7 @@ const authLimiter = rateLimit({
   keyGenerator: (req) => {
     const rawEmail = typeof req.body?.email === "string" ? req.body.email : "";
     const email = rawEmail ? normalizeEmail(rawEmail) : "";
-    return `${req.ip}:${email}`;
+    return `${ipKeyGenerator(req)}:${email}`;
   },
 });
 

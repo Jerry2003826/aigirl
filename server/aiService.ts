@@ -12,6 +12,7 @@ interface GenerateResponseOptions {
   userMessage: string;
   contextLimit?: number;
   imageData?: ImageData; // Support for image input
+  forceFullMemoryContext?: boolean;
 }
 
 interface SelectRespondingPersonaOptions {
@@ -422,7 +423,14 @@ async function buildRAGContext(
 export async function generateAIResponse(
   options: GenerateResponseOptions
 ): Promise<string> {
-  const { conversationId, personaId, userMessage, contextLimit = 100, imageData } = options;
+  const {
+    conversationId,
+    personaId,
+    userMessage,
+    contextLimit = 100,
+    imageData,
+    forceFullMemoryContext = false,
+  } = options;
   
   // Fetch persona
   const persona = await storage.getPersona(personaId);
@@ -445,6 +453,7 @@ export async function generateAIResponse(
   
   // Check if RAG and Search are enabled
   const ragEnabled = aiSettings?.ragEnabled || false;
+  const effectiveRagEnabled = forceFullMemoryContext ? false : ragEnabled;
   const searchEnabled = aiSettings?.searchEnabled || false;
   const language = aiSettings?.language || "zh-CN";
   
@@ -455,13 +464,19 @@ export async function generateAIResponse(
   const memoryTokenBudget = 33000;        // Adjusted for RAG memories
   
   // Build system prompt with personality (and memories if RAG is disabled)
-  const systemPrompt = await buildSystemPrompt(persona, conversation.userId, ragEnabled, language, conversationId);
+  const systemPrompt = await buildSystemPrompt(
+    persona,
+    conversation.userId,
+    effectiveRagEnabled,
+    language,
+    conversationId,
+  );
   const systemPromptTokens = estimateTokens(systemPrompt);
   console.log(`[Token Budget] System prompt: ~${systemPromptTokens} tokens`);
   
   // Build RAG context if enabled (with token limit)
   let ragContext: string | undefined;
-  if (ragEnabled) {
+  if (effectiveRagEnabled) {
     ragContext = await buildRAGContext(
       persona.id, 
       conversation.userId,

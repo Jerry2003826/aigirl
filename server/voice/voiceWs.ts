@@ -212,7 +212,8 @@ async function handleAiTurn(
     conversationId: ws.conversationId!,
     personaId: personaId || ws.personaId!,
     userMessage: userText,
-    contextLimit: 30,
+    contextLimit: 60,
+    forceFullMemoryContext: true,
   });
   ws.send(JSON.stringify({ type: "asr_final", payload: { text: userText } }));
   ws.send(JSON.stringify({ type: "ai_text", payload: { text: aiText } }));
