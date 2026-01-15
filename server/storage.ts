@@ -87,10 +87,12 @@ export interface IStorage {
   // Moment like operations
   toggleMomentLike(momentId: string, likerId: string, likerType: 'user' | 'ai'): Promise<boolean>; // Returns true if liked, false if unliked
   getMomentLikes(momentId: string): Promise<MomentLike[]>;
+  getMomentLikesForMoments(momentIds: string[]): Promise<MomentLike[]>;
   
   // Moment comment operations
   createMomentComment(comment: InsertMomentComment): Promise<MomentComment>;
   getMomentComments(momentId: string): Promise<MomentComment[]>;
+  getMomentCommentsForMoments(momentIds: string[]): Promise<MomentComment[]>;
   getMomentCommentById(id: string): Promise<MomentComment | undefined>;
   deleteMomentComment(id: string): Promise<boolean>;
   markMomentCommentsAsRead(momentId: string): Promise<void>; // Mark all comments on a moment as read
@@ -114,6 +116,9 @@ export class MemStorage implements IStorage {
   private conversationParticipants: Map<string, ConversationParticipant>;
   private messages: Map<string, Message>;
   private memories: Map<string, Memory>;
+  private moments: Map<string, Moment>;
+  private momentLikes: Map<string, MomentLike>;
+  private momentComments: Map<string, MomentComment>;
   private aiReplyJobs: Map<string, AiReplyJob>;
 
   constructor() {
@@ -123,6 +128,9 @@ export class MemStorage implements IStorage {
     this.conversationParticipants = new Map();
     this.messages = new Map();
     this.memories = new Map();
+    this.moments = new Map();
+    this.momentLikes = new Map();
+    this.momentComments = new Map();
     this.aiReplyJobs = new Map();
   }
 
@@ -497,6 +505,130 @@ export class MemStorage implements IStorage {
 
   async deleteMemory(id: string): Promise<boolean> {
     return this.memories.delete(id);
+  }
+
+  // Moment operations
+  async getMoment(id: string): Promise<Moment | undefined> {
+    return this.moments.get(id);
+  }
+
+  async getMomentsByUser(userId: string, limit: number = 50, offset: number = 0): Promise<Moment[]> {
+    return Array.from(this.moments.values())
+      .filter((moment) => moment.userId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(offset, offset + limit);
+  }
+
+  async createMoment(insertMoment: InsertMoment): Promise<Moment> {
+    const id = randomUUID();
+    const moment: Moment = {
+      id,
+      authorId: insertMoment.authorId,
+      authorType: insertMoment.authorType,
+      userId: insertMoment.userId,
+      content: insertMoment.content,
+      images: insertMoment.images ?? null,
+      unreadCommentsCount: 0,
+      createdAt: new Date(),
+    };
+    this.moments.set(id, moment);
+    return moment;
+  }
+
+  async deleteMoment(id: string): Promise<boolean> {
+    return this.moments.delete(id);
+  }
+
+  // Moment like operations
+  async toggleMomentLike(momentId: string, likerId: string, likerType: 'user' | 'ai'): Promise<boolean> {
+    const existing = Array.from(this.momentLikes.values()).find(
+      (like) => like.momentId === momentId && like.likerId === likerId,
+    );
+    if (existing) {
+      this.momentLikes.delete(existing.id);
+      return false;
+    }
+    const id = randomUUID();
+    const momentLike: MomentLike = {
+      id,
+      momentId,
+      likerId,
+      likerType,
+      createdAt: new Date(),
+    };
+    this.momentLikes.set(id, momentLike);
+    return true;
+  }
+
+  async getMomentLikes(momentId: string): Promise<MomentLike[]> {
+    return Array.from(this.momentLikes.values())
+      .filter((like) => like.momentId === momentId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getMomentLikesForMoments(momentIds: string[]): Promise<MomentLike[]> {
+    if (momentIds.length === 0) {
+      return [];
+    }
+    const idSet = new Set(momentIds);
+    return Array.from(this.momentLikes.values())
+      .filter((like) => idSet.has(like.momentId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  // Moment comment operations
+  async createMomentComment(insertComment: InsertMomentComment): Promise<MomentComment> {
+    const id = randomUUID();
+    const comment: MomentComment = {
+      id,
+      momentId: insertComment.momentId,
+      authorId: insertComment.authorId,
+      authorType: insertComment.authorType,
+      content: insertComment.content,
+      parentCommentId: insertComment.parentCommentId ?? null,
+      createdAt: new Date(),
+    };
+    this.momentComments.set(id, comment);
+
+    const moment = this.moments.get(insertComment.momentId);
+    if (moment && moment.authorId !== insertComment.authorId) {
+      moment.unreadCommentsCount += 1;
+      this.moments.set(moment.id, moment);
+    }
+
+    return comment;
+  }
+
+  async getMomentComments(momentId: string): Promise<MomentComment[]> {
+    return Array.from(this.momentComments.values())
+      .filter((comment) => comment.momentId === momentId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getMomentCommentsForMoments(momentIds: string[]): Promise<MomentComment[]> {
+    if (momentIds.length === 0) {
+      return [];
+    }
+    const idSet = new Set(momentIds);
+    return Array.from(this.momentComments.values())
+      .filter((comment) => idSet.has(comment.momentId))
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async getMomentCommentById(id: string): Promise<MomentComment | undefined> {
+    return this.momentComments.get(id);
+  }
+
+  async deleteMomentComment(id: string): Promise<boolean> {
+    return this.momentComments.delete(id);
+  }
+
+  async markMomentCommentsAsRead(momentId: string): Promise<void> {
+    const moment = this.moments.get(momentId);
+    if (moment) {
+      moment.unreadCommentsCount = 0;
+      this.moments.set(momentId, moment);
+    }
   }
   
   // AI Reply Job operations (background queue)
@@ -1018,6 +1150,17 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(momentLikes.createdAt));
   }
 
+  async getMomentLikesForMoments(momentIds: string[]): Promise<MomentLike[]> {
+    if (momentIds.length === 0) {
+      return [];
+    }
+    return await db
+      .select()
+      .from(momentLikes)
+      .where(inArray(momentLikes.momentId, momentIds))
+      .orderBy(asc(momentLikes.createdAt));
+  }
+
   // Moment comment operations
   async createMomentComment(insertComment: InsertMomentComment): Promise<MomentComment> {
     const result = await db.insert(momentComments).values(insertComment).returning();
@@ -1046,6 +1189,17 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(momentComments)
       .where(eq(momentComments.momentId, momentId))
+      .orderBy(asc(momentComments.createdAt));
+  }
+
+  async getMomentCommentsForMoments(momentIds: string[]): Promise<MomentComment[]> {
+    if (momentIds.length === 0) {
+      return [];
+    }
+    return await db
+      .select()
+      .from(momentComments)
+      .where(inArray(momentComments.momentId, momentIds))
       .orderBy(asc(momentComments.createdAt));
   }
 

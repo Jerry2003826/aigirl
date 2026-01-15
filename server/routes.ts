@@ -58,14 +58,23 @@ function readSameSiteEnv(): "lax" | "strict" | "none" {
   return "lax";
 }
 
+function sanitizeUser(user: { passwordHash?: string | null; verificationCode?: string | null; verificationCodeExpiresAt?: Date | null; [key: string]: unknown }) {
+  const { passwordHash, verificationCode, verificationCodeExpiresAt, ...safeUser } = user;
+  return safeUser;
+}
+
 export function getSession() {
   const isProd = process.env.NODE_ENV === "production";
   const secure = readBoolEnv("COOKIE_SECURE", isProd);
   const sameSite = readSameSiteEnv();
   const domain = readStringEnv("COOKIE_DOMAIN");
+  const sessionSecret = readStringEnv("SESSION_SECRET");
+  if (!sessionSecret) {
+    throw new Error("SESSION_SECRET is required for session security.");
+  }
 
   return session({
-    secret: process.env.SESSION_SECRET!,
+    secret: sessionSecret,
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -137,6 +146,14 @@ const messageLimiter = rateLimit({
   },
 });
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 requests per window
+  message: "Too many authentication attempts. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup session middleware
   const trustProxy = parseInt(process.env.TRUST_PROXY || "1", 10);
@@ -147,7 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isDevEnv = (process.env.NODE_ENV || "development") === "development";
   
   // 注册 - 发送验证码
-  app.post('/api/auth/register', async (req: any, res) => {
+  app.post('/api/auth/register', authLimiter, async (req: any, res) => {
     try {
       const { email, password } = req.body;
       
@@ -207,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 验证码验证 - 完成注册
-  app.post('/api/auth/verify', async (req: any, res) => {
+  app.post('/api/auth/verify', authLimiter, async (req: any, res) => {
     try {
       const { email, code } = req.body;
       
@@ -240,7 +257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ 
         message: "注册成功",
-        user: verifiedUser
+        user: sanitizeUser(verifiedUser!),
       });
     } catch (error: any) {
       console.error("❌ [Verify] 验证失败:", error);
@@ -249,7 +266,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 登录
-  app.post('/api/auth/login', async (req: any, res) => {
+  app.post('/api/auth/login', authLimiter, async (req: any, res) => {
     try {
       const { email, password } = req.body;
       
@@ -283,7 +300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ 
         message: "登录成功",
-        user
+        user: sanitizeUser(user),
       });
     } catch (error: any) {
       console.error("❌ [Login] 登录失败:", error);
@@ -308,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 忘记密码 - 发送重置密码验证码
-  app.post('/api/auth/forgot-password', async (req: any, res) => {
+  app.post('/api/auth/forgot-password', authLimiter, async (req: any, res) => {
     try {
       const { email } = req.body;
       
@@ -353,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 重置密码 - 验证码验证并更新密码
-  app.post('/api/auth/reset-password', async (req: any, res) => {
+  app.post('/api/auth/reset-password', authLimiter, async (req: any, res) => {
     try {
       const { email, code, newPassword } = req.body;
       
@@ -400,7 +417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       // req.user已经由isAuthenticated中间件加载
-      res.json(req.user);
+      res.json(sanitizeUser(req.user));
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -422,7 +439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "用户不存在" });
       }
       
-      res.json(updatedUser);
+      res.json(sanitizeUser(updatedUser));
     } catch (error: any) {
       console.error("Error updating user profile:", error);
       if (error.name === 'ZodError') {
@@ -1664,20 +1681,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get moments only for current user (user-isolated feed)
       const moments = await storage.getMomentsByUser(userId, limit, offset);
       
-      // Fetch likes and comments for each moment
-      const momentsWithDetails = await Promise.all(
-        moments.map(async (moment) => {
-          const [likes, comments] = await Promise.all([
-            storage.getMomentLikes(moment.id),
-            storage.getMomentComments(moment.id),
-          ]);
-          return {
-            ...moment,
-            likes,
-            comments,
-          };
-        })
-      );
+      const momentIds = moments.map((moment) => moment.id);
+      const [allLikes, allComments] = await Promise.all([
+        storage.getMomentLikesForMoments(momentIds),
+        storage.getMomentCommentsForMoments(momentIds),
+      ]);
+      const likesByMoment = allLikes.reduce((acc, like) => {
+        (acc[like.momentId] ||= []).push(like);
+        return acc;
+      }, {} as Record<string, typeof allLikes>);
+      const commentsByMoment = allComments.reduce((acc, comment) => {
+        (acc[comment.momentId] ||= []).push(comment);
+        return acc;
+      }, {} as Record<string, typeof allComments>);
+      
+      const momentsWithDetails = moments.map((moment) => ({
+        ...moment,
+        likes: likesByMoment[moment.id] || [],
+        comments: commentsByMoment[moment.id] || [],
+      }));
       
       res.json(momentsWithDetails);
     } catch (error) {
@@ -1923,9 +1945,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.id;
       const { commentId } = req.params;
       
-      // Note: We should verify comment ownership here, but we'll need to fetch it first
-      // For now, we'll just delete it (in production, add ownership check)
-      
+      const comment = await storage.getMomentCommentById(commentId);
+      if (!comment) {
+        return res.status(404).json({ message: "Comment not found" });
+      }
+
+      const isAuthor = comment.authorType === 'user' && comment.authorId === userId;
+      if (!isAuthor) {
+        const moment = await storage.getMoment(comment.momentId);
+        const isMomentOwner = moment?.authorType === 'user' && moment?.authorId === userId;
+        if (!isMomentOwner) {
+          return res.status(403).json({ message: "Forbidden: You don't own this comment" });
+        }
+      }
+
       await storage.deleteMomentComment(commentId);
       res.json({ success: true });
     } catch (error) {
