@@ -27,6 +27,8 @@ import { db, pool } from "./db";
 import { INSTANCE_ID } from "./instance";
 import { eq, and, or, desc, asc, count, inArray, sql } from "drizzle-orm";
 
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
 // Storage interface with all CRUD methods needed for the AI chat app
 export interface IStorage {
   // User operations
@@ -143,9 +145,13 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email === email,
-    );
+    const normalizedEmail = normalizeEmail(email);
+    return Array.from(this.users.values()).find((user) => {
+      if (!user.email) {
+        return false;
+      }
+      return normalizeEmail(user.email) === normalizedEmail;
+    });
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -154,7 +160,7 @@ export class MemStorage implements IStorage {
     const user: User = { 
       id,
       username: insertUser.username ?? null,
-      email: insertUser.email ?? null,
+      email: insertUser.email ? normalizeEmail(insertUser.email) : null,
       firstName: insertUser.firstName ?? null,
       lastName: insertUser.lastName ?? null,
       profileImageUrl: insertUser.profileImageUrl ?? null,
@@ -173,7 +179,7 @@ export class MemStorage implements IStorage {
       // Update existing user
       const updated: User = {
         ...existingUser,
-        email: upsertData.email ?? existingUser.email,
+        email: upsertData.email ? normalizeEmail(upsertData.email) : existingUser.email,
         firstName: upsertData.firstName ?? existingUser.firstName,
         lastName: upsertData.lastName ?? existingUser.lastName,
         profileImageUrl: upsertData.profileImageUrl ?? existingUser.profileImageUrl,
@@ -186,7 +192,7 @@ export class MemStorage implements IStorage {
       const newUser: User = {
         id: upsertData.id,
         username: null,
-        email: upsertData.email ?? null,
+        email: upsertData.email ? normalizeEmail(upsertData.email) : null,
         firstName: upsertData.firstName ?? null,
         lastName: upsertData.lastName ?? null,
         profileImageUrl: upsertData.profileImageUrl ?? null,
@@ -559,16 +565,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const normalizedEmail = normalizeEmail(email);
+    const result = await db
+      .select()
+      .from(users)
+      .where(eq(sql`lower(${users.email})`, normalizedEmail))
+      .limit(1);
     return result[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(insertUser).returning();
+    const normalizedEmail = insertUser.email ? normalizeEmail(insertUser.email) : null;
+    const result = await db
+      .insert(users)
+      .values({ ...insertUser, email: normalizedEmail })
+      .returning();
     return result[0];
   }
 
   async upsertUser(upsertData: UpsertUser): Promise<User> {
+    const normalizedEmail = upsertData.email ? normalizeEmail(upsertData.email) : null;
     // Handle both id and email conflicts
     // First try to find existing user by id or email
     const existing = await db
@@ -577,7 +593,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         or(
           eq(users.id, upsertData.id),
-          eq(users.email, upsertData.email || '')
+          eq(sql`lower(${users.email})`, normalizedEmail || '')
         )
       )
       .limit(1);
@@ -588,7 +604,7 @@ export class DatabaseStorage implements IStorage {
         .update(users)
         .set({
           id: upsertData.id, // Update id in case email matched but id different
-          email: upsertData.email,
+          email: normalizedEmail,
           firstName: upsertData.firstName,
           lastName: upsertData.lastName,
           profileImageUrl: upsertData.profileImageUrl,
@@ -601,7 +617,7 @@ export class DatabaseStorage implements IStorage {
       // Insert new user
       const result = await db
         .insert(users)
-        .values(upsertData)
+        .values({ ...upsertData, email: normalizedEmail })
         .returning();
       return result[0];
     }
@@ -620,8 +636,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUnverifiedUser(email: string, passwordHash: string, verificationCode: string, expiresAt: Date): Promise<User> {
+    const normalizedEmail = normalizeEmail(email);
     // First check if user already exists
-    const existing = await this.getUserByEmail(email);
+    const existing = await this.getUserByEmail(normalizedEmail);
     if (existing) {
       // Update existing unverified user with new verification code
       const result = await db
@@ -633,7 +650,7 @@ export class DatabaseStorage implements IStorage {
           emailVerified: false,
           updatedAt: new Date(),
         })
-        .where(eq(users.email, email))
+        .where(eq(sql`lower(${users.email})`, normalizedEmail))
         .returning();
       return result[0];
     } else {
@@ -641,7 +658,7 @@ export class DatabaseStorage implements IStorage {
       const result = await db
         .insert(users)
         .values({
-          email,
+          email: normalizedEmail,
           passwordHash,
           verificationCode,
           verificationCodeExpiresAt: expiresAt,
@@ -653,6 +670,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async verifyUser(email: string): Promise<User | undefined> {
+    const normalizedEmail = normalizeEmail(email);
     const result = await db
       .update(users)
       .set({
@@ -661,12 +679,13 @@ export class DatabaseStorage implements IStorage {
         verificationCodeExpiresAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(users.email, email))
+      .where(eq(sql`lower(${users.email})`, normalizedEmail))
       .returning();
     return result[0];
   }
 
   async updatePasswordResetCode(email: string, code: string, expiresAt: Date): Promise<User | undefined> {
+    const normalizedEmail = normalizeEmail(email);
     const result = await db
       .update(users)
       .set({
@@ -674,12 +693,13 @@ export class DatabaseStorage implements IStorage {
         verificationCodeExpiresAt: expiresAt,
         updatedAt: new Date(),
       })
-      .where(eq(users.email, email))
+      .where(eq(sql`lower(${users.email})`, normalizedEmail))
       .returning();
     return result[0];
   }
 
   async updateUserPassword(email: string, passwordHash: string): Promise<User | undefined> {
+    const normalizedEmail = normalizeEmail(email);
     const result = await db
       .update(users)
       .set({
@@ -688,7 +708,7 @@ export class DatabaseStorage implements IStorage {
         verificationCodeExpiresAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(users.email, email))
+      .where(eq(sql`lower(${users.email})`, normalizedEmail))
       .returning();
     return result[0];
   }

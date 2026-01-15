@@ -1848,8 +1848,6 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
-            {/* 电话/语音入口暂时隐藏，保持文字聊天 */}
-
             {/* Menu Button */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1894,6 +1892,55 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   <MessageSquare className="mr-2 h-4 w-4" />
                   查看聊天记录
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {!selectedConversation.isGroup && selectedConversation.personas?.[0] ? (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      aiVoiceStatus === "connecting" ||
+                      aiVoiceStatus === "ready" ||
+                      aiVoiceStatus === "listening" ||
+                      aiVoiceStatus === "thinking" ||
+                      aiVoiceStatus === "speaking"
+                        ? stopAiVoiceSession()
+                        : startAiVoiceSession()
+                    }
+                    data-testid="menu-toggle-ai-voice"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    {aiVoiceStatus === "connecting" ||
+                    aiVoiceStatus === "ready" ||
+                    aiVoiceStatus === "listening" ||
+                    aiVoiceStatus === "thinking" ||
+                    aiVoiceStatus === "speaking"
+                      ? "结束AI通话"
+                      : "AI语音通话"}
+                  </DropdownMenuItem>
+                ) : webrtcConfig ? (
+                  <>
+                    <DropdownMenuItem
+                      onClick={() => startCall(false)}
+                      data-testid="menu-start-voice-call"
+                    >
+                      <Phone className="mr-2 h-4 w-4" />
+                      语音通话
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => startCall(true)}
+                      data-testid="menu-start-video-call"
+                    >
+                      <Video className="mr-2 h-4 w-4" />
+                      视频通话
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <DropdownMenuItem
+                    onClick={() => setVoiceCallEnabled((prev) => !prev)}
+                    data-testid="menu-toggle-voice-chat"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    {voiceCallEnabled ? "关闭语音聊天" : "开启语音聊天"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleDeleteConversation}

@@ -1,6 +1,6 @@
 import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
@@ -83,6 +83,22 @@ const messageLimiter = rateLimit({
   },
 });
 
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+// Rate limiter for auth-related endpoints (mitigate brute-force / enumeration)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: "Too many authentication attempts. Please try again later.",
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const rawEmail = typeof req.body?.email === "string" ? req.body.email : "";
+    const email = rawEmail ? normalizeEmail(rawEmail) : "";
+    return `${ipKeyGenerator(req)}:${email}`;
+  },
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup session middleware
   const trustProxy = parseInt(process.env.TRUST_PROXY || "1", 10);
@@ -93,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isDevEnv = (process.env.NODE_ENV || "development") === "development";
   
   // 注册 - 发送验证码
-  app.post('/api/auth/register', async (req: any, res) => {
+  app.post('/api/auth/register', authLimiter, async (req: any, res) => {
     try {
       const { email, password } = req.body;
       
@@ -107,7 +123,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // 检查邮箱是否已存在
-      const existingUser = await storage.getUserByEmail(email);
+      const normalizedEmail = normalizeEmail(email);
+      const existingUser = await storage.getUserByEmail(normalizedEmail);
       if (existingUser && existingUser.emailVerified) {
         // 如果用户已验证，拒绝注册
         return res.status(400).json({ message: "该邮箱已被注册" });
@@ -123,12 +140,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { hashPassword } = await import('./auth');
       const passwordHash = await hashPassword(password);
       
-      await storage.createUnverifiedUser(email, passwordHash, code, expiresAt);
+      await storage.createUnverifiedUser(normalizedEmail, passwordHash, code, expiresAt);
       
       // 发送验证码邮件
       const { sendVerificationEmail } = await import('./emailService');
       try {
-        await sendVerificationEmail(email, code);
+        await sendVerificationEmail(normalizedEmail, code);
       } catch (emailErr: any) {
         // Dev-friendly: allow local testing even if email provider/network is unavailable
         if (isDevEnv) {
@@ -153,16 +170,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 验证码验证 - 完成注册
-  app.post('/api/auth/verify', async (req: any, res) => {
+  app.post('/api/auth/verify', authLimiter, async (req: any, res) => {
     try {
       const { email, code } = req.body;
       
       if (!email || !code) {
         return res.status(400).json({ message: "邮箱和验证码不能为空" });
       }
+      const normalizedEmail = normalizeEmail(email);
       
       // 获取未验证用户
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByEmail(normalizedEmail);
       if (!user) {
         return res.status(404).json({ message: "用户不存在" });
       }
@@ -178,10 +196,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // 标记为已验证
-      await storage.verifyUser(email);
+      await storage.verifyUser(normalizedEmail);
       
       // 创建session
-      const verifiedUser = await storage.getUserByEmail(email);
+      const verifiedUser = await storage.getUserByEmail(normalizedEmail);
       req.session.user = { id: verifiedUser!.id };
       
       res.json({ 
@@ -195,16 +213,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 登录
-  app.post('/api/auth/login', async (req: any, res) => {
+  app.post('/api/auth/login', authLimiter, async (req: any, res) => {
     try {
       const { email, password } = req.body;
       
       if (!email || !password) {
         return res.status(400).json({ message: "邮箱和密码不能为空" });
       }
+      const normalizedEmail = normalizeEmail(email);
       
       // 查找用户
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByEmail(normalizedEmail);
       if (!user) {
         return res.status(401).json({ message: "邮箱或密码错误" });
       }
@@ -254,16 +273,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 忘记密码 - 发送重置密码验证码
-  app.post('/api/auth/forgot-password', async (req: any, res) => {
+  app.post('/api/auth/forgot-password', authLimiter, async (req: any, res) => {
     try {
       const { email } = req.body;
       
       if (!email) {
         return res.status(400).json({ message: "邮箱不能为空" });
       }
+      const normalizedEmail = normalizeEmail(email);
       
       // 检查用户是否存在
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByEmail(normalizedEmail);
       
       // Security: Always return success to prevent enumeration
       // Even if user doesn't exist or isn't verified, we pretend to send the email
@@ -277,12 +297,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expiresAt = getVerificationCodeExpiry();
       
       // 保存验证码到数据库
-      await storage.updatePasswordResetCode(email, code, expiresAt);
+      await storage.updatePasswordResetCode(normalizedEmail, code, expiresAt);
       
       // 发送重置密码邮件
       const { sendPasswordResetEmail } = await import('./emailService');
       try {
-        await sendPasswordResetEmail(email, code);
+        await sendPasswordResetEmail(normalizedEmail, code);
       } catch (emailErr: any) {
         if (isDevEnv) {
           console.warn("⚠️ [Forgot Password] 开发环境发送邮件失败，已返回devCode用于本机测试：", emailErr?.message || emailErr);
@@ -299,32 +319,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // 重置密码 - 验证码验证并更新密码
-  app.post('/api/auth/reset-password', async (req: any, res) => {
+  app.post('/api/auth/reset-password', authLimiter, async (req: any, res) => {
     try {
       const { email, code, newPassword } = req.body;
       
       if (!email || !code || !newPassword) {
         return res.status(400).json({ message: "邮箱、验证码和新密码不能为空" });
       }
+      const normalizedEmail = normalizeEmail(email);
       
       if (newPassword.length < 6) {
         return res.status(400).json({ message: "新密码长度至少为6位" });
       }
       
       // 获取用户
-      const user = await storage.getUserByEmail(email);
+      const user = await storage.getUserByEmail(normalizedEmail);
       
       // Security: Always return the same error message to prevent enumeration
       // We cannot distinguish between "user doesn't exist", "user not verified", or "invalid code"
       if (!user || !user.emailVerified) {
-        console.log(`[Security] Reset password attempt for non-existent/unverified user: ${email}`);
+        console.log(`[Security] Reset password attempt for non-existent/unverified user: ${normalizedEmail}`);
         return res.status(400).json({ message: "验证码无效或已过期" });
       }
       
       // 验证验证码
       const { isVerificationCodeValid } = await import('./auth');
       if (!isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt)) {
-        console.log(`[Security] Invalid verification code for user: ${email}`);
+        console.log(`[Security] Invalid verification code for user: ${normalizedEmail}`);
         return res.status(400).json({ message: "验证码无效或已过期" });
       }
       
@@ -332,9 +353,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { hashPassword } = await import('./auth');
       const passwordHash = await hashPassword(newPassword);
       
-      await storage.updateUserPassword(email, passwordHash);
+      await storage.updateUserPassword(normalizedEmail, passwordHash);
       
-      console.log(`[Auth] Password reset successful for user: ${email}`);
+      console.log(`[Auth] Password reset successful for user: ${normalizedEmail}`);
       res.json({ message: "密码重置成功，请使用新密码登录" });
     } catch (error: any) {
       console.error("❌ [Reset Password] 重置密码失败:", error);
