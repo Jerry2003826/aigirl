@@ -4,7 +4,6 @@ import { WebSocket, WebSocketServer } from "ws";
 import { sessionStore } from "../session";
 import { storage } from "../storage";
 import { generateAIResponse } from "../aiService";
-import { minimaxTtsToBuffer } from "./minimaxTts";
 import { minimaxTtsStream } from "./minimaxTtsStream";
 import { transcribePcmStream } from "./minimaxAsrStream";
 
@@ -19,6 +18,12 @@ type VoiceWsClient = WebSocket & {
   conversationId?: string;
   personaId?: string;
   pcmBuffers?: Buffer[];
+};
+
+type MinimaxRuntimeConfig = {
+  apiKey?: string;
+  streamAsrUrl?: string;
+  streamTtsUrl?: string;
 };
 
 async function authenticate(ws: VoiceWsClient, req: any): Promise<string | null> {
@@ -42,6 +47,22 @@ async function resolvePersona(conversationId: string): Promise<string | null> {
   if (participants && participants.length > 0) return participants[0].personaId;
   const conv = await storage.getConversation(conversationId);
   return conv?.userId || null;
+}
+
+async function getMinimaxConfig(userId?: string): Promise<MinimaxRuntimeConfig> {
+  if (!userId) {
+    return {
+      apiKey: process.env.MINIMAX_API_KEY,
+      streamAsrUrl: process.env.MINIMAX_STREAM_ASR_URL,
+      streamTtsUrl: process.env.MINIMAX_STREAM_TTS_URL,
+    };
+  }
+  const settings = await storage.getAiSettings(userId);
+  return {
+    apiKey: settings?.minimaxApiKey || process.env.MINIMAX_API_KEY,
+    streamAsrUrl: process.env.MINIMAX_STREAM_ASR_URL,
+    streamTtsUrl: process.env.MINIMAX_STREAM_TTS_URL,
+  };
 }
 
 export function setupVoiceWebSocket(server: Server) {
@@ -120,8 +141,13 @@ export function setupVoiceWebSocket(server: Server) {
             ws.send(JSON.stringify({ type: "error", payload: { message: "No persona found" } }));
             return;
           }
+          const minimaxConfig = await getMinimaxConfig(ws.userId);
+          if (!minimaxConfig.apiKey) {
+            ws.send(JSON.stringify({ type: "error", payload: { message: "未配置 MINIMAX_API_KEY，请在设置中填写。" } }));
+            return;
+          }
           try {
-            await handleAiTurn(ws, text, personaId);
+            await handleAiTurn(ws, text, personaId, minimaxConfig);
           } catch (err: any) {
             console.error("[voice-ai] error", err);
             ws.send(JSON.stringify({ type: "error", payload: { message: err?.message || "Server error" } }));
@@ -140,9 +166,15 @@ export function setupVoiceWebSocket(server: Server) {
             return;
           }
           const personaId = ws.personaId || (await resolvePersona(ws.conversationId));
+          const minimaxConfig = await getMinimaxConfig(ws.userId);
+          if (!minimaxConfig.apiKey) {
+            ws.send(JSON.stringify({ type: "error", payload: { message: "未配置 MINIMAX_API_KEY，请在设置中填写。" } }));
+            ws.close(1000, "ended");
+            return;
+          }
           const asr = await transcribePcmStream(pcm, {
-            apiKey: process.env.MINIMAX_API_KEY,
-            streamAsrUrl: process.env.MINIMAX_STREAM_ASR_URL,
+            apiKey: minimaxConfig.apiKey,
+            streamAsrUrl: minimaxConfig.streamAsrUrl,
             sampleRate: 16000,
             language: "zh",
           });
@@ -151,7 +183,7 @@ export function setupVoiceWebSocket(server: Server) {
           const text = asr.final || asr.partial || "";
           if (text) {
             try {
-              await handleAiTurn(ws, text, personaId || undefined);
+              await handleAiTurn(ws, text, personaId || undefined, minimaxConfig);
             } catch (err: any) {
               ws.send(JSON.stringify({ type: "error", payload: { message: err?.message || "Server error" } }));
             }
@@ -170,7 +202,12 @@ export function setupVoiceWebSocket(server: Server) {
   console.log("[voice-ai] WebSocket server ready at /ws/voice-ai");
 }
 
-async function handleAiTurn(ws: VoiceWsClient, userText: string, personaId?: string) {
+async function handleAiTurn(
+  ws: VoiceWsClient,
+  userText: string,
+  personaId: string | undefined,
+  minimaxConfig: MinimaxRuntimeConfig,
+) {
   const aiText = await generateAIResponse({
     conversationId: ws.conversationId!,
     personaId: personaId || ws.personaId!,
@@ -181,7 +218,11 @@ async function handleAiTurn(ws: VoiceWsClient, userText: string, personaId?: str
   ws.send(JSON.stringify({ type: "ai_text", payload: { text: aiText } }));
 
   let seq = 0;
-  for await (const chunk of minimaxTtsStream({ text: aiText })) {
+  for await (const chunk of minimaxTtsStream({
+    text: aiText,
+    apiKey: minimaxConfig.apiKey,
+    streamTtsUrl: minimaxConfig.streamTtsUrl,
+  })) {
     ws.send(
       JSON.stringify({
         type: "tts_chunk",
@@ -198,4 +239,3 @@ async function handleAiTurn(ws: VoiceWsClient, userText: string, personaId?: str
   }
   ws.send(JSON.stringify({ type: "tts_end" }));
 }
-
