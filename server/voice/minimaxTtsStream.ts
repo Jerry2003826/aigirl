@@ -15,6 +15,7 @@ type MinimaxTtsStreamOptions = {
   sampleRate?: number;
   format?: "mp3" | "wav" | "pcm" | "flac";
   languageBoost?: string;
+  signal?: AbortSignal;
 };
 
 /**
@@ -37,6 +38,22 @@ export async function* minimaxTtsStream(opts: MinimaxTtsStreamOptions): AsyncGen
 
   const queue: Array<TtsChunk> = [];
   let ended = false;
+
+  const abortHandler = () => {
+    if (ended) return;
+    ended = true;
+    try {
+      ws.close();
+    } catch {}
+  };
+
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      abortHandler();
+    } else {
+      opts.signal.addEventListener("abort", abortHandler, { once: true });
+    }
+  }
 
   const done = new Promise<void>((resolve, reject) => {
     ws.on("open", () => {
@@ -111,5 +128,8 @@ export async function* minimaxTtsStream(opts: MinimaxTtsStreamOptions): AsyncGen
   }
 
   await done;
-}
 
+  if (opts.signal) {
+    opts.signal.removeEventListener("abort", abortHandler);
+  }
+}

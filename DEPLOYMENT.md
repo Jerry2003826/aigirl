@@ -1,6 +1,6 @@
 # 部署指南 - WhatsApp 式前后端分离架构
 
-本项目已完全脱离 Replit，采用 **前端静态站点 + 后端 API/WebSocket** 的部署方式（类似 WhatsApp Web）。
+本项目采用 **前端静态站点 + 后端 API/WebSocket** 的部署方式（类似 WhatsApp Web）。
 
 你现在可以通过 `config/app.config.json`（以及可选的 `config/app.config.local.json` 覆盖文件）来修改部署所需的关键变量，而不需要去改源码里的 `process.env.*`。
 
@@ -39,7 +39,6 @@
   - `objectStorage.mode`：
     - `disabled`：默认（使用本地磁盘 `public/uploads/`）
     - `s3`：使用 S3 兼容存储（推荐生产环境）
-    - `replit`：仅当你仍运行在 Replit 并有 sidecar 时可用（已废弃）
 
 - **S3 存储配置**（当 `objectStorage.mode` 为 `s3` 时）
   - `s3.endpoint`：S3 端点（如 `https://s3.amazonaws.com` 或 MinIO 的 `http://localhost:9000`）
@@ -182,5 +181,4 @@ location /ws {
 - **WebSocket 连接失败**：确保反向代理支持 WebSocket Upgrade（见配置示例）。
 - **前端路由 404**：确保反向代理配置了 SPA fallback（`try_files` 或 `file_server` + `handle`）。
 - **图片上传失败**：检查 S3 配置是否正确，或使用本地存储（`objectStorage.mode: "disabled"`，文件保存到 `public/uploads/`）。
-
 

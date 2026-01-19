@@ -3,7 +3,7 @@ import { pgTable, text, varchar, timestamp, boolean, jsonb, integer, index, uniq
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table (required for Replit Auth)
+// Session storage table (required for auth)
 export const sessions = pgTable(
   "sessions",
   {
@@ -203,6 +203,7 @@ export const aiSettings = pgTable(
     provider: text("provider").default("google").notNull(), // 'google', 'openai'
     model: text("model").default("gemini-2.5-pro").notNull(), // Model name
     customApiKey: text("custom_api_key"), // Optional custom API key for RAG embeddings
+    customBaseUrl: text("custom_base_url"), // Optional OpenAI-compatible base URL
     minimaxApiKey: text("minimax_api_key"), // Optional MiniMax API key for Speech-2.6-Turbo TTS
     ragEnabled: boolean("rag_enabled").default(false).notNull(), // Enable RAG features
     searchEnabled: boolean("search_enabled").default(true).notNull(), // Enable web search
@@ -222,7 +223,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
-// Upsert schema for Replit Auth
+// Upsert schema for auth
 export const upsertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   updatedAt: true,

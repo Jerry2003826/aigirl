@@ -28,6 +28,12 @@ export class AiVoiceSession {
   private sourceNode: AudioBufferSourceNode | null = null;
   private stopAnimation?: () => void;
   private status: Status = "idle";
+  private aiTextBuffer = "";
+  private vadState = {
+    speaking: false,
+    lastVoiceAt: 0,
+    lastFrameAt: 0,
+  };
 
   constructor(conversationId: string, personaId: string | undefined, callbacks: AiVoiceCallbacks) {
     this.conversationId = conversationId;
@@ -76,14 +82,26 @@ export class AiVoiceSession {
           case "started":
             this.setStatus("ready");
             break;
+          case "listening":
+            this.setStatus("listening");
+            break;
           case "asr_partial":
             if (data.payload?.text) this.callbacks.onUserText?.(data.payload.text);
             break;
           case "asr_final":
             if (data.payload?.text) this.callbacks.onUserText?.(data.payload.text);
             break;
-          case "ai_text":
-            this.callbacks.onAiText?.(data.payload?.text || "");
+          case "ai_text_start":
+            this.aiTextBuffer = "";
+            this.callbacks.onAiText?.("");
+            break;
+          case "ai_text_delta":
+            this.aiTextBuffer += data.payload?.text || "";
+            this.callbacks.onAiText?.(this.aiTextBuffer);
+            break;
+          case "ai_text_final":
+            this.aiTextBuffer = data.payload?.text || this.aiTextBuffer;
+            this.callbacks.onAiText?.(this.aiTextBuffer);
             break;
           case "tts_chunk":
             this.enqueueTtsChunk(
@@ -94,6 +112,11 @@ export class AiVoiceSession {
             break;
           case "tts_end":
             // no-op,队列消费完成后自动结束
+            break;
+          case "ai_interrupt":
+          case "interrupted":
+            this.stopTtsPlayback();
+            this.setStatus("ready");
             break;
           case "error":
             this.callbacks.onError?.(data.payload?.message || "语音服务错误");
@@ -131,13 +154,35 @@ export class AiVoiceSession {
     processor.onaudioprocess = (event) => {
       const input = event.inputBuffer.getChannelData(0);
       const pcm = new Int16Array(input.length);
+      let sum = 0;
       for (let i = 0; i < input.length; i++) {
         const s = Math.max(-1, Math.min(1, input[i]));
         pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        sum += s * s;
       }
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const rms = Math.sqrt(sum / input.length);
+      const now = performance.now();
+      const vadThreshold = 0.012;
+      const silenceMs = 400;
+      const isVoice = rms > vadThreshold;
+      if (isVoice) {
+        if (!this.vadState.speaking) {
+          this.vadState.speaking = true;
+          this.vadState.lastVoiceAt = now;
+          this.sendJson({ type: "speech_start" });
+          this.stopTtsPlayback();
+        } else {
+          this.vadState.lastVoiceAt = now;
+        }
+      } else if (this.vadState.speaking && now - this.vadState.lastVoiceAt > silenceMs) {
+        this.vadState.speaking = false;
+        this.sendJson({ type: "speech_end" });
+      }
+
+      if (this.vadState.speaking && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(pcm.buffer);
       }
+      this.vadState.lastFrameAt = now;
     };
     source.connect(processor);
     processor.connect(ctx.destination);
@@ -161,7 +206,7 @@ export class AiVoiceSession {
   private enqueueTtsChunk(audioBase64: string, contentType: string, done?: boolean, text?: string) {
     if (!audioBase64) return;
     this.ttsQueue.push({ b64: audioBase64, contentType, text });
-    if (done) {
+    if (!this.playing) {
       this.playFromQueue();
     }
   }
@@ -174,6 +219,20 @@ export class AiVoiceSession {
       await this.playTts(chunk.b64, chunk.contentType, chunk.text);
     }
     this.playing = false;
+  }
+
+  private stopTtsPlayback() {
+    this.ttsQueue = [];
+    this.playing = false;
+    if (this.sourceNode) {
+      try {
+        this.sourceNode.stop();
+      } catch {}
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    this.stopMeter();
+    this.stopVisemeFallback();
   }
 
   private playTts(audioBase64: string, contentType: string, text?: string) {
@@ -323,5 +382,10 @@ export class AiVoiceSession {
     }
     this.setStatus("ended");
   }
-}
 
+  private sendJson(payload: Record<string, unknown>) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
+    }
+  }
+}

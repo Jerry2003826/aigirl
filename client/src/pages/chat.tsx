@@ -850,6 +850,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   }, [voiceCallEnabled]);
 
   useEffect(() => {
+    if (voiceCallEnabled) {
+      void startAiVoiceSession();
+    } else {
+      stopAiVoiceSession();
+      setAiVoiceStatus("idle");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiceCallEnabled, selectedConversationId]);
+
+  useEffect(() => {
     return () => {
       aiVoiceSessionRef.current?.stop();
     };
@@ -1893,32 +1903,13 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                   查看聊天记录
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {webrtcConfig ? (
-                  <>
-                    <DropdownMenuItem
-                      onClick={() => startCall(false)}
-                      data-testid="menu-start-voice-call"
-                    >
-                      <Phone className="mr-2 h-4 w-4" />
-                      语音通话
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => startCall(true)}
-                      data-testid="menu-start-video-call"
-                    >
-                      <Video className="mr-2 h-4 w-4" />
-                      视频通话
-                    </DropdownMenuItem>
-                  </>
-                ) : (
-                  <DropdownMenuItem
-                    onClick={() => setVoiceCallEnabled((prev) => !prev)}
-                    data-testid="menu-toggle-voice-chat"
-                  >
-                    <Phone className="mr-2 h-4 w-4" />
-                    {voiceCallEnabled ? "关闭语音聊天" : "开启语音聊天"}
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem
+                  onClick={() => setVoiceCallEnabled((prev) => !prev)}
+                  data-testid="menu-toggle-voice-chat"
+                >
+                  <Phone className="mr-2 h-4 w-4" />
+                  {voiceCallEnabled ? "关闭语音聊天" : "开启语音聊天"}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={handleDeleteConversation}
@@ -1942,25 +1933,35 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             </DropdownMenu>
           </div>
 
-          {/* Legacy Voice Call Panel（仅无 WebRTC 时展示，避免双入口） */}
-          {!webrtcConfig && voiceCallEnabled && (
+          {/* AI 语音面板（前端隐藏 WebRTC 通话入口，保留 AI 语音入口） */}
+          {voiceCallEnabled && (
             <div className="border-b bg-sidebar/50 px-4 py-3 flex flex-col gap-2">
               <div className="flex items-center gap-3">
               <Button
                 size="sm"
-                variant={isListening ? "secondary" : "default"}
-                onClick={() => (isListening ? stopListening() : startListening())}
+                variant={
+                  ["connecting", "ready", "listening", "thinking", "speaking"].includes(aiVoiceStatus)
+                    ? "secondary"
+                    : "default"
+                }
+                onClick={() => {
+                  if (["connecting", "ready", "listening", "thinking", "speaking"].includes(aiVoiceStatus)) {
+                    stopAiVoiceSession();
+                  } else {
+                    void startAiVoiceSession();
+                  }
+                }}
                 data-testid="button-voice-listen-toggle"
               >
-                {isListening ? (
+                {["connecting", "ready", "listening", "thinking", "speaking"].includes(aiVoiceStatus) ? (
                   <>
                     <MicOff className="mr-2 h-4 w-4" />
-                    停止说话
+                    结束语音
                   </>
                 ) : (
                   <>
                     <Mic className="mr-2 h-4 w-4" />
-                    开始说话
+                    开始语音
                   </>
                 )}
               </Button>
@@ -1989,7 +1990,11 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </Button>
 
               <div className="flex-1 min-w-0 text-sm text-muted-foreground truncate" data-testid="text-voice-transcript">
-                {voiceTranscript ? `识别中：${voiceTranscript}` : (isListening ? "正在听你说…" : "点击“开始说话”用语音聊天")}
+                {aiUserText
+                  ? `识别中：${aiUserText}`
+                  : ["connecting", "ready", "listening"].includes(aiVoiceStatus)
+                    ? "正在听你说…"
+                    : "点击“开始语音”进入 AI 语音聊天"}
               </div>
               </div>
 

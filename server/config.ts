@@ -40,7 +40,7 @@ type AppConfigFile = {
     };
   };
   objectStorage?: {
-    mode?: "disabled" | "replit" | "s3";
+    mode?: "disabled" | "s3";
     publicObjectSearchPaths?: string;
     privateObjectDir?: string;
   };
@@ -141,7 +141,7 @@ function loadAppConfigFile(): AppConfigFile {
 
 /**
  * Load JSON config (if present) and apply to process.env for backward compatibility.
- * This lets existing modules keep using process.env.* without being tied to Replit.
+ * This lets existing modules keep using process.env.* without being tied to a host provider.
  */
 export function loadAndApplyConfig() {
   const cfg = loadAppConfigFile();
@@ -171,7 +171,7 @@ export function loadAndApplyConfig() {
   setEnvIfEmpty("AI_INTEGRATIONS_OPENAI_API_KEY", cfg.ai?.integrations?.openaiApiKey);
   setEnvIfEmpty("AI_INTEGRATIONS_OPENAI_BASE_URL", cfg.ai?.integrations?.openaiBaseUrl);
 
-  // Object storage (Replit-only sidecar). Default disabled outside Replit.
+  // Object storage configuration
   setEnvIfEmpty("OBJECT_STORAGE_MODE", cfg.objectStorage?.mode);
   setEnvIfEmpty("PUBLIC_OBJECT_SEARCH_PATHS", cfg.objectStorage?.publicObjectSearchPaths);
   setEnvIfEmpty("PRIVATE_OBJECT_DIR", cfg.objectStorage?.privateObjectDir);
@@ -202,5 +202,4 @@ export function loadAndApplyConfig() {
 
   return cfg;
 }
-
 

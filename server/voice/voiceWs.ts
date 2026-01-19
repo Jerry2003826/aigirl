@@ -3,13 +3,16 @@ import { parse } from "cookie";
 import { WebSocket, WebSocketServer } from "ws";
 import { sessionStore } from "../session";
 import { storage } from "../storage";
-import { generateAIResponse } from "../aiService";
+import { generateAIResponseStream } from "../aiService";
 import { minimaxTtsStream } from "./minimaxTtsStream";
 import { transcribePcmStream } from "./minimaxAsrStream";
 
 type VoiceWsMessage =
   | { type: "start"; payload: { conversationId: string; personaId?: string } }
+  | { type: "speech_start" }
+  | { type: "speech_end" }
   | { type: "user_text"; payload: { text: string } }
+  | { type: "interrupt" }
   | { type: "ping" }
   | { type: "end" };
 
@@ -18,12 +21,21 @@ type VoiceWsClient = WebSocket & {
   conversationId?: string;
   personaId?: string;
   pcmBuffers?: Buffer[];
+  isSpeechActive?: boolean;
+  activeTurn?: VoiceTurn;
+  turnCounter?: number;
 };
 
 type MinimaxRuntimeConfig = {
   apiKey?: string;
   streamAsrUrl?: string;
   streamTtsUrl?: string;
+};
+
+type VoiceTurn = {
+  id: number;
+  aborted: boolean;
+  abort: () => void;
 };
 
 async function authenticate(ws: VoiceWsClient, req: any): Promise<string | null> {
@@ -89,9 +101,10 @@ export function setupVoiceWebSocket(server: Server) {
     ws.on("message", async (raw, isBinary) => {
       // Binary audio frames
       if (isBinary) {
-        ws.pcmBuffers = ws.pcmBuffers || [];
-        ws.pcmBuffers.push(Buffer.from(raw));
-        ws.send(JSON.stringify({ type: "asr_partial", payload: { note: "收到音频帧" } }));
+        if (ws.isSpeechActive) {
+          ws.pcmBuffers = ws.pcmBuffers || [];
+          ws.pcmBuffers.push(Buffer.from(raw));
+        }
         return;
       }
 
@@ -118,12 +131,25 @@ export function setupVoiceWebSocket(server: Server) {
           ws.conversationId = conversationId;
           ws.personaId = personaId || (await resolvePersona(conversationId)) || undefined;
           ws.pcmBuffers = [];
+          ws.isSpeechActive = false;
           ws.send(
             JSON.stringify({
               type: "started",
               payload: { conversationId: ws.conversationId, personaId: ws.personaId },
             })
           );
+          return;
+        }
+        case "speech_start": {
+          ws.isSpeechActive = true;
+          ws.pcmBuffers = [];
+          abortActiveTurn(ws, "interrupt");
+          ws.send(JSON.stringify({ type: "listening" }));
+          return;
+        }
+        case "speech_end": {
+          ws.isSpeechActive = false;
+          await handleSpeechEnd(ws);
           return;
         }
         case "user_text": {
@@ -147,49 +173,20 @@ export function setupVoiceWebSocket(server: Server) {
             return;
           }
           try {
-            await handleAiTurn(ws, text, personaId, minimaxConfig);
+            await handleAiTurnStreaming(ws, text, personaId, minimaxConfig);
           } catch (err: any) {
             console.error("[voice-ai] error", err);
             ws.send(JSON.stringify({ type: "error", payload: { message: err?.message || "Server error" } }));
           }
           return;
         }
+        case "interrupt": {
+          abortActiveTurn(ws, "interrupt");
+          ws.send(JSON.stringify({ type: "interrupted" }));
+          return;
+        }
         case "end": {
-          const pcm = Buffer.concat(ws.pcmBuffers || []);
-          ws.pcmBuffers = [];
-          if (!ws.conversationId) {
-            ws.close(1000, "ended");
-            return;
-          }
-          if (pcm.length === 0) {
-            ws.close(1000, "ended");
-            return;
-          }
-          const personaId = ws.personaId || (await resolvePersona(ws.conversationId));
-          const minimaxConfig = await getMinimaxConfig(ws.userId);
-          if (!minimaxConfig.apiKey) {
-            ws.send(JSON.stringify({ type: "error", payload: { message: "未配置 MINIMAX_API_KEY，请在设置中填写。" } }));
-            ws.close(1000, "ended");
-            return;
-          }
-          const asr = await transcribePcmStream(pcm, {
-            apiKey: minimaxConfig.apiKey,
-            streamAsrUrl: minimaxConfig.streamAsrUrl,
-            sampleRate: 16000,
-            language: "zh",
-          });
-          if (asr.partial) ws.send(JSON.stringify({ type: "asr_partial", payload: { text: asr.partial } }));
-          if (asr.final) ws.send(JSON.stringify({ type: "asr_final", payload: { text: asr.final } }));
-          const text = asr.final || asr.partial || "";
-          if (text) {
-            try {
-              await handleAiTurn(ws, text, personaId || undefined, minimaxConfig);
-            } catch (err: any) {
-              ws.send(JSON.stringify({ type: "error", payload: { message: err?.message || "Server error" } }));
-            }
-          } else {
-            ws.send(JSON.stringify({ type: "error", payload: { message: "未识别到语音" } }));
-          }
+          abortActiveTurn(ws, "end");
           ws.close(1000, "ended");
           return;
         }
@@ -202,41 +199,164 @@ export function setupVoiceWebSocket(server: Server) {
   console.log("[voice-ai] WebSocket server ready at /ws/voice-ai");
 }
 
-async function handleAiTurn(
+function abortActiveTurn(ws: VoiceWsClient, reason: string) {
+  if (ws.activeTurn && !ws.activeTurn.aborted) {
+    ws.activeTurn.abort();
+    ws.send(JSON.stringify({ type: "ai_interrupt", payload: { reason } }));
+  }
+}
+
+function extractStreamDelta(chunk: any): string {
+  if (!chunk) return "";
+  if (typeof chunk === "string") return chunk;
+  if (typeof chunk.text === "string") return chunk.text;
+  if (typeof chunk.text === "function") return chunk.text();
+  const openAiDelta = chunk.choices?.[0]?.delta?.content;
+  if (openAiDelta) return openAiDelta;
+  const candidateParts = chunk.candidates?.[0]?.content?.parts;
+  if (Array.isArray(candidateParts)) {
+    return candidateParts.map((part: any) => part?.text || "").join("");
+  }
+  return "";
+}
+
+function splitByPunctuation(text: string): { completed: string[]; rest: string } {
+  const completed: string[] = [];
+  let rest = text;
+  const punctuation = /[。！？.!?，,]/;
+  while (rest && punctuation.test(rest)) {
+    let lastIndex = -1;
+    for (let i = 0; i < rest.length; i += 1) {
+      if (punctuation.test(rest[i])) lastIndex = i;
+    }
+    if (lastIndex === -1) break;
+    const sentence = rest.slice(0, lastIndex + 1).trim();
+    if (sentence) completed.push(sentence);
+    rest = rest.slice(lastIndex + 1);
+  }
+  return { completed, rest };
+}
+
+async function handleSpeechEnd(ws: VoiceWsClient) {
+  const pcm = Buffer.concat(ws.pcmBuffers || []);
+  ws.pcmBuffers = [];
+  if (!ws.conversationId) {
+    return;
+  }
+  if (pcm.length === 0) {
+    return;
+  }
+  const personaId = ws.personaId || (await resolvePersona(ws.conversationId));
+  const minimaxConfig = await getMinimaxConfig(ws.userId);
+  if (!minimaxConfig.apiKey) {
+    ws.send(JSON.stringify({ type: "error", payload: { message: "未配置 MINIMAX_API_KEY，请在设置中填写。" } }));
+    return;
+  }
+  const asr = await transcribePcmStream(pcm, {
+    apiKey: minimaxConfig.apiKey,
+    streamAsrUrl: minimaxConfig.streamAsrUrl,
+    sampleRate: 16000,
+    language: "zh",
+  });
+  if (asr.partial) ws.send(JSON.stringify({ type: "asr_partial", payload: { text: asr.partial } }));
+  if (asr.final) ws.send(JSON.stringify({ type: "asr_final", payload: { text: asr.final } }));
+  const text = asr.final || asr.partial || "";
+  if (text) {
+    try {
+      await handleAiTurnStreaming(ws, text, personaId || undefined, minimaxConfig);
+    } catch (err: any) {
+      ws.send(JSON.stringify({ type: "error", payload: { message: err?.message || "Server error" } }));
+    }
+  } else {
+    ws.send(JSON.stringify({ type: "error", payload: { message: "未识别到语音" } }));
+  }
+}
+
+async function handleAiTurnStreaming(
   ws: VoiceWsClient,
   userText: string,
   personaId: string | undefined,
   minimaxConfig: MinimaxRuntimeConfig,
 ) {
-  const aiText = await generateAIResponse({
+  abortActiveTurn(ws, "new_turn");
+  const turnId = (ws.turnCounter || 0) + 1;
+  ws.turnCounter = turnId;
+  const ttsAbort = new AbortController();
+  const turn: VoiceTurn = {
+    id: turnId,
+    aborted: false,
+    abort: () => {
+      turn.aborted = true;
+      ttsAbort.abort();
+    },
+  };
+  ws.activeTurn = turn;
+
+  ws.send(JSON.stringify({ type: "asr_final", payload: { text: userText } }));
+  ws.send(JSON.stringify({ type: "ai_text_start" }));
+
+  const stream = await generateAIResponseStream({
     conversationId: ws.conversationId!,
     personaId: personaId || ws.personaId!,
     userMessage: userText,
     contextLimit: 60,
     forceFullMemoryContext: true,
   });
-  ws.send(JSON.stringify({ type: "asr_final", payload: { text: userText } }));
-  ws.send(JSON.stringify({ type: "ai_text", payload: { text: aiText } }));
 
+  let buffer = "";
+  let fullText = "";
   let seq = 0;
-  for await (const chunk of minimaxTtsStream({
-    text: aiText,
-    apiKey: minimaxConfig.apiKey,
-    streamTtsUrl: minimaxConfig.streamTtsUrl,
-  })) {
-    ws.send(
-      JSON.stringify({
-        type: "tts_chunk",
-        payload: {
-          seq: chunk.seq ?? seq,
-          audioBase64: chunk.audioBase64,
-          contentType: chunk.contentType,
-          done: chunk.done,
-          text: aiText,
-        },
-      })
-    );
-    seq += 1;
+  let ttsChain = Promise.resolve();
+
+  const enqueueTts = (text: string) => {
+    const clean = text.trim();
+    if (!clean) return;
+    ttsChain = ttsChain.then(async () => {
+      if (turn.aborted) return;
+      for await (const chunk of minimaxTtsStream({
+        text: clean,
+        apiKey: minimaxConfig.apiKey,
+        streamTtsUrl: minimaxConfig.streamTtsUrl,
+        signal: ttsAbort.signal,
+      })) {
+        if (turn.aborted) return;
+        ws.send(
+          JSON.stringify({
+            type: "tts_chunk",
+            payload: {
+              seq: chunk.seq ?? seq,
+              audioBase64: chunk.audioBase64,
+              contentType: chunk.contentType,
+              done: chunk.done,
+              text: clean,
+            },
+          })
+        );
+        seq += 1;
+      }
+    });
+  };
+
+  for await (const chunk of stream) {
+    if (turn.aborted) break;
+    const delta = extractStreamDelta(chunk);
+    if (!delta) continue;
+    fullText += delta;
+    ws.send(JSON.stringify({ type: "ai_text_delta", payload: { text: delta } }));
+    buffer += delta;
+    const { completed, rest } = splitByPunctuation(buffer);
+    buffer = rest;
+    completed.forEach((sentence) => enqueueTts(sentence));
   }
-  ws.send(JSON.stringify({ type: "tts_end" }));
+
+  if (!turn.aborted && buffer.trim()) {
+    enqueueTts(buffer);
+  }
+
+  await ttsChain;
+
+  if (!turn.aborted) {
+    ws.send(JSON.stringify({ type: "ai_text_final", payload: { text: fullText } }));
+    ws.send(JSON.stringify({ type: "tts_end" }));
+  }
 }

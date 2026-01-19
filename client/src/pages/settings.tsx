@@ -19,6 +19,7 @@ type AiSettings = {
   provider: string;
   model: string;
   customApiKey: string | null;
+  customBaseUrl: string | null;
   minimaxApiKey: string | null;
   ragEnabled: boolean;
   searchEnabled: boolean;
@@ -31,6 +32,7 @@ const settingsFormSchema = z.object({
   provider: z.string().min(1, "Provider is required"),
   model: z.string().min(1, "Model is required"),
   customApiKey: z.string().min(1, "API密钥是必需的，请提供你的Google AI或OpenAI API密钥"),
+  customBaseUrl: z.string().optional(),
   minimaxApiKey: z.string().optional(),
   ragEnabled: z.boolean(),
   searchEnabled: z.boolean(),
@@ -57,6 +59,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
       provider: settings?.provider || "google",
       model: settings?.model || "gemini-2.5-pro",
       customApiKey: settings?.customApiKey || "",
+      customBaseUrl: settings?.customBaseUrl || "",
       minimaxApiKey: settings?.minimaxApiKey || "",
       ragEnabled: settings?.ragEnabled || false,
       searchEnabled: settings?.searchEnabled || false,
@@ -66,12 +69,15 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
       provider: settings.provider,
       model: settings.model,
       customApiKey: settings.customApiKey || "",
+      customBaseUrl: settings.customBaseUrl || "",
       minimaxApiKey: settings.minimaxApiKey || "",
       ragEnabled: settings.ragEnabled,
       searchEnabled: settings.searchEnabled,
       language: settings.language || "zh-CN",
     } : undefined,
   });
+
+  const selectedProvider = form.watch("provider");
 
   const updateSettingsMutation = useMutation({
     mutationFn: (data: SettingsFormData) =>
@@ -154,11 +160,11 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="google">Google Gemini（推荐）</SelectItem>
-                            <SelectItem value="openai">OpenAI（未来扩展）</SelectItem>
+                            <SelectItem value="openai">OpenAI 兼容格式</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          选择你偏好的AI提供商。推荐使用Google Gemini以获得最佳效果。
+                          选择你偏好的AI提供商。OpenAI 兼容格式可连接 ChatGPT、Grok 等兼容接口。
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -207,6 +213,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                           <ul className="list-disc list-inside space-y-0.5 text-sm">
                             <li><strong>Google AI（推荐）</strong>: 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Google AI Studio</a> 获取免费密钥</li>
                             <li>OpenAI: 在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取密钥（付费）</li>
+                            <li>使用 OpenAI 兼容接口时可填写自定义 Base URL（如 ChatGPT 或 Grok 提供的接口地址）</li>
                             <li>你的密钥将被安全存储，仅用于你的AI请求</li>
                             <li className="text-destructive font-medium">没有API密钥将无法使用任何AI功能</li>
                           </ul>
@@ -215,6 +222,30 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                       </FormItem>
                     )}
                   />
+
+                  {selectedProvider === "openai" && (
+                    <FormField
+                      control={form.control}
+                      name="customBaseUrl"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>OpenAI 兼容 Base URL（可选）</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="https://api.openai.com/v1"
+                              {...field}
+                              value={field.value || ""}
+                              data-testid="input-openai-base-url"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            可填写 ChatGPT、Grok 等兼容接口地址。留空则默认使用 OpenAI 官方地址。
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
 
                   <FormField
                     control={form.control}
