@@ -1,17 +1,18 @@
 import type { Express, RequestHandler } from "express";
+import { randomUUID } from "crypto";
 import { createServer, type Server } from "http";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import multer from "multer";
 import path from "path";
 import { storage } from "./storage";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
+import { getAIProvider, getModelName } from "./ai/providers";
+import { buildConversationFromOpenAI, getOpenAIStreamText, parseOpenAIChatRequest } from "./ai/openaiCompat";
 import { minimaxTtsToBuffer } from "./voice/minimaxTts";
 import { setupVoiceWebSocket } from "./voice/voiceWs";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent, broadcastToUserEvent } from "./websocket";
 import { loadAndApplyConfig } from "./config";
 import { getSession } from "./session";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { ObjectPermission } from "./objectAcl";
 import { S3StorageService } from "./storage/s3";
 import { 
   insertAiPersonaSchema, 
@@ -437,16 +438,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error getting S3 presigned URL:", error);
         res.status(500).json({ message: error.message || "获取上传链接失败" });
       }
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage (for backward compatibility)
-      try {
-        const objectStorageService = new ObjectStorageService();
-        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-        res.json({ uploadURL });
-      } catch (error: any) {
-        console.error("Error getting upload URL:", error);
-        res.status(500).json({ message: error.message || "获取上传链接失败" });
-      }
     } else {
       // Disabled or unknown mode
       return res.status(501).json({ 
@@ -456,7 +447,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Avatar upload: For S3, we just return the public URL directly
-  // For Replit, we normalize the path (legacy support)
   app.put('/api/avatars', isAuthenticated, async (req: any, res) => {
     if (!req.body.avatarURL) {
       return res.status(400).json({ error: "avatarURL is required" });
@@ -472,24 +462,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         objectPath: req.body.avatarURL,
         publicUrl: req.body.avatarURL,
       });
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage
-      try {
-        const objectStorageService = new ObjectStorageService();
-        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-          req.body.avatarURL,
-          {
-            owner: userId,
-            visibility: "public",
-          },
-        );
-        res.status(200).json({
-          objectPath: objectPath,
-        });
-      } catch (error) {
-        console.error("Error setting avatar ACL:", error);
-        res.status(500).json({ error: "Internal server error" });
-      }
     } else {
       // For local uploads or disabled storage, just return the URL as-is
       // (assuming it's a relative path like /uploads/...)
@@ -502,7 +474,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Object Storage: Download/serve objects
   // For S3: redirect to public URL or generate presigned download URL
-  // For Replit: serve via sidecar (legacy)
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
     const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
     
@@ -536,30 +507,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         console.error("Error generating S3 download URL:", error);
         return res.status(500).json({ message: "获取文件链接失败" });
-      }
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage
-      const userId = req.user.id;
-      const objectStorageService = new ObjectStorageService();
-      try {
-        const objectFile = await objectStorageService.getObjectEntityFile(
-          req.path,
-        );
-        const canAccess = await objectStorageService.canAccessObjectEntity({
-          objectFile,
-          userId: userId,
-          requestedPermission: ObjectPermission.READ,
-        });
-        if (!canAccess) {
-          return res.sendStatus(401);
-        }
-        objectStorageService.downloadObject(objectFile, res);
-      } catch (error) {
-        console.error("Error checking object access:", error);
-        if (error instanceof ObjectNotFoundError) {
-          return res.sendStatus(404);
-        }
-        return res.sendStatus(500);
       }
     } else {
       // Disabled or unknown mode
@@ -1145,6 +1092,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error marking messages as read:", error);
       res.status(500).json({ message: "Failed to mark messages as read" });
+    }
+  });
+
+  // OpenAI-compatible chat completions
+  app.post("/v1/chat/completions", isAuthenticated, messageLimiter, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { model, messages, stream, maxTokens } = parseOpenAIChatRequest(req.body);
+      const aiSettings = await storage.getAiSettings(userId);
+      const provider = getAIProvider(aiSettings);
+      const resolvedModel = model || getModelName(aiSettings);
+      const { systemPrompt, conversationMessages, imageData } =
+        buildConversationFromOpenAI(messages);
+
+      if (conversationMessages.length === 0) {
+        return res.status(400).json({
+          error: {
+            message: "Invalid OpenAI request: at least one user or assistant message is required",
+          },
+        });
+      }
+
+      if (stream) {
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+
+        const responseId = `chatcmpl-${randomUUID()}`;
+        const created = Math.floor(Date.now() / 1000);
+        const providerStream = await provider.generateResponseStream({
+          model: resolvedModel,
+          systemPrompt,
+          messages: conversationMessages,
+          maxTokens,
+          imageData,
+        });
+
+        for await (const chunk of providerStream) {
+          const content = getOpenAIStreamText(chunk);
+          if (!content) {
+            continue;
+          }
+
+          res.write(
+            `data: ${JSON.stringify({
+              id: responseId,
+              object: "chat.completion.chunk",
+              created,
+              model: resolvedModel,
+              choices: [
+                {
+                  index: 0,
+                  delta: { content },
+                  finish_reason: null,
+                },
+              ],
+            })}\n\n`,
+          );
+        }
+
+        res.write(
+          `data: ${JSON.stringify({
+            id: responseId,
+            object: "chat.completion.chunk",
+            created,
+            model: resolvedModel,
+            choices: [
+              {
+                index: 0,
+                delta: {},
+                finish_reason: "stop",
+              },
+            ],
+          })}\n\n`,
+        );
+        res.write("data: [DONE]\n\n");
+        return res.end();
+      }
+
+      const content = await provider.generateResponse({
+        model: resolvedModel,
+        systemPrompt,
+        messages: conversationMessages,
+        maxTokens,
+        imageData,
+      });
+
+      return res.json({
+        id: `chatcmpl-${randomUUID()}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: resolvedModel,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content,
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      });
+    } catch (error: any) {
+      console.error("[/v1/chat/completions] error:", error);
+      return res.status(500).json({
+        error: {
+          message: error?.message || "Failed to generate completion",
+        },
+      });
     }
   });
 
@@ -1798,7 +1860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           supportsArbitraryDepth: true,
         });
         
-        // No limit enforced - supports arbitrary-depth comment threading as per replit.md
+        // No limit enforced - supports arbitrary-depth comment threading
       }
       
       // Server-side author derivation - prevent spoofing
@@ -1942,7 +2004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       
-      // Check Replit AI Integrations environment variables (preferred method)
+      // Check AI integrations environment variables (preferred method)
       const hasGeminiIntegration = !!(
         process.env.AI_INTEGRATIONS_GEMINI_API_KEY && 
         process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
@@ -1964,7 +2026,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hasOpenAI = hasOpenAIIntegration;
       
       // User is online if ANY API source is configured:
-      // 1. Replit AI Integrations (Gemini or OpenAI), OR
+      // 1. AI integrations (Gemini or OpenAI), OR
       // 2. Legacy Google API key, OR
       // 3. Custom user API key
       const isOnline = hasGoogle || hasOpenAI || hasCustomKey;
@@ -1997,7 +2059,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error?.code === "42703") {
         return res.status(500).json({
           message:
-            "数据库未迁移：缺少 ai_settings.minimax_api_key 字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再刷新页面。",
+            "数据库未迁移：缺少 ai_settings 的新增字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再刷新页面。",
         });
       }
       res.status(500).json({ message: "Failed to fetch AI settings" });
@@ -2007,13 +2069,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { provider, model, customApiKey, minimaxApiKey, ragEnabled, searchEnabled, language } = req.body;
+      const { provider, model, customApiKey, customBaseUrl, minimaxApiKey, ragEnabled, searchEnabled, language } = req.body;
       
       // Try to update existing settings
       let settings = await storage.updateAiSettings(userId, {
         provider,
         model,
         customApiKey,
+        customBaseUrl,
         minimaxApiKey,
         ragEnabled,
         searchEnabled,
@@ -2027,6 +2090,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           provider: provider || "google",
           model: model || "gemini-2.5-pro",
           customApiKey: customApiKey || null,
+          customBaseUrl: customBaseUrl || null,
           minimaxApiKey: minimaxApiKey || null,
           ragEnabled: ragEnabled || false,
           searchEnabled: searchEnabled || false,
@@ -2040,7 +2104,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error?.code === "42703") {
         return res.status(500).json({
           message:
-            "数据库未迁移：缺少 ai_settings.minimax_api_key 字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再保存设置。",
+            "数据库未迁移：缺少 ai_settings 的新增字段。请先运行 `npm run db:push`（或 drizzle-kit push）后再保存设置。",
         });
       }
       res.status(500).json({ message: "Failed to update AI settings" });

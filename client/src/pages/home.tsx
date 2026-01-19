@@ -105,7 +105,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="border-t py-6">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>Built with Replit AI</p>
+          <p>Built with modern AI tooling</p>
         </div>
       </footer>
     </div>

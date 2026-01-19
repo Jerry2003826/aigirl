@@ -18,7 +18,7 @@ function readJsonIfExists(filePath: string): any | null {
   }
 }
 
-// Allow DATABASE_URL to be sourced from config/app.config.json for non-Replit deployments.
+// Allow DATABASE_URL to be sourced from config/app.config.json for deployments without server bootstrapping.
 // drizzle-kit runs this file directly (without server/index.ts), so we load config here too.
 if (!process.env.DATABASE_URL) {
   const cwd = process.cwd();

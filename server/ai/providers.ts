@@ -28,14 +28,14 @@ export interface ImageData {
   mimeType: string;
 }
 
-// Google Gemini Provider (using Replit AI Integrations - gemini-2.5-pro default)
+// Google Gemini Provider (gemini-2.5-pro default)
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenAI | null = null;
   private isConfigured: boolean = false;
 
   constructor(customApiKey?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
-    // NO fallback to Replit AI Integrations or any built-in keys
+    // NO fallback to any built-in keys
     let apiKey: string | undefined;
     let baseUrl: string | undefined;
 
@@ -410,22 +410,22 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dotProduct / denominator;
 }
 
-// OpenAI Provider (using Replit AI Integrations)
+// OpenAI Provider
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI | null = null;
   private isConfigured: boolean = false;
 
-  constructor(customApiKey?: string | null) {
+  constructor(customApiKey?: string | null, customBaseUrl?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
-    // NO fallback to Replit AI Integrations or any built-in keys
+    // NO fallback to any built-in keys
     let apiKey: string | undefined;
     let baseURL: string | undefined;
 
     if (customApiKey) {
       // User provided custom API key - use official OpenAI API
       apiKey = customApiKey;
-      baseURL = "https://api.openai.com/v1";
-      console.log("✅ Using user's custom OpenAI API key");
+      baseURL = customBaseUrl?.trim() || "https://api.openai.com/v1";
+      console.log("✅ Using user's custom OpenAI-compatible API settings");
     } else {
       // NO FALLBACK - User must provide their own API key
       console.error(
@@ -585,11 +585,12 @@ export class OpenAIProvider implements AIProvider {
 export function getAIProvider(settings?: AiSettings): AIProvider {
   const provider = settings?.provider || "google"; // Default to Google Gemini
   const customApiKey = settings?.customApiKey;
+  const customBaseUrl = settings?.customBaseUrl;
 
   if (provider === "google") {
     return new GeminiProvider(customApiKey);
   } else if (provider === "openai") {
-    return new OpenAIProvider(customApiKey);
+    return new OpenAIProvider(customApiKey, customBaseUrl);
   } else {
     // Fallback to Google Gemini
     return new GeminiProvider(customApiKey);
