@@ -8,6 +8,8 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "secret-scan": "gitleaks detect --config .gitleaks.toml --verbose 2>/dev/null || echo 'Install gitleaks: brew install gitleaks'",
     "db:push": "drizzle-kit push"
   },
@@ -19,6 +21,7 @@
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@neondatabase/serverless": "^0.10.4",
+    "@pixiv/three-vrm": "^2.1.3",
     "@radix-ui/react-accordion": "^1.2.4",
     "@radix-ui/react-alert-dialog": "^1.1.7",
     "@radix-ui/react-aspect-ratio": "^1.1.3",
@@ -92,13 +95,12 @@
     "resend": "^6.6.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.164.1",
     "tw-animate-css": "^1.2.5",
     "undici": "^6.22.0",
     "vaul": "^1.1.2",
     "wouter": "^3.3.5",
     "ws": "^8.18.0",
-    "three": "^0.164.1",
-    "@pixiv/three-vrm": "^2.1.3",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   },
@@ -113,6 +115,7 @@
     "@types/passport-local": "^1.0.38",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.164.0",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.20",
@@ -123,7 +126,7 @@
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
     "vite": "^5.4.20",
-    "@types/three": "^0.164.0"
+    "vitest": "^3.2.4"
   },
   "optionalDependencies": {
     "bufferutil": "^4.0.9"

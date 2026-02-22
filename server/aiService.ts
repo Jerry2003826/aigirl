@@ -1802,8 +1802,8 @@ export async function triggerAICommentsOnMoment(
               content: cleanedContent,
             });
 
-            // Broadcast to all users for real-time updates
-            broadcastMomentEvent('commented', { momentId, comment });
+            // Broadcast to moment owner for real-time updates
+            broadcastMomentEvent(userId, 'commented', { momentId, comment });
 
             console.log(`[AI Comment] ✅ AI ${persona.name} successfully commented on moment ${momentId}`);
           } catch (error) {
@@ -2081,8 +2081,11 @@ export async function triggerAIReplyToComment(
             parentCommentId: commentId,
           });
 
-          // Broadcast to all users for real-time updates
-          broadcastMomentEvent('commented', { momentId: comment.momentId, comment: reply });
+          // Broadcast to moment owner for real-time updates
+          const moment = await storage.getMoment(comment.momentId);
+          if (moment) {
+            broadcastMomentEvent(moment.userId, 'commented', { momentId: comment.momentId, comment: reply });
+          }
 
           console.log(`[AI评论回复] ✅ 成功发布回复`, {
             personaName: selectedPersona.name,

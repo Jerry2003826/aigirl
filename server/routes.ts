@@ -14,6 +14,7 @@ import { loadAndApplyConfig } from "./config";
 import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
 import { ObjectPermission } from "./objectAcl";
 import { S3StorageService } from "./storage/s3";
+import { splitAiResponse } from "./utils/aiResponseSplit";
 import { 
   insertAiPersonaSchema, 
   updateAiPersonaSchema,
@@ -1253,12 +1254,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userMessage: content,
       });
       
-      // Split AI response by backslash (\) and forward slash (/)
-      // This creates multiple messages for more natural conversation flow
-      const messageParts = aiResponse
-        .split(/[\\\/]/)  // Split by both \ and /
-        .map(part => part.trim())  // Trim whitespace
-        .filter(part => part.length > 0);  // Remove empty parts
+      const messageParts = splitAiResponse(aiResponse);
       
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
@@ -1450,11 +1446,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Split AI response by backslash (\) and forward slash (/)
-      const messageParts = fullResponse
-        .split(/[\\\/]/)  // Split by both \ and /
-        .map(part => part.trim())
-        .filter(part => part.length > 0);
+      const messageParts = splitAiResponse(fullResponse);
       
       // Save and broadcast AI messages with 2-3 second random delay between each
       const aiMessages = [];
