@@ -16,6 +16,11 @@ export function getVerificationCodeExpiry(): Date {
   return expiry;
 }
 
+/** Hash verification code before storing (L5: never store plaintext codes). */
+export async function hashVerificationCode(code: string): Promise<string> {
+  return bcrypt.hash(code, 10);
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, SALT_ROUNDS);
 }
@@ -24,14 +29,23 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function isVerificationCodeValid(code: string, storedCode: string | null, expiresAt: Date | null): boolean {
-  if (!storedCode || !expiresAt) {
-    return false;
+/** Backward compat: detect bcrypt hash vs legacy plaintext. */
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+export async function isVerificationCodeValid(
+  code: string,
+  stored: string | null,
+  expiresAt: Date | null
+): Promise<boolean> {
+  if (!stored || !expiresAt) return false;
+  if (new Date() > expiresAt) return false;
+  if (stored.startsWith('$2')) {
+    return bcrypt.compare(code, stored);
   }
-  
-  if (new Date() > expiresAt) {
-    return false;
-  }
-  
-  return code === storedCode;
+  return timingSafeEqual(code, stored);
 }

@@ -1225,28 +1225,60 @@ export class DatabaseStorage implements IStorage {
       .where(eq(moments.id, momentId));
   }
 
-  // AI Settings operations
+  // AI Settings operations (API keys encrypted at rest when ENCRYPTION_KEY is set)
   async getAiSettings(userId: string): Promise<AiSettings | undefined> {
+    const { decrypt } = await import("./utils/encryption");
     const result = await db
       .select()
       .from(aiSettings)
       .where(eq(aiSettings.userId, userId))
       .limit(1);
-    return result[0];
+    const row = result[0];
+    if (!row) return undefined;
+    return {
+      ...row,
+      customApiKey: row.customApiKey ? decrypt(row.customApiKey) : null,
+      minimaxApiKey: row.minimaxApiKey ? decrypt(row.minimaxApiKey) : null,
+    };
   }
 
   async createAiSettings(settings: InsertAiSettings): Promise<AiSettings> {
-    const result = await db.insert(aiSettings).values(settings).returning();
-    return result[0];
+    const { encrypt } = await import("./utils/encryption");
+    const toInsert = {
+      ...settings,
+      customApiKey: settings.customApiKey ? encrypt(settings.customApiKey) : null,
+      minimaxApiKey: settings.minimaxApiKey ? encrypt(settings.minimaxApiKey) : null,
+    };
+    const result = await db.insert(aiSettings).values(toInsert).returning();
+    const row = result[0];
+    return {
+      ...row,
+      customApiKey: settings.customApiKey,
+      minimaxApiKey: settings.minimaxApiKey,
+    };
   }
 
   async updateAiSettings(userId: string, updates: UpdateAiSettings): Promise<AiSettings | undefined> {
+    const { encrypt, decrypt } = await import("./utils/encryption");
+    const toSet: Record<string, unknown> = { ...updates, updatedAt: new Date() };
+    if (updates.customApiKey !== undefined) {
+      toSet.customApiKey = updates.customApiKey ? encrypt(updates.customApiKey) : null;
+    }
+    if (updates.minimaxApiKey !== undefined) {
+      toSet.minimaxApiKey = updates.minimaxApiKey ? encrypt(updates.minimaxApiKey) : null;
+    }
     const result = await db
       .update(aiSettings)
-      .set({ ...updates, updatedAt: new Date() })
+      .set(toSet)
       .where(eq(aiSettings.userId, userId))
       .returning();
-    return result[0];
+    const row = result[0];
+    if (!row) return undefined;
+    return {
+      ...row,
+      customApiKey: updates.customApiKey ?? (row.customApiKey ? decrypt(row.customApiKey) : null),
+      minimaxApiKey: updates.minimaxApiKey ?? (row.minimaxApiKey ? decrypt(row.minimaxApiKey) : null),
+    };
   }
   
   // AI Reply Job operations (background queue)

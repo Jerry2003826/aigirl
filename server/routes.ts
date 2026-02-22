@@ -155,6 +155,14 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 30,
+  message: "Too many uploads. Please wait before uploading more.",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup session middleware
   const trustProxy = parseInt(process.env.TRUST_PROXY || "1", 10);
@@ -191,11 +199,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const code = generateVerificationCode();
       const expiresAt = getVerificationCodeExpiry();
       
-      // 临时保存验证码和密码到数据库（创建或更新未验证用户）
-      const { hashPassword } = await import('./auth');
+      const { hashPassword, hashVerificationCode } = await import('./auth');
       const passwordHash = await hashPassword(password);
-      
-      await storage.createUnverifiedUser(email, passwordHash, code, expiresAt);
+      const codeHash = await hashVerificationCode(code);
+      await storage.createUnverifiedUser(email, passwordHash, codeHash, expiresAt);
       
       // 发送验证码邮件
       const { sendVerificationEmail } = await import('./emailService');
@@ -243,13 +250,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "该邮箱已验证" });
       }
       
-      // 验证验证码
       const { isVerificationCodeValid } = await import('./auth');
-      if (!isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt)) {
+      if (!(await isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt))) {
         return res.status(400).json({ message: "验证码无效或已过期" });
       }
-      
-      // 标记为已验证
       await storage.verifyUser(email);
       
       // 创建session
@@ -343,13 +347,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ message: "如果该邮箱已注册，重置密码验证码已发送" });
       }
       
-      // 生成验证码
-      const { generateVerificationCode, getVerificationCodeExpiry } = await import('./auth');
+      const { generateVerificationCode, getVerificationCodeExpiry, hashVerificationCode } = await import('./auth');
       const code = generateVerificationCode();
       const expiresAt = getVerificationCodeExpiry();
-      
-      // 保存验证码到数据库
-      await storage.updatePasswordResetCode(email, code, expiresAt);
+      const codeHash = await hashVerificationCode(code);
+      await storage.updatePasswordResetCode(email, codeHash, expiresAt);
       
       // 发送重置密码邮件
       const { sendPasswordResetEmail } = await import('./emailService');
@@ -393,9 +395,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "验证码无效或已过期" });
       }
       
-      // 验证验证码
       const { isVerificationCodeValid } = await import('./auth');
-      if (!isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt)) {
+      if (!(await isVerificationCodeValid(code, user.verificationCode, user.verificationCodeExpiresAt))) {
         console.log(`[Security] Invalid verification code for user: ${email}`);
         return res.status(400).json({ message: "验证码无效或已过期" });
       }
@@ -451,7 +452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Object Storage: Get presigned upload URL (S3-compatible)
-  app.post('/api/objects/upload', isAuthenticated, async (req: any, res) => {
+  app.post('/api/objects/upload', isAuthenticated, uploadLimiter, async (req: any, res) => {
     const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
     
     if (storageMode === "s3") {
