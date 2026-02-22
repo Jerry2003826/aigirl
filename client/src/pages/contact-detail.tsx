@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useStartChat } from "@/hooks/useStartChat";
 import { MessageCircle, Edit, Trash2, Plus, ArrowLeft, Star, StarOff, Upload, X as XIcon } from "lucide-react";
 import { useState, useRef } from "react";
 import { useLocation } from "wouter";
@@ -203,42 +204,7 @@ export default function ContactDetail({ personaId, onBackToList = () => {}, show
     },
   });
 
-  const startChatMutation = useMutation({
-    mutationFn: async (personaId: string) => {
-      // Check if conversation already exists
-      const conversations: any[] = await queryClient.fetchQuery({
-        queryKey: ["/api/conversations"],
-      });
-      
-      const existingConversation = conversations.find(
-        (conv) => !conv.isGroup && conv.personas?.[0]?.id === personaId
-      );
-
-      if (existingConversation) {
-        return existingConversation;
-      }
-
-      // Create new conversation
-      const res = await apiRequest("POST", "/api/conversations", {
-        title: null,
-        isGroup: false,
-        personaIds: [personaId],
-      });
-      return await res.json();
-    },
-    onSuccess: (conversation) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      // Navigate to chat with conversation ID
-      setLocation(`/chat?conversationId=${conversation.id}`);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "错误",
-        description: error.message || "无法创建对话",
-        variant: "destructive",
-      });
-    },
-  });
+  const startChatMutation = useStartChat();
 
   const handleSubmit = (data: MemoryFormData) => {
     if (editingMemory) {

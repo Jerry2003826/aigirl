@@ -12,10 +12,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertAiPersonaSchema, type AiPersona } from "@shared/schema";
 import { z } from "zod";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useStartChat } from "@/hooks/useStartChat";
 import { Plus, Edit, Trash2, MessageCircle, Sparkles, Upload, X as XIcon, Loader2 } from "lucide-react";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
 import { MobileHeader } from "@/components/mobile-header";
 
 const personaFormSchema = insertAiPersonaSchema.extend({
@@ -33,7 +33,6 @@ type PersonasProps = {
 
 export default function Personas({ onBackToList = () => {}, showMobileSidebar = false }: PersonasProps) {
   const { toast } = useToast();
-  const [_, setLocation] = useLocation();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState<AiPersona | null>(null);
@@ -125,41 +124,7 @@ export default function Personas({ onBackToList = () => {}, showMobileSidebar = 
     },
   });
 
-  const startChatMutation = useMutation({
-    mutationFn: async (personaId: string) => {
-      // Check if conversation already exists
-      const conversations: any[] = await queryClient.fetchQuery({
-        queryKey: ["/api/conversations"],
-      });
-      
-      const existingConversation = conversations.find(
-        (conv) => !conv.isGroup && conv.personas?.[0]?.id === personaId
-      );
-
-      if (existingConversation) {
-        return existingConversation;
-      }
-
-      // Create new conversation
-      const res = await apiRequest("POST", "/api/conversations", {
-        title: null,
-        isGroup: false,
-        personaIds: [personaId],
-      });
-      return await res.json();
-    },
-    onSuccess: (conversation) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conversations"] });
-      setLocation(`/chat?conversationId=${conversation.id}`);
-    },
-    onError: (error: any) => {
-      toast({
-        title: "错误",
-        description: error.message || "开始聊天失败",
-        variant: "destructive",
-      });
-    },
-  });
+  const startChatMutation = useStartChat();
 
   const handleSubmit = (data: PersonaFormData) => {
     if (editingPersona) {
