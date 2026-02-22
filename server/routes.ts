@@ -11,8 +11,6 @@ import { minimaxTtsToBuffer } from "./voice/minimaxTts";
 import { setupVoiceWebSocket } from "./voice/voiceWs";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent, broadcastToUserEvent } from "./websocket";
 import { loadAndApplyConfig } from "./config";
-import { ObjectStorageService, ObjectNotFoundError } from "./objectStorage";
-import { ObjectPermission } from "./objectAcl";
 import { S3StorageService } from "./storage/s3";
 import { splitAiResponse } from "./utils/aiResponseSplit";
 import { registerAuthRoutes } from "./routes/authRoutes";
@@ -216,26 +214,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error getting S3 presigned URL:", error);
         res.status(500).json({ message: error.message || "获取上传链接失败" });
       }
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage (for backward compatibility)
-      try {
-        const objectStorageService = new ObjectStorageService();
-        const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-        res.json({ uploadURL });
-      } catch (error: any) {
-        console.error("Error getting upload URL:", error);
-        res.status(500).json({ message: error.message || "获取上传链接失败" });
-      }
     } else {
       // Disabled or unknown mode
       return res.status(501).json({ 
-        message: "对象存储未启用。请在 config/app.config.json 中设置 objectStorage.mode 为 's3' 或使用本地上传方案。" 
+        message: "对象存储未启用。请在 config/app.config.json 中设置 objectStorage.mode 为 's3'。" 
       });
     }
   });
 
-  // Avatar upload: For S3, we just return the public URL directly
-  // For Replit, we normalize the path (legacy support)
+  // Avatar upload: For S3, return the public URL directly
   app.put('/api/avatars', isAuthenticated, async (req: any, res) => {
     if (!req.body.avatarURL) {
       return res.status(400).json({ error: "avatarURL is required" });
@@ -251,24 +238,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         objectPath: req.body.avatarURL,
         publicUrl: req.body.avatarURL,
       });
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage
-      try {
-        const objectStorageService = new ObjectStorageService();
-        const objectPath = await objectStorageService.trySetObjectEntityAclPolicy(
-          req.body.avatarURL,
-          {
-            owner: userId,
-            visibility: "public",
-          },
-        );
-        res.status(200).json({
-          objectPath: objectPath,
-        });
-      } catch (error) {
-        console.error("Error setting avatar ACL:", error);
-        res.status(500).json({ error: "Internal server error" });
-      }
     } else {
       // For local uploads or disabled storage, just return the URL as-is
       // (assuming it's a relative path like /uploads/...)
@@ -279,9 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Object Storage: Download/serve objects
-  // For S3: redirect to public URL or generate presigned download URL
-  // For Replit: serve via sidecar (legacy)
+  // Object Storage: Download/serve objects (S3 only)
   app.get("/objects/:objectPath(*)", isAuthenticated, async (req: any, res) => {
     const storageMode = process.env.OBJECT_STORAGE_MODE || "disabled";
     
@@ -315,30 +282,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         console.error("Error generating S3 download URL:", error);
         return res.status(500).json({ message: "获取文件链接失败" });
-      }
-    } else if (storageMode === "replit") {
-      // Legacy Replit object storage
-      const userId = req.user.id;
-      const objectStorageService = new ObjectStorageService();
-      try {
-        const objectFile = await objectStorageService.getObjectEntityFile(
-          req.path,
-        );
-        const canAccess = await objectStorageService.canAccessObjectEntity({
-          objectFile,
-          userId: userId,
-          requestedPermission: ObjectPermission.READ,
-        });
-        if (!canAccess) {
-          return res.sendStatus(401);
-        }
-        objectStorageService.downloadObject(objectFile, res);
-      } catch (error) {
-        console.error("Error checking object access:", error);
-        if (error instanceof ObjectNotFoundError) {
-          return res.sendStatus(404);
-        }
-        return res.sendStatus(500);
       }
     } else {
       // Disabled or unknown mode
@@ -1566,7 +1509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           supportsArbitraryDepth: true,
         });
         
-        // No limit enforced - supports arbitrary-depth comment threading as per replit.md
+        // No limit enforced - supports arbitrary-depth comment threading
       }
       
       // Server-side author derivation - prevent spoofing
@@ -1721,7 +1664,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.id;
       
-      // Check Replit AI Integrations environment variables (preferred method)
+      // Check AI Integrations environment variables (preferred method)
       const hasGeminiIntegration = !!(
         process.env.AI_INTEGRATIONS_GEMINI_API_KEY && 
         process.env.AI_INTEGRATIONS_GEMINI_BASE_URL
@@ -1743,7 +1686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const hasOpenAI = hasOpenAIIntegration;
       
       // User is online if ANY API source is configured:
-      // 1. Replit AI Integrations (Gemini or OpenAI), OR
+      // 1. AI Integrations (Gemini or OpenAI), OR
       // 2. Legacy Google API key, OR
       // 3. Custom user API key
       const isOnline = hasGoogle || hasOpenAI || hasCustomKey;

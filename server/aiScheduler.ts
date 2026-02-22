@@ -21,7 +21,7 @@ async function hasValidGeminiKey(userId: string): Promise<boolean> {
       return true;
     }
     
-    // Check if Replit AI Integrations (Gemini) are configured
+    // Check if AI Integrations (Gemini) are configured
     const hasGeminiIntegration = !!(
       process.env.AI_INTEGRATIONS_GEMINI_API_KEY && 
       process.env.AI_INTEGRATIONS_GEMINI_BASE_URL

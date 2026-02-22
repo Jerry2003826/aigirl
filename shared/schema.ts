@@ -3,7 +3,7 @@ import { pgTable, text, varchar, timestamp, boolean, jsonb, integer, index, uniq
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table (required for Replit Auth)
+// Session storage table (required for session-based auth)
 export const sessions = pgTable(
   "sessions",
   {
@@ -222,7 +222,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
   updatedAt: true,
 });
 
-// Upsert schema for Replit Auth
+// Upsert schema for session auth
 export const upsertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
   updatedAt: true,

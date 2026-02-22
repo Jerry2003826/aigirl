@@ -28,14 +28,14 @@ export interface ImageData {
   mimeType: string;
 }
 
-// Google Gemini Provider (using Replit AI Integrations - gemini-2.5-pro default)
+// Google Gemini Provider (gemini-2.5-pro default)
 export class GeminiProvider implements AIProvider {
   private client: GoogleGenAI | null = null;
   private isConfigured: boolean = false;
 
   constructor(customApiKey?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
-    // NO fallback to Replit AI Integrations or any built-in keys
+    // NO fallback to AI Integrations or any built-in keys
     let apiKey: string | undefined;
     let baseUrl: string | undefined;
 
@@ -410,14 +410,14 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   return dotProduct / denominator;
 }
 
-// OpenAI Provider (using Replit AI Integrations)
+// OpenAI Provider
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI | null = null;
   private isConfigured: boolean = false;
 
   constructor(customApiKey?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
-    // NO fallback to Replit AI Integrations or any built-in keys
+    // NO fallback to AI Integrations or any built-in keys
     let apiKey: string | undefined;
     let baseURL: string | undefined;
 
