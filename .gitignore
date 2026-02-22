@@ -36,3 +36,6 @@ config/app.config.local.json
 
 # Local env file (no dotfile, easier on Windows)
 config/env.local
+
+# L5 history rewrite (one-time use)
+.git-replacements.txt

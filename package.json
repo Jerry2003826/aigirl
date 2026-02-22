@@ -8,6 +8,7 @@
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "secret-scan": "gitleaks detect --config .gitleaks.toml --verbose 2>/dev/null || echo 'Install gitleaks: brew install gitleaks'",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {

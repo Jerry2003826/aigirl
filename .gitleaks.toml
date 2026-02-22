@@ -1,0 +1,19 @@
+# Gitleaks config - L5 secret scanning
+# Run: gitleaks detect --config .gitleaks.toml
+
+title = "L5 Secret Detection"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "resend-api-key"
+description = "Resend API Key"
+regex = '''re_[A-Za-z0-9]{20,}'''
+tags = ["key", "resend"]
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey|api_key)\s*[:=]\s*['"]?[A-Za-z0-9_\-]{20,}'''
+tags = ["key"]

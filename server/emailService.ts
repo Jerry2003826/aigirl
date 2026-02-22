@@ -2,7 +2,13 @@ import { Resend } from 'resend';
 
 // NOTE: 按你的要求恢复“硬编码 key”为默认回退方案（优先使用环境变量）。
 // 生产环境仍建议用 RESEND_API_KEY 覆盖，避免泄露密钥。
-const apiKey = process.env.RESEND_API_KEY || 'REMOVED_BY_L5';
+const apiKey = (() => {
+  const k = process.env.RESEND_API_KEY;
+  if (!k || k.trim() === '') {
+    throw new Error('RESEND_API_KEY is required. Set in config/env. Never commit keys.');
+  }
+  return k;
+})();
 const from = process.env.RESEND_FROM || 'AI伴侣 <noreply@ai-girlchat.com>';
 
 const resend = new Resend(apiKey);
