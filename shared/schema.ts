@@ -200,10 +200,14 @@ export const aiSettings = pgTable(
   {
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
-    provider: text("provider").default("google").notNull(), // 'google', 'openai'
+    provider: text("provider").default("custom").notNull(), // legacy field, keep for backward compatibility
+    apiFormat: text("api_format").default("google_native").notNull(), // 'google_native' | 'openai_compatible'
+    apiBaseUrl: text("api_base_url"), // User-provided API base URL
     model: text("model").default("gemini-2.5-pro").notNull(), // Model name
-    customApiKey: text("custom_api_key"), // Optional custom API key for RAG embeddings
+    customApiKey: text("custom_api_key"), // User API key for chosen format/provider
     minimaxApiKey: text("minimax_api_key"), // Optional MiniMax API key for Speech-2.6-Turbo TTS
+    minimaxStreamAsrUrl: text("minimax_stream_asr_url"), // Optional override, defaults to overseas route
+    minimaxStreamTtsUrl: text("minimax_stream_tts_url"), // Optional override, defaults to overseas route
     ragEnabled: boolean("rag_enabled").default(false).notNull(), // Enable RAG features
     searchEnabled: boolean("search_enabled").default(true).notNull(), // Enable web search
     language: text("language").default("zh").notNull(), // UI language: 'zh' or 'en'

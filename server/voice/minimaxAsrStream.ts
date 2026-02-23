@@ -1,5 +1,5 @@
+import { randomUUID } from "crypto";
 import WebSocket from "ws";
-import { v4 as uuid } from "uuid";
 
 export type AsrResult = {
   partial?: string;
@@ -9,15 +9,17 @@ export type AsrResult = {
 export type MinimaxAsrOptions = {
   apiKey?: string;
   streamAsrUrl?: string;
-  sampleRate: number; // e.g., 16000
-  language?: string; // zh / en
+  sampleRate: number;
+  language?: string;
 };
 
+/** 20ms 帧大小：16kHz * 0.02s * 2 bytes = 640 */
+const ASR_FRAME_MS = 20;
+const ASR_FRAME_BYTES = Math.floor((16000 * ASR_FRAME_MS) / 1000) * 2;
+
 /**
- * 基于 Minimax 流式 ASR 的简单实现：
- * - 建立 WS，发送 start/config
- * - 发送完整 PCM（此处未分片；若需严格20ms帧，可在外部分片逐帧 send）
- * - 监听 partial_result/result/end
+ * MiniMax 流式 ASR：分帧发送 PCM（20ms 一帧），避免一次性整包。
+ * 建立 WS → 发送 start 配置 → 按帧发送 PCM → 发送 end → 收 partial_result/result/end。
  */
 export async function transcribePcmStream(pcm: Buffer, opts: MinimaxAsrOptions): Promise<AsrResult> {
   const apiKey = (opts.apiKey || process.env.MINIMAX_API_KEY || "").trim();
@@ -32,7 +34,7 @@ export async function transcribePcmStream(pcm: Buffer, opts: MinimaxAsrOptions):
 
   const partials: string[] = [];
   let final: string | undefined;
-  const sessionId = uuid();
+  const sessionId = randomUUID();
 
   const done = new Promise<void>((resolve, reject) => {
     ws.on("open", () => {
@@ -47,13 +49,18 @@ export async function transcribePcmStream(pcm: Buffer, opts: MinimaxAsrOptions):
           },
         })
       );
-      ws.send(pcm);
+      // 按 20ms 帧分片发送 PCM，再发 end
+      for (let i = 0; i < pcm.length; i += ASR_FRAME_BYTES) {
+        const chunk = pcm.subarray(i, Math.min(i + ASR_FRAME_BYTES, pcm.length));
+        if (chunk.length) ws.send(chunk);
+      }
       ws.send(JSON.stringify({ type: "end" }));
     });
 
     ws.on("message", (data: WebSocket.RawData) => {
       try {
-        const msg = JSON.parse(data.toString());
+        const raw = Buffer.isBuffer(data) ? data : Buffer.concat(Array.isArray(data) ? data : [Buffer.from(data)]);
+        const msg = JSON.parse(raw.toString("utf8"));
         if (msg.type === "partial_result" && msg.text) {
           partials.push(msg.text);
         }
@@ -63,8 +70,8 @@ export async function transcribePcmStream(pcm: Buffer, opts: MinimaxAsrOptions):
         if (msg.type === "end") {
           resolve();
         }
-      } catch (err) {
-        reject(err);
+      } catch {
+        // ignore parse errors
       }
     });
 
@@ -79,4 +86,3 @@ export async function transcribePcmStream(pcm: Buffer, opts: MinimaxAsrOptions):
     final,
   };
 }
-

@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AiVoiceSession } from "@/lib/aiVoiceSession";
+import { RealtimeVoiceSession } from "@/lib/realtimeVoiceSession";
 import { AvatarViewer } from "@/components/voice/AvatarViewer";
 
 // Voice debug globals to detect stale bundle / expose logs
@@ -75,7 +75,7 @@ interface ChatProps {
   wsRef: React.RefObject<WebSocket | null>;
 }
 
-export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList, showMobileSidebar = true, wsRef }: ChatProps) {
+export default function Chat({ selectedConversationId, onConversationDeleted, onBackToList, showMobileSidebar: _showMobileSidebar = true, wsRef }: ChatProps) {
   const { toast } = useToast();
   const [_, setLocation] = useLocation();
   const [messageInput, setMessageInput] = useState("");
@@ -115,8 +115,19 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   const [webrtcConfig, setWebrtcConfig] = useState<WebRTCConfig | null>(null);
   const [aiCompanionEnabled, setAiCompanionEnabled] = useState(false);
   const [minimaxStream, setMinimaxStream] = useState<MiniMaxStream | null>(null);
-  const aiVoiceSessionRef = useRef<AiVoiceSession | null>(null);
+  const realtimeVoiceSessionRef = useRef<RealtimeVoiceSession | null>(null);
   const [aiVoiceStatus, setAiVoiceStatus] = useState<"idle" | "connecting" | "ready" | "listening" | "thinking" | "speaking" | "ended" | "error">("idle");
+
+  const aiVoiceStatusLabel: Record<string, string> = {
+    idle: "未开始",
+    connecting: "连接中…",
+    ready: "已就绪",
+    listening: "听你说（直接说即可）",
+    thinking: "思考中…",
+    speaking: "播报中（可随时打断）",
+    ended: "已结束",
+    error: "失败，请重试",
+  };
   const [aiUserText, setAiUserText] = useState("");
   const [aiReplyText, setAiReplyText] = useState("");
   const [aiMouthLevel, setAiMouthLevel] = useState(0);
@@ -943,7 +954,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     void playNextTts();
   };
 
-  // ===== AI 语音会话（Minimax ASR/TTS + Gemini）=====
+  // ===== AI 全双工实时语音（VAD + MiniMax ASR/TTS + LLM，可打断）=====
   const startAiVoiceSession = async () => {
     if (!selectedConversationId) {
       toast({ title: "请选择会话", description: "需要在某个会话里发起 AI 语音", variant: "destructive" });
@@ -951,11 +962,16 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
     }
     const personaId = selectedConversationData?.personas?.[0]?.id;
     try {
-      aiVoiceSessionRef.current?.stop();
-      const session = new AiVoiceSession(selectedConversationId, personaId, {
-        onStatus: setAiVoiceStatus,
+      realtimeVoiceSessionRef.current?.stop();
+      setAiUserText("");
+      setAiReplyText("");
+      const session = new RealtimeVoiceSession(selectedConversationId, personaId, {
+        onStatus: (s) => {
+          setAiVoiceStatus(s);
+          if (s === "thinking") setAiReplyText("");
+        },
         onUserText: setAiUserText,
-        onAiText: setAiReplyText,
+        onAiTextDelta: (delta) => setAiReplyText((prev) => prev + delta),
         onError: (m) =>
           toast({
             title: "AI 语音通话失败",
@@ -964,9 +980,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
           }),
         onMouthLevel: setAiMouthLevel,
       });
-      aiVoiceSessionRef.current = session;
+      realtimeVoiceSessionRef.current = session;
       await session.start();
-      session.startListening();
     } catch (e: any) {
       toast({
         title: "AI 语音通话失败",
@@ -978,10 +993,12 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
   };
 
   const stopAiVoiceSession = () => {
-    aiVoiceSessionRef.current?.stop();
-    aiVoiceSessionRef.current = null;
+    realtimeVoiceSessionRef.current?.stop();
+    realtimeVoiceSessionRef.current = null;
     setAiVoiceStatus("ended");
     setAiMouthLevel(0);
+    setAiUserText("");
+    setAiReplyText("");
   };
 
   // Initialize SpeechRecognition ONCE
@@ -1643,10 +1660,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
 
   return (
     <div className={cn(
-      "flex h-full flex-col bg-background",
-      // Mobile: only show chat when sidebar is hidden
-      "md:flex",
-      showMobileSidebar && "hidden md:flex"
+      "flex h-full flex-col bg-background"
     )}>
       {selectedConversationId && conversationLoading ? (
         // Loading state when conversation is being fetched
@@ -2080,30 +2094,38 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
               </div>
             </div>
 
-            {/* AI 语音通话（针对 AI 角色） */}
+            {/* AI 全双工实时语音通话（直接说话、可打断） */}
             {selectedConversationId && (
-              <div className="border rounded-lg mb-3 p-3 bg-muted/40">
+              <div className="border rounded-lg mb-3 p-3 bg-muted/40 md:block">
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-sm text-muted-foreground">
-                    AI 语音通话状态：{aiVoiceStatus}
+                    AI 语音：{aiVoiceStatusLabel[aiVoiceStatus] ?? aiVoiceStatus}
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={startAiVoiceSession} disabled={aiVoiceStatus === "connecting" || aiVoiceStatus === "listening"}>
-                      开始
-                    </Button>
-                    <Button size="sm" variant="secondary" onClick={stopAiVoiceSession}>
-                      停止
-                    </Button>
+                    {["idle", "ended", "error"].includes(aiVoiceStatus) ? (
+                      <Button size="sm" onClick={startAiVoiceSession} disabled={aiVoiceStatus === "connecting"}>
+                        开始通话
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="secondary" onClick={stopAiVoiceSession}>
+                        挂断
+                      </Button>
+                    )}
                   </div>
                 </div>
+                {!["idle", "ended", "error"].includes(aiVoiceStatus) && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    直接说话即可，AI 回复时可随时插话打断
+                  </p>
+                )}
                 <div className="mt-2 grid md:grid-cols-2 gap-2 text-sm">
                   <div className="p-2 rounded bg-background">
                     <div className="text-muted-foreground mb-1">我说</div>
-                    <div className="font-medium">{aiUserText || "等待语音..."}</div>
+                    <div className="font-medium">{aiUserText || "—"}</div>
                   </div>
                   <div className="p-2 rounded bg-background">
                     <div className="text-muted-foreground mb-1">AI 回复</div>
-                    <div className="font-medium">{aiReplyText || "等待回应..."}</div>
+                    <div className="font-medium">{aiReplyText || "—"}</div>
                   </div>
                 </div>
                 <div className="mt-3">
@@ -2113,8 +2135,8 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
             )}
 
             {/* Message Input */}
-            <div className="border-t bg-background pb-[env(safe-area-inset-bottom)]">
-              <div className="px-3 py-2">
+            <div className="sticky bottom-0 z-20 border-t bg-background/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
+              <div className="px-4 py-3">
               {/* Image Preview */}
               {imagePreview && (
                 <div className="mb-2 relative inline-block">
@@ -2162,7 +2184,7 @@ export default function Chat({ selectedConversationId, onConversationDeleted, on
                     placeholder={isLoading ? "AI正在思考..." : isStreaming ? "AI正在回复..." : "输入消息..."}
                     rows={1}
                     disabled={isLoading || isStreaming}
-                    className="min-h-[40px] max-h-[100px] resize-none text-base leading-relaxed"
+                    className="min-h-[44px] max-h-[120px] resize-none text-base leading-relaxed rounded-full px-4 py-2"
                     data-testid="input-message"
                   />
                   

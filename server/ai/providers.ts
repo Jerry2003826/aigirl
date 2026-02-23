@@ -33,7 +33,7 @@ export class GeminiProvider implements AIProvider {
   private client: GoogleGenAI | null = null;
   private isConfigured: boolean = false;
 
-  constructor(customApiKey?: string | null) {
+  constructor(customApiKey?: string | null, customBaseUrl?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
     // NO fallback to AI Integrations or any built-in keys
     let apiKey: string | undefined;
@@ -42,7 +42,7 @@ export class GeminiProvider implements AIProvider {
     if (customApiKey) {
       // User provided custom API key - use official Google AI API
       apiKey = customApiKey;
-      baseUrl = "https://generativelanguage.googleapis.com/v1beta";
+      baseUrl = (customBaseUrl || "").trim() || "https://generativelanguage.googleapis.com/v1beta";
       console.log("✅ Using user's custom Google AI API key");
     } else {
       // NO FALLBACK - User must provide their own API key
@@ -415,7 +415,7 @@ export class OpenAIProvider implements AIProvider {
   private client: OpenAI | null = null;
   private isConfigured: boolean = false;
 
-  constructor(customApiKey?: string | null) {
+  constructor(customApiKey?: string | null, customBaseUrl?: string | null) {
     // SECURITY: ONLY use user-provided custom API key
     // NO fallback to AI Integrations or any built-in keys
     let apiKey: string | undefined;
@@ -424,7 +424,7 @@ export class OpenAIProvider implements AIProvider {
     if (customApiKey) {
       // User provided custom API key - use official OpenAI API
       apiKey = customApiKey;
-      baseURL = "https://api.openai.com/v1";
+      baseURL = (customBaseUrl || "").trim() || "https://api.openai.com/v1";
       console.log("✅ Using user's custom OpenAI API key");
     } else {
       // NO FALLBACK - User must provide their own API key
@@ -581,27 +581,29 @@ export class OpenAIProvider implements AIProvider {
   }
 }
 
+// Resolve effective API format: apiFormat is source of truth; provider only for legacy read.
+function resolveApiFormat(settings?: AiSettings): "google_native" | "openai_compatible" {
+  if (settings?.apiFormat === "openai_compatible" || settings?.apiFormat === "google_native") {
+    return settings.apiFormat;
+  }
+  return settings?.provider === "openai" ? "openai_compatible" : "google_native";
+}
+
 // Factory function to get the appropriate AI provider
 export function getAIProvider(settings?: AiSettings): AIProvider {
-  const provider = settings?.provider || "google"; // Default to Google Gemini
+  const apiFormat = resolveApiFormat(settings);
   const customApiKey = settings?.customApiKey;
+  const apiBaseUrl = settings?.apiBaseUrl;
 
-  if (provider === "google") {
-    return new GeminiProvider(customApiKey);
-  } else if (provider === "openai") {
-    return new OpenAIProvider(customApiKey);
-  } else {
-    // Fallback to Google Gemini
-    return new GeminiProvider(customApiKey);
+  if (apiFormat === "openai_compatible") {
+    return new OpenAIProvider(customApiKey, apiBaseUrl);
   }
+
+  return new GeminiProvider(customApiKey, apiBaseUrl);
 }
 
 // Get model name from user settings only (no persona-specific models)
 export function getModelName(settings?: AiSettings): string {
-  // Priority: user settings model > default
-  if (settings?.model) {
-    return settings.model;
-  }
-  // Default to gemini-2.5-pro
-  return "gemini-2.5-pro";
+  if (settings?.model) return settings.model;
+  return resolveApiFormat(settings) === "openai_compatible" ? "gpt-4o-mini" : "gemini-2.5-pro";
 }

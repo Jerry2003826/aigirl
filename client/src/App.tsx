@@ -181,8 +181,9 @@ function Router() {
     setLocation("/chat");
   };
 
-  // Determine if bottom nav bar should be hidden (keep this logic in sync with BottomNavBar hide prop)
-  const hideBottomNavBar = !!selectedConversationId && !showMobileSidebar;
+  // Determine if bottom nav bar should be hidden on mobile chat detail view.
+  const isChatRoute = location === "/" || location === "/chat" || location.startsWith("/chat?");
+  const hideBottomNavBar = isChatRoute && !!selectedConversationId && !showMobileSidebar;
 
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>

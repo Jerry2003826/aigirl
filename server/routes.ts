@@ -9,6 +9,7 @@ import { storage } from "./storage";
 import { generateAIResponse, generateAIResponseStream, selectRespondingPersona, extractAndStoreMemories, triggerAICommentsOnMoment, triggerAIPostMoment, triggerAIReplyToComment } from "./aiService";
 import { minimaxTtsToBuffer } from "./voice/minimaxTts";
 import { setupVoiceWebSocket } from "./voice/voiceWs";
+import { setupRealtimeVoiceWebSocket } from "./voice/realtimeVoiceWs";
 import { setupWebSocket, broadcastNewMessage, broadcastMomentEvent, broadcastGroupEvent, broadcastToUserEvent } from "./websocket";
 import { loadAndApplyConfig } from "./config";
 import { S3StorageService } from "./storage/s3";
@@ -1045,9 +1046,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // WebRTC configuration (STUN/TURN + MiniMax streaming URLs)
-  app.get("/api/webrtc/config", isAuthenticated, async (_req: any, res) => {
+  app.get("/api/webrtc/config", isAuthenticated, async (req: any, res) => {
     try {
       const cfg = loadAndApplyConfig();
+      const userSettings = await storage.getAiSettings(req.user.id);
+      const defaultOverseasAsrUrl = "wss://api.minimax.io/ws/v1/asr";
+      const defaultOverseasTtsUrl = "wss://api.minimax.io/ws/v1/t2a_v2";
       const webrtcConfig = {
         stunServers: cfg.webrtc?.stunServers || [
           { urls: "stun:stun.l.google.com:19302" },
@@ -1055,8 +1059,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ],
         turnServers: cfg.webrtc?.turnServers || [],
         minimax: {
-          streamAsrUrl: cfg.minimax?.streamAsrUrl || process.env.MINIMAX_STREAM_ASR_URL || "wss://api.minimax.io/ws/v1/asr",
-          streamTtsUrl: cfg.minimax?.streamTtsUrl || process.env.MINIMAX_STREAM_TTS_URL || "wss://api.minimax.io/ws/v1/t2a_v2",
+          // Default to overseas paths; allow user-level override in settings.
+          streamAsrUrl:
+            userSettings?.minimaxStreamAsrUrl ||
+            cfg.minimax?.streamAsrUrl ||
+            process.env.MINIMAX_STREAM_ASR_URL ||
+            defaultOverseasAsrUrl,
+          streamTtsUrl:
+            userSettings?.minimaxStreamTtsUrl ||
+            cfg.minimax?.streamTtsUrl ||
+            process.env.MINIMAX_STREAM_TTS_URL ||
+            defaultOverseasTtsUrl,
         },
       };
       res.setHeader("Cache-Control", "no-store");
@@ -1726,17 +1739,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  function isValidOptionalUrl(value: unknown): string | null {
+    if (value == null || value === "") return null;
+    const s = String(value).trim();
+    if (!s) return null;
+    try {
+      const u = new URL(s);
+      if (!["http:", "https:", "ws:", "wss:"].includes(u.protocol)) return null;
+      return s;
+    } catch {
+      return null;
+    }
+  }
+
   app.put('/api/settings/ai', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { provider, model, customApiKey, minimaxApiKey, ragEnabled, searchEnabled, language } = req.body;
-      
-      // Try to update existing settings
-      let settings = await storage.updateAiSettings(userId, {
+      const {
         provider,
+        apiFormat,
+        apiBaseUrl,
         model,
         customApiKey,
         minimaxApiKey,
+        minimaxStreamAsrUrl,
+        minimaxStreamTtsUrl,
+        ragEnabled,
+        searchEnabled,
+        language,
+      } = req.body;
+
+      const apiBaseUrlNorm = isValidOptionalUrl(apiBaseUrl);
+      const asrUrlNorm = isValidOptionalUrl(minimaxStreamAsrUrl);
+      const ttsUrlNorm = isValidOptionalUrl(minimaxStreamTtsUrl);
+      if (apiBaseUrl && apiBaseUrlNorm === null) {
+        return res.status(400).json({ message: "API Base URL 格式无效，需为 http(s) 或 ws(s) 地址" });
+      }
+      if (minimaxStreamAsrUrl && asrUrlNorm === null) {
+        return res.status(400).json({ message: "MiniMax ASR URL 格式无效，需为 ws(s) 地址" });
+      }
+      if (minimaxStreamTtsUrl && ttsUrlNorm === null) {
+        return res.status(400).json({ message: "MiniMax TTS URL 格式无效，需为 ws(s) 地址" });
+      }
+
+      const format = apiFormat === "openai_compatible" ? "openai_compatible" : "google_native";
+      const modelVal = model && String(model).trim() ? String(model).trim() : (format === "openai_compatible" ? "gpt-4o-mini" : "gemini-2.5-pro");
+
+      // Try to update existing settings
+      let settings = await storage.updateAiSettings(userId, {
+        provider: provider || "custom",
+        apiFormat: format,
+        apiBaseUrl: apiBaseUrlNorm,
+        model: modelVal,
+        customApiKey: customApiKey || null,
+        minimaxApiKey: minimaxApiKey || null,
+        minimaxStreamAsrUrl: asrUrlNorm,
+        minimaxStreamTtsUrl: ttsUrlNorm,
         ragEnabled,
         searchEnabled,
         language,
@@ -1746,10 +1804,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!settings) {
         settings = await storage.createAiSettings({
           userId,
-          provider: provider || "google",
-          model: model || "gemini-2.5-pro",
+          provider: "custom",
+          apiFormat: format,
+          apiBaseUrl: apiBaseUrlNorm,
+          model: modelVal,
           customApiKey: customApiKey || null,
           minimaxApiKey: minimaxApiKey || null,
+          minimaxStreamAsrUrl: asrUrlNorm,
+          minimaxStreamTtsUrl: ttsUrlNorm,
           ragEnabled: ragEnabled || false,
           searchEnabled: searchEnabled || false,
           language: language || "zh-CN",
@@ -1774,6 +1836,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup WebSocket server for real-time messaging
   setupWebSocket(httpServer);
   setupVoiceWebSocket(httpServer);
+  setupRealtimeVoiceWebSocket(httpServer);
   
   return httpServer;
 }

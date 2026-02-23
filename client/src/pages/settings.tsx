@@ -17,9 +17,13 @@ type AiSettings = {
   id: string;
   userId: string;
   provider: string;
+  apiFormat: "google_native" | "openai_compatible";
+  apiBaseUrl: string | null;
   model: string;
   customApiKey: string | null;
   minimaxApiKey: string | null;
+  minimaxStreamAsrUrl: string | null;
+  minimaxStreamTtsUrl: string | null;
   ragEnabled: boolean;
   searchEnabled: boolean;
   language: string | null;
@@ -27,11 +31,21 @@ type AiSettings = {
   updatedAt: string;
 };
 
+const urlOptional = (msg: string) =>
+  z
+    .string()
+    .optional()
+    .refine((v) => !v || v.trim() === "" || /^(https?|wss?):\/\//.test(v.trim()), msg);
+
 const settingsFormSchema = z.object({
-  provider: z.string().min(1, "Provider is required"),
-  model: z.string().min(1, "Model is required"),
-  customApiKey: z.string().min(1, "API密钥是必需的，请提供你的Google AI或OpenAI API密钥"),
+  provider: z.string().optional(),
+  apiFormat: z.enum(["google_native", "openai_compatible"]),
+  apiBaseUrl: urlOptional("API Base URL 需以 http://、https://、ws:// 或 wss:// 开头"),
+  model: z.string().min(1, "模型名不能为空"),
+  customApiKey: z.string().min(1, "API密钥是必需的，请提供你的API密钥"),
   minimaxApiKey: z.string().optional(),
+  minimaxStreamAsrUrl: urlOptional("MiniMax ASR URL 需为 ws:// 或 wss:// 地址"),
+  minimaxStreamTtsUrl: urlOptional("MiniMax TTS URL 需为 ws:// 或 wss:// 地址"),
   ragEnabled: z.boolean(),
   searchEnabled: z.boolean(),
   language: z.string().optional(),
@@ -54,19 +68,27 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
   const form = useForm<SettingsFormData>({
     resolver: zodResolver(settingsFormSchema),
     defaultValues: {
-      provider: settings?.provider || "google",
+      provider: settings?.provider || "custom",
+      apiFormat: settings?.apiFormat || "google_native",
+      apiBaseUrl: settings?.apiBaseUrl || "",
       model: settings?.model || "gemini-2.5-pro",
       customApiKey: settings?.customApiKey || "",
       minimaxApiKey: settings?.minimaxApiKey || "",
+      minimaxStreamAsrUrl: settings?.minimaxStreamAsrUrl || "",
+      minimaxStreamTtsUrl: settings?.minimaxStreamTtsUrl || "",
       ragEnabled: settings?.ragEnabled || false,
       searchEnabled: settings?.searchEnabled || false,
       language: settings?.language || "zh-CN",
     },
     values: settings ? {
-      provider: settings.provider,
+      provider: settings.provider || "custom",
+      apiFormat: settings.apiFormat || "google_native",
+      apiBaseUrl: settings.apiBaseUrl || "",
       model: settings.model,
       customApiKey: settings.customApiKey || "",
       minimaxApiKey: settings.minimaxApiKey || "",
+      minimaxStreamAsrUrl: settings.minimaxStreamAsrUrl || "",
+      minimaxStreamTtsUrl: settings.minimaxStreamTtsUrl || "",
       ragEnabled: settings.ragEnabled,
       searchEnabled: settings.searchEnabled,
       language: settings.language || "zh-CN",
@@ -93,7 +115,10 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
   });
 
   const handleSubmit = (data: SettingsFormData) => {
-    updateSettingsMutation.mutate(data);
+    updateSettingsMutation.mutate({
+      ...data,
+      provider: "custom",
+    });
   };
 
   if (isLoading) {
@@ -142,23 +167,45 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                 <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
                   <FormField
                     control={form.control}
-                    name="provider"
+                    name="apiFormat"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>AI提供商</FormLabel>
+                        <FormLabel>协议格式</FormLabel>
                         <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value}>
                           <FormControl>
-                            <SelectTrigger data-testid="select-provider">
-                              <SelectValue placeholder="选择AI提供商" />
+                            <SelectTrigger data-testid="select-api-format">
+                              <SelectValue placeholder="选择协议格式" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="google">Google Gemini（推荐）</SelectItem>
-                            <SelectItem value="openai">OpenAI（未来扩展）</SelectItem>
+                            <SelectItem value="google_native">Google Native（Gemini原生）</SelectItem>
+                            <SelectItem value="openai_compatible">OpenAI Compatible（兼容格式）</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
-                          选择你偏好的AI提供商。推荐使用Google Gemini以获得最佳效果。
+                          统一采用“用户自定义URL + 选择协议格式”的方式调用模型。
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="apiBaseUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>API Base URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="例如：https://api.openai.com/v1 或 https://generativelanguage.googleapis.com/v1beta"
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-api-base-url"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          可留空使用官方默认地址。填写后将按你选择的协议格式发起请求。
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -195,7 +242,7 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                         <FormControl>
                           <Input
                             type="password"
-                            placeholder="输入你的 Google AI API 密钥或 OpenAI API 密钥"
+                            placeholder="输入你的模型 API Key"
                             {...field}
                             value={field.value || ""}
                             data-testid="input-api-key"
@@ -205,9 +252,9 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                         <FormDescription className="space-y-1">
                           <p className="font-medium text-foreground">⚠️ 必须提供API密钥才能使用AI功能：</p>
                           <ul className="list-disc list-inside space-y-0.5 text-sm">
-                            <li><strong>Google AI（推荐）</strong>: 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold">Google AI Studio</a> 获取免费密钥</li>
-                            <li>OpenAI: 在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">OpenAI Platform</a> 获取密钥（付费）</li>
-                            <li>你的密钥将被安全存储，仅用于你的AI请求</li>
+                            <li>支持 Google Native 与 OpenAI Compatible 两种协议格式</li>
+                            <li>你可以填写任意服务商 URL，只要协议格式匹配</li>
+                            <li>密钥仅用于你自己的请求，并会安全存储</li>
                             <li className="text-destructive font-medium">没有API密钥将无法使用任何AI功能</li>
                           </ul>
                         </FormDescription>
@@ -233,8 +280,52 @@ export default function Settings({ onBackToList = () => {}, showMobileSidebar = 
                         </FormControl>
                         <FormDescription className="space-y-1">
                           <p className="text-sm">
-                            仅用于语音合成（Speech-2.6-Turbo）。不填也能正常文字聊天，但语音通话会提示未配置。
+                            仅用于 MiniMax 实时语音（ASR/TTS）。不填也能正常文字聊天，但语音通话会提示未配置。
                           </p>
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="minimaxStreamAsrUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>MiniMax ASR WebSocket URL（海外默认）</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="wss://api.minimax.io/ws/v1/asr"
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-minimax-asr-url"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          留空将使用海外默认地址，可按你的网络环境覆盖。
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="minimaxStreamTtsUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>MiniMax TTS WebSocket URL（海外默认）</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="wss://api.minimax.io/ws/v1/t2a_v2"
+                            {...field}
+                            value={field.value || ""}
+                            data-testid="input-minimax-tts-url"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          留空将使用海外默认地址，可按你的网络环境覆盖。
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
