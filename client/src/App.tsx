@@ -188,7 +188,7 @@ function Router() {
   return (
     <SidebarProvider style={sidebarStyle as React.CSSProperties}>
       <div className="flex w-full bg-background flex-col" style={{ height: 'var(--app-height)' }}>
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Sidebar: Always visible on md+, conditionally visible on mobile */}
           <div className={cn(
             "md:flex md:w-auto",
@@ -204,24 +204,14 @@ function Router() {
           
           {/* Main content: Always visible on md+, conditionally visible on mobile */}
           <main className={cn(
-            "flex-1 overflow-hidden md:flex flex-col bg-background",
+            "flex-1 overflow-hidden min-h-0 md:flex flex-col bg-background",
             showMobileSidebar ? "hidden" : "flex",
             // Reserve space for bottom nav bar on mobile only (56px nav height)
             !hideBottomNavBar && "pb-[56px]"
           )}>
-            <div className="flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden min-h-0">
               <Switch>
-                <Route path="/">
-                  {() => (
-                    <Chat
-                      selectedConversationId={selectedConversationId}
-                      onConversationDeleted={handleBackToList}
-                      onBackToList={handleBackToList}
-                      showMobileSidebar={showMobileSidebar}
-                      wsRef={wsRef}
-                    />
-                  )}
-                </Route>
+                {/* 具体路径必须放在 path="/" 之前，因为 wouter 使用前缀匹配，path="/" 会匹配所有路径 */}
                 <Route path="/chat">
                   {() => (
                     <Chat
@@ -239,17 +229,28 @@ function Router() {
                 <Route path="/personas">
                   {() => <Personas onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
                 </Route>
-                <Route path="/contacts">
-                  {() => <Contacts onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
-                </Route>
                 <Route path="/contacts/:id">
                   {(params) => <ContactDetail personaId={params.id} onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/contacts">
+                  {() => <Contacts onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
                 </Route>
                 <Route path="/groups">
                   {() => <Groups onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
                 </Route>
                 <Route path="/settings">
                   {() => <Settings onBackToList={handleBackToList} showMobileSidebar={showMobileSidebar} />}
+                </Route>
+                <Route path="/">
+                  {() => (
+                    <Chat
+                      selectedConversationId={selectedConversationId}
+                      onConversationDeleted={handleBackToList}
+                      onBackToList={handleBackToList}
+                      showMobileSidebar={showMobileSidebar}
+                      wsRef={wsRef}
+                    />
+                  )}
                 </Route>
                 <Route component={NotFound} />
               </Switch>
